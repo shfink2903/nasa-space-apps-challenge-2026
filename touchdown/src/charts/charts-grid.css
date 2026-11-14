@@ -5,7 +5,7 @@
   --muted: #8b93a6;
   --faint: #5d6477;
   --line: rgba(255, 255, 255, 0.09);
-  font-family: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  font-family: var(--sans, system-ui, sans-serif);
   color: var(--ink);
   min-width: 0;
   max-width: 100%;
@@ -48,7 +48,7 @@
   background: var(--cal-bg, #0b0f17);
 }
 .cal-month {
-  font: 500 10.5px/16px "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  font: 500 10.5px/16px var(--mono, ui-monospace, monospace);
   color: var(--muted);
   white-space: nowrap;
   overflow: visible;
@@ -146,13 +146,13 @@
   color: var(--muted);
 }
 .cal-tip-value {
-  font: 500 12px/1.4 "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  font: 500 12px/1.4 var(--mono, ui-monospace, monospace);
 }
 .cal-legend {
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 500 10.5px/1 "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  font: 500 10.5px/1 var(--mono, ui-monospace, monospace);
   color: var(--muted);
 }
 .cal-legend-bar {
@@ -202,7 +202,7 @@
   min-width: 0;
   border-radius: 4px;
   cursor: default;
-  font: 500 11px/1 "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  font: 500 11px/1 var(--mono, ui-monospace, monospace);
   transition: filter 0.12s;
 }
 .sg-cell.is-null {
@@ -243,7 +243,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font: 500 10.5px/1 "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  font: 500 10.5px/1 var(--mono, ui-monospace, monospace);
   color: var(--muted);
 }
 .sg-scale {
@@ -261,7 +261,7 @@
   border-top: none;
 }
 .sg-range {
-  font: 500 11px/1.3 "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  font: 500 11px/1.3 var(--mono, ui-monospace, monospace);
   color: var(--ink);
 }
 .sg-readout {
