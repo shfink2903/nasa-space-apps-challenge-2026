@@ -1,8 +1,8 @@
-# Touchdown
+# Touchdown — lunar south pole mission planner
 
-A cinematic view for the Lunar Landing Site Navigator: Starship comes closer to the Moon, you pick a real landing site, and the ship flies there and lands. The time bar moves the Sun and the Earth of the project dataset.
+Touchdown helps a mission planner compare landing sites and dates at the lunar south pole: where the Sun (power) and the Earth (direct link) are relative to the local horizon, for how long, and what changes when the site or the date moves.
 
-This app is separate from `web/`. It reads the frozen dataset in `data/processed/v1` and changes nothing there.
+It reads the frozen dataset in `data/processed/v1` and changes nothing there.
 
 ## Run
 
@@ -12,75 +12,74 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5180. The dev server also serves the dataset at `/data/v1` straight from `../data/processed/v1` (no copy).
-
-Other commands:
+Open http://127.0.0.1:5180. The interface is in French or English (switch at the top right).
 
 | Command | What it does |
 |---|---|
 | `npm test` | Unit tests (Vitest). They read the real dataset. |
 | `npm run typecheck` | TypeScript check. |
-| `npm run build` | Type check, production build, full dataset copy and SHA-256 verification in `dist/`. |
-| `npm run preview` | Serves the complete `dist/` on port 5180, with no dataset fallback to the repository. |
-| `npm run prepare:assets` | Downloads the NASA source images and rebuilds `public/textures/`. Not needed for a normal run: the textures are committed. |
+| `npm run build` | Type check, production build in `dist/`, and a byte-for-byte copy of the dataset with SHA-256 checks. |
+| `npm run test:e2e` | Browser check of the build. Serve `dist/` on port 4180 first: `python3 -m http.server 4180 --directory dist --bind 127.0.0.1`. |
+| `npm run prepare:assets` | Rebuilds the Moon and Earth textures from the NASA sources. Not needed for a normal run. |
 
-To host the build, publish the entire `dist/` directory. The build includes
-`data/v1/` automatically and fails if any manifest file or browser series copy
-is missing or altered. Series are also copied as `*.json.gz.bin` so static
-hosts serve raw bytes for browser decompression. The scientific source and its
-manifest remain unchanged. No separate data publication step is required.
+Optional AI assistant: start the local service from the repository root with `python3 scripts/run_demo.py` (see `AI_GUIDE.md`). The app finds it at `/api`. Without it everything else works, and the assistant panel shows a rule-based summary only.
 
-To verify the production build without Vite's development middleware:
+## What it does
 
-```bash
-# Terminal 1, from touchdown/
-python3 -m http.server 4180 --bind 127.0.0.1 --directory dist
-# Terminal 2, from touchdown/ (Google Chrome must be installed)
-npm run test:e2e
-```
+**Explore in 3D**
 
-The browser test checks every site's displayed Sun/Earth elevations and solar
-fraction against the delivered dataset, a second start date, the final timeline
-sample, and mobile layout. Results and screenshots are saved under `.cache/`.
+- The Moon is seen from under its south pole. Gold dots are the candidates, blue dots are missions that already landed.
+- A click on a dot or on a row of the ranking shows the site at once: no flight is needed to read the numbers.
+- Left panel: Sun and Earth elevation at the chosen time, the published visibility state, and the time left before each one sets or rises. Then the 30-day shares, the longest night, the longest Earth blackout, the check against your requirements, and the local sky unrolled over 360° with the terrain skyline.
+- Right panel: the 30-day period. Bands show when the Sun, the Earth and both are visible. A chart shows their elevation, with the terrain horizon in their direction. Click or drag to move the time. Mast height: 2 m or 10 m.
+- In the site view two beams leave the site: amber toward the Sun, blue toward the Earth. A beam is drawn only while the dataset says the body is visible.
+- "Watch the landing" starts the illustrative flight. It is refused when the Sun is not visible at the chosen time: there would be no power on arrival. A button jumps to the next sunrise.
+- On the ground: the Sun and the Earth are at the published azimuth and elevation, a compass is painted on the ground, two arrows point to the Sun and the Earth, a blue line shows the line of sight to the Earth, and the far relief is the published horizon profile placed at its real distance.
 
-## What you see
+**Compare sites**
 
-1. **Approach.** The Moon far away, Starship in front. It moves closer by itself. Scroll or drag to go faster.
-2. **Guide** (top left), **time bar** (top right), **site list** (bottom right): 10 real landings and, in a separate group, 3 south-pole study points.
-3. **Click a site** (list or gold pin): transfer around the Moon, tail-first descent, cut to a ground camera for the last metres, then a free view around the landed ship.
-4. **On the ground:** the Sun and the Earth are where the dataset says, for that site and that time. The card on the left shows the published values.
-
-Keys: `Space` play/pause, `←` `→` one hour, `Esc` back to orbit. With "reduce motion" on, the flight is skipped.
+- Ranking of the candidates on a priority you choose: Sun + Earth together, Sun, or Earth. Landed missions are listed below as references and are not ranked.
+- Mission requirements: three limits you set (minimum Sun share, minimum Earth share, longest continuous night). Each site gets "meets" or "does not meet", with the reason.
+- Side by side: 2 or 3 sites with live countdowns, their numbers, their visibility windows on one time axis, and their Sun and Earth elevation curves.
+- When to land: one row per site, 52 weekly start dates, coloured by the chosen share. Click a cell to pick the date.
+- A small move changes everything: the 5 x 5 grid (1 km spacing) around each candidate.
+- Method and limits: validation status and the limits published with the scenarios, in their original text.
 
 ## What is real and what is not
 
 Real, from `data/processed/v1`:
 
 - Site names, coordinates and status (`sites.json`).
-- Sun and Earth azimuth, elevation, visibility state and angular size, every 600 s (`series/`).
-- Next sunrise or sunset and the 30-day Sun share (`scenarios/`).
-- For the 5 polar sites: the far hills are the 3,600-value horizon profile (`horizons/`).
-- The interface computes no window, no duration and no verdict.
+- Sun and Earth azimuth, elevation, visibility state and angular size every 600 s (`series/`).
+- Rise and set events and visibility windows (`scenarios/`). A countdown is the difference between a published event time and the chosen time.
+- The shares and gaps of each 30-day period, for 52 start dates (`sweeps/`).
+- The 1 km grids (`sensitivity/`) and the terrain skyline with its distance (`horizons/`).
 
-Illustrative:
+Computed in the browser, and why it is safe:
 
-- The flight path, its timing, the ship size in the orbit view, flame and dust. No trajectory is modelled and no vehicle number is shown (rule R2 of `data.md`).
-- The ground near the ship: procedural craters, seeded by the site id. It is not the real terrain of the site.
-- Star field and Earth rotation. The dataset has no sky orientation.
-- Light on the far hills.
+- The rank: a sort on one published value.
+- The Pareto badge: the non-dominated set on the four criteria of the dataset. A test proves that it gives the same set as all 104 comparisons published in `comparisons/`.
+- The requirement check: a comparison of published values with limits the user sets. The default limits are examples.
 
-One geometry check ties the picture to the data: the tests rebuild the sub-solar latitude and the sub-Earth point from the site azimuth/elevation values and compare them with the dataset (`tests/astro.test.ts`).
+Not real:
+
+- The flight path, its timing, the ship size in the orbit view, flame and dust. No trajectory is modelled and no vehicle number is shown.
+- The ground near the ship: procedural craters. The star field and the Earth rotation.
+
+Limits to keep in mind:
+
+- All scenarios are marked `not_validated` in the dataset. The terrain model is a preliminary product.
+- "Visible" means above the local horizon. It does not prove electrical power or a radio link.
+- The candidates are the three study points of the team. Free coordinates are not possible in the browser: the computation needs ephemerides and terrain data.
 
 ## How it is built
 
-- `src/data/` — dataset access and pure geometry (frames, azimuth convention).
-- `src/flight/timeline.ts` — pure timing and shape of the flight. Tune the feel of the landing here.
-- `src/scene/orbitScene.ts` — far view: georeferenced Moon (Lommel–Seeliger shading, LOLA slope map, earthshine), Sun, Earth, stars. The ship is drawn in an overlay scene with its own depth buffer.
-- `src/scene/surfaceScene.ts` — near view in metres: ground patch, horizon ring, shadows, flame light, dust.
-- `src/scene/director.ts` — runs the shots and the cut between the two scenes.
-- `src/ui/` — panels. All text is in `src/ui/strings.ts`.
-
-Two scenes are used because one cannot hold a 3,474 km Moon and a 52 m ship with good depth precision and detail. The cut is hidden in the engine glare.
+- `src/data/` — dataset access, lazy cache (`resources.ts`), pure geometry.
+- `src/planner/` — pure logic, no DOM: metrics, ranking, Pareto set, requirement check, countdowns, site grouping.
+- `src/charts/` — elevation chart, window strips, 360° panorama, calendar heatmap, 1 km grid. No chart library.
+- `src/scene/` — orbit scene, surface scene, and the director that runs the views and the shots.
+- `src/ui/` — panels of the two tabs, assistant, guide. All text is in `src/i18n/`.
+- `src/flight/timeline.ts` — timing and shape of the illustrative flight.
 
 ## Credits
 

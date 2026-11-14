@@ -14,13 +14,53 @@ DEFAULT_CRITERIA = [
 ]
 
 
+def validate_comparison_request(request):
+    """Validate the public deterministic comparison contract before dataset access."""
+    allowed = {"scenarioIds", "criteria", "priority", "constraints"}
+    if not isinstance(request, dict) or not set(request) <= allowed:
+        raise DataError("invalid_request", "body")
+    ids = request.get("scenarioIds")
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 60 or any(not isinstance(sid, str) or not 1 <= len(sid) <= 180 for sid in ids):
+        raise DataError("invalid_request", "scenarioIds", "1 to 60 scenario identifiers required")
+    if len(set(ids)) != len(ids):
+        raise DataError("invalid_request", "scenarioIds", "duplicate identifiers")
+    criteria = request.get("criteria")
+    if criteria is not None:
+        if not isinstance(criteria, list) or not 1 <= len(criteria) <= 20:
+            raise DataError("invalid_request", "criteria")
+        for c in criteria:
+            if not isinstance(c, dict) or set(c) != {"metricId", "direction", "origin"} or c["direction"] not in ("min", "max"):
+                raise DataError("invalid_request", "criteria")
+            if any(not isinstance(c[k], str) or not 1 <= len(c[k]) <= 180 for k in ("metricId", "origin")):
+                raise DataError("invalid_request", "criteria")
+        if len({c["metricId"] for c in criteria}) != len(criteria):
+            raise DataError("invalid_request", "criteria", "duplicate metrics")
+    priority = request.get("priority")
+    if priority is not None:
+        known = {c["metricId"] for c in (DEFAULT_CRITERIA if criteria is None else criteria)}
+        if not isinstance(priority, list) or len(priority) > 20 or any(not isinstance(k, str) or k not in known for k in priority):
+            raise DataError("invalid_request", "priority", "metric identifiers from criteria required")
+        if len(set(priority)) != len(priority):
+            raise DataError("invalid_request", "priority", "duplicate metrics")
+    constraints = request.get("constraints", [])
+    if not isinstance(constraints, list) or len(constraints) > 20:
+        raise DataError("invalid_request", "constraints")
+    for c in constraints:
+        if not isinstance(c, dict) or set(c) != {"metricId", "op", "value", "unit", "origin"} or c.get("origin") != "user":
+            raise DataError("invalid_request", "constraints", "explicit user constraints required")
+        if not isinstance(c["metricId"], str) or not 1 <= len(c["metricId"]) <= 180:
+            raise DataError("invalid_request", "constraints.metricId")
+    evaluate([], constraints)
+    return {"scenarioIds": ids, "criteria": criteria, "priority": priority, "constraints": constraints}
+
+
 def evaluate(metrics, constraints):
     lookup = {m["metricId"]: m for m in metrics}
     rows = []
     for c in constraints:
         if not isinstance(c, dict) or not all(k in c for k in ("metricId", "op", "value", "unit", "origin")):
             raise DataError("invalid_request", "hardConstraints", "metricId, op, value, unit and origin required")
-        if c["op"] not in OPS or not isinstance(c["unit"], str) or not c["unit"] or not isinstance(c["origin"], str) or not c["origin"]:
+        if not isinstance(c["metricId"], str) or not c["metricId"] or not isinstance(c["op"], str) or c["op"] not in OPS or not isinstance(c["unit"], str) or not c["unit"] or not isinstance(c["origin"], str) or not c["origin"]:
             raise DataError("invalid_request", "hardConstraints", "invalid operator, unit or origin")
         finite(c["value"], "constraint.value")
         m = lookup.get(c["metricId"])
@@ -82,19 +122,39 @@ def compare(scenarios, criteria=None, priority=None, constraints=None):
     eligible = [s for s in scenarios if verdicts[s["scenarioId"]]["status"] in ("pass", "not_evaluated") and s["coverageStatus"] == "covered"]
     front = [s["scenarioId"] for s in eligible if not any(dominates(other, s, criteria) for other in eligible if other is not s)]
     ranking = None
+    ranks, unranked = {}, []
     if priority:
         selected = {c["metricId"]: c for c in criteria}
         if len(set(priority)) != len(priority) or any(k not in selected for k in priority):
             raise DataError("invalid_request", "priority", "unique metricIds from criteria required")
+        def can_rank(s):
+            metrics = {m["metricId"]: m for m in s["metrics"]}
+            for metric_id in priority:
+                m = metrics.get(metric_id)
+                if m is None or m["value"] is None or m.get("quality") != "complete":
+                    return False
+                # A truncated gap is only a lower bound, never an exact rank value.
+                if metric_id.endswith("longestGapH") and any(m.get(k) for k in ("truncatedStart", "truncatedEnd", "truncatedByMissingData")):
+                    return False
+            return True
         def key(s):
             mm = {m["metricId"]: m["value"] for m in s["metrics"]}
-            return tuple((mm[k] is None, (-mm[k] if selected[k]["direction"] == "max" else mm[k]) if mm[k] is not None else 0) for k in priority)
-        ranking = [s["scenarioId"] for s in sorted(eligible, key=key)]
+            return tuple(-mm[k] if selected[k]["direction"] == "max" else mm[k] for k in priority)
+        ranked = sorted((s for s in eligible if can_rank(s)), key=key)
+        ranking = [s["scenarioId"] for s in ranked]
+        previous, rank = None, 0
+        for position, s in enumerate(ranked, 1):
+            current = key(s)
+            if current != previous:
+                rank = position
+            ranks[s["scenarioId"]] = rank
+            previous = current
+        unranked = [s["scenarioId"] for s in scenarios if s["scenarioId"] not in ranks]
     result = {"schemaVersion": "1.0.0", "scenarioIds": [s["scenarioId"] for s in scenarios],
               "method": {"type": "pareto", "criteria": criteria, "priority": priority, "weights": None},
               "modelLevel": scenarios[0]["modelLevel"], "coverageStatus": "covered" if all(s["coverageStatus"] == "covered" for s in scenarios) else "partial",
               "validationStatus": "not_validated", "verdicts": verdicts, "nonDominatedScenarioIds": front,
-              "ranking": ranking, "recommendation": None,
+              "ranking": ranking, "rankByScenarioId": ranks, "unrankedScenarioIds": unranked, "recommendation": None,
               "recommendationReason": reason("descriptive_pareto_only" if eligible else "all_failed_or_unknown"),
               "exploredCount": len(scenarios), "returnedCount": len(front),
               "excluded": [{"scenarioId": s["scenarioId"], "reason": reason("constraint_or_coverage"), "status": verdicts[s["scenarioId"]]["status"]} for s in scenarios if s not in eligible],

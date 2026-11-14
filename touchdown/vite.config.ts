@@ -52,7 +52,8 @@ function serveDataset(): Plugin {
 
 export default defineConfig({
   plugins: [serveDataset()],
-  server: { host: "127.0.0.1", port: 5180, strictPort: true },
-  preview: { host: "127.0.0.1", port: 5180, strictPort: true },
+  // The optional AI service (python -m lunar_data.server) listens on 8001. Without it the app still works.
+  server: { host: "127.0.0.1", port: 5180, strictPort: true, proxy: { "/api": "http://127.0.0.1:8001" } },
+  preview: { host: "127.0.0.1", port: 5180, strictPort: true, proxy: { "/api": "http://127.0.0.1:8001" } },
   build: { target: "es2022", chunkSizeWarningLimit: 900 },
 });

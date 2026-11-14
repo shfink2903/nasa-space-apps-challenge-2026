@@ -1,0 +1,22 @@
+{
+  "base": "http://127.0.0.1:4180",
+  "startedAt": "2026-11-14T19:32:56.465Z",
+  "checks": [
+    "Boot: 5 south-pole sites (3 candidates, 2 references) and 52 start dates, no flight needed to see numbers",
+    "sp_s8950: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started",
+    "sp_s8800: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started",
+    "sp_s8600: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started",
+    "chandrayaan3: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started",
+    "im1: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started",
+    "sp_s8800 (0 % Sun): landing refused",
+    "sp_s8600 at a sunlit time: landing reaches the ground view, and Back returns to the site view",
+    "Compare tab: candidates ranked Point d'étude 89,5° S > Point d'étude 86,0° S > Point d'étude 88,0° S; 3 sites side by side; 52-week calendar drawn",
+    "All 13 sites listed with the geometric model; Apollo 15 Sun share on 2027-11-23 matches the dataset",
+    "Three 5 x 5 sensitivity grids drawn (75 cells)",
+    "Mobile width: both tabs fit the viewport"
+  ],
+  "errors": [],
+  "failedDataRequests": [],
+  "pass": true,
+  "finishedAt": "2026-11-14T19:34:08.083Z"
+}

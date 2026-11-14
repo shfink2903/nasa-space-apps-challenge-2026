@@ -13,3 +13,6 @@ data/processed/*.tmp/
 touchdown/node_modules/
 touchdown/dist/
 touchdown/.cache/
+
+.env.*
+!.env.example
