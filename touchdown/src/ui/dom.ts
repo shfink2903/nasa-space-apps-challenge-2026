@@ -34,6 +34,8 @@ const ICONS: Record<string, string> = {
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>',
   table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  left: '<path d="M15 6l-6 6 6 6"/>',
+  right: '<path d="M9 6l6 6-6 6"/>',
 };
 
 export function icon(name: keyof typeof ICONS | string): SVGSVGElement {

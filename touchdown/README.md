@@ -28,18 +28,23 @@ To host the build on a static server, also publish `data/processed/v1` at the pa
 
 ## What you see
 
-1. **Overview.** The Moon seen from the south, so the south pole faces you. Right: the time bar and the ranking of the 13 sites.
-2. **Click a site** (gold pin or ranking row): the camera zooms on it and the **site sheet** opens at once, with no flight to wait for.
-   - Sun (power) and Earth (communication) now: height, state, and the **time left before the next set or rise**.
-   - **Sky map**: direction and height, the 30-day paths of the Sun and the Earth, and the terrain horizon where the dataset has one.
-   - 30-day metrics: Sun visible, Earth visible, both together, longest night, longest Earth blackout, maximum heights.
-   - **One year**: 52 weekly starts as a strip. Click a cell to change the date.
-   - **Within 2 km** (the 3 study points): the 5 x 5 grid at 1 km, to see how a small move changes the result.
-   - Observer height (2 m or 10 m), model level and the limits published with the data.
-3. **Time bar**: two bands over the 30 days, Sun on top and Earth under it.
-4. **Ranking** (bottom right): you choose the criterion. **Compare** opens a table of every site and a calendar of every site for every week of the year.
-5. **Land here**: the illustrative flight starts only when the Sun is visible at the site at the chosen time. If not, the button becomes **Go to sunrise**, or the caption says that no sunrise is published in these 30 days.
+The main job of the tool is to **compare sites and dates** for two things: **lighting** (is the Sun up at the site) and **communication** (is the Earth in view, so a direct link is possible).
+
+1. **Overview.** The Moon seen from the south, so the south pole faces you. A large **Compare the sites** button sits under the title and on top of the ranking.
+2. **Compare sheet.**
+   - **By date**: one row per site with three bars (lighting, communication, both together). Drag the start date, step week by week or press **Play through the year**: the bars and the ranking move as the date changes.
+   - Click a column title to rank by it. Each title has one line that says what it measures.
+   - **Precision**: *Simple* shows the three bars. *Detailed* adds one decimal, the longest night, the longest link blackout, the maximum Sun height and the model level.
+   - **Over the year**: one row per site, one cell per weekly start. Click a cell to open that site at that date.
+3. **Click a site** (gold pin, ranking row or compare row): the camera zooms on it and the **site sheet** opens at once, with no flight to wait for.
+   - Two cards, no angle: **Lighting** ("Lit" / "In the dark", time left before night) and **Communication** ("Direct link possible" / "No direct link", time left before the blackout), each with its share of the 30 days.
+   - A date strip (52 weekly starts) to change the date.
+   - **More precision** (closed by default): Sun and Earth heights, the sky map with the terrain horizon, longest night and blackout, the 1 km grid of the study points, observer height (2 m or 10 m), model level and published limits.
+4. **Time bar**: two bands over the 30 days, lighting on top and link with Earth under it.
+5. **Land here**: the illustrative flight starts only when the site is lit at the chosen time. If not, the button becomes **Go to sunrise**, or the caption says that no sunrise is published in these 30 days.
 6. **On the ground:** the Sun and the Earth are where the dataset says. **Back to the sheet** returns to the zoomed view.
+
+"Lit" and "link possible" are the published visibility states of the Sun and the Earth above the terrain. They are not a power budget or a radio link budget.
 
 Keys: `Space` play/pause, `←` `→` one hour, `Esc` back. With "reduce motion" on, the flight is skipped. The interface is in French or English (`FR` / `EN` button, or `?lang=en`).
 

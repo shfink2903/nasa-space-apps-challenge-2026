@@ -31,16 +31,19 @@ const SUN_RGB = "255,186,96";
 const EARTH_RGB = "157,188,255";
 const HEIGHTS = [2, 10];
 
-const stateText = (state: DiskState): string => (state === null ? T.state.unknown : T.state[state]);
+const sunStatus = (state: DiskState): string => (state === null ? T.sunStatus.unknown : T.sunStatus[state]);
+const earthStatus = (state: DiskState): string => (state === null ? T.earthStatus.unknown : T.earthStatus[state]);
 const shade = (rgb: string, fraction: number | null): string =>
   fraction === null ? "rgba(255,255,255,0.05)" : `rgba(${rgb},${(0.1 + 0.9 * fraction).toFixed(3)})`;
 const percent = (v: number | null): string => (v === null ? "—" : formatPercent(v));
 
-/** "Sets in 19 h 50", "Rises in 16,7 j", or the plain fact when the window has no change. */
-function countdown(v: Visibility, tMs: number): string {
-  if (v.changeMs === null) return v.visible ? T.upAllWindow : T.downAllWindow;
+/** "Night in 19 h 50", "Link back in 16,7 j", or the plain fact when the window has no change. */
+function countdown(v: Visibility, tMs: number, body: "sun" | "earth"): string {
+  const sun = body === "sun";
+  if (v.changeMs === null) return v.visible ? (sun ? T.sunUpAll : T.earthUpAll) : sun ? T.sunDownAll : T.earthDownAll;
   const left = formatDuration(v.changeMs - tMs);
-  return v.visible ? T.setsIn(left) : T.risesIn(left);
+  if (v.visible) return sun ? T.sunSetsIn(left) : T.earthSetsIn(left);
+  return sun ? T.sunRisesIn(left) : T.earthRisesIn(left);
 }
 
 /** Sentences that restate exact published values (0 or 1). No threshold is chosen here. */
@@ -66,50 +69,43 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   const place = h("small", { class: "cond-coords" });
   const tags = h("div", { class: "tags" });
 
-  const nowRow = (label: string, kind: "sun" | "earth", role: string) => {
-    const value = h("span", { class: "cond-value" });
-    const state = h("small");
-    const next = h("small", { class: "cond-next" });
-    const row = h(
+  /** One big card per question: is the site lit, can it talk to Earth. No angle here. */
+  const card = (kind: "sun" | "earth", title: string, rgb: string) => {
+    const status = h("b", { class: "status-text" });
+    const next = h("span", { class: "status-next" });
+    const share = h("span");
+    const fill = h("i");
+    fill.style.background = `rgb(${rgb})`;
+    const el = h(
       "div",
-      { class: "cond-row" },
+      { class: `status status-${kind}` },
       h("span", { class: `cond-icon cond-${kind}` }, icon(kind)),
-      h("div", null, h("strong", null, label, h("em", { text: role })), state, next),
-      value,
+      h("div", { class: "status-main" }, h("small", { class: "status-kicker", text: title }), status, next),
+      h("div", { class: "status-share" }, h("div", { class: "meter-track" }, fill), h("small", null, share, ` ${T.on30}`)),
     );
-    return { row, value, state, next };
+    return { el, status, next, share, fill };
   };
-  const sun = nowRow(T.sun, "sun", T.power);
-  const earth = nowRow(T.earth, "earth", T.comms);
+  const sun = card("sun", T.power, SUN_RGB);
+  const earth = card("earth", T.comms, EARTH_RGB);
+  const bothFill = h("i");
+  const bothValue = h("b");
+  const both = h("div", { class: "meter" }, h("span", { text: T.bothShare }), bothValue, h("div", { class: "meter-track" }, bothFill));
 
   const sky = createSkyChart();
   const skyNote = h("p", { class: "note" });
-
-  const bar = (label: string, rgb: string) => {
-    const fill = h("i");
-    fill.style.background = `rgb(${rgb})`;
-    const value = h("b");
-    const row = h("div", { class: "meter" }, h("span", { text: label }), value, h("div", { class: "meter-track" }, fill));
-    return {
-      row,
-      set(v: number | null) {
-        value.textContent = percent(v);
-        fill.style.width = `${(v ?? 0) * 100}%`;
-      },
-    };
-  };
   const line = (label: string) => {
     const value = h("b");
     return { row: h("div", { class: "cond-line" }, h("span", { text: label }), value), value };
   };
-  const sunShare = bar(T.sunShare, SUN_RGB);
-  const earthShare = bar(T.earthShare, EARTH_RGB);
-  const overlapShare = bar(T.overlapShare, "232,236,244");
+  const sunHeight = line(T.sunHeight);
+  const earthHeight = line(T.earthHeight);
   const night = line(T.longestNight);
   const blackout = line(T.longestBlackout);
   const maxSun = line(T.maxSun);
   const maxEarth = line(T.maxEarth);
   const insightList = h("ul", { class: "insights" });
+  const compare = h("button", { class: "button button-wide", type: "button" }, icon("table"), T.compareThis);
+  compare.addEventListener("click", () => actions.setCompare(true));
 
   const yearMonths = h("div", { class: "year-months", "aria-hidden": "true" });
   const yearGrid = h("div", { class: "year-grid" });
@@ -119,19 +115,11 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     h("h3", { class: "block-title", text: T.yearTitle }),
     yearMonths,
     yearGrid,
-    h(
-      "div",
-      { class: "legend" },
-      h("i", { class: "dot dot-day" }),
-      T.legendSun,
-      h("i", { class: "dot dot-earth" }),
-      T.legendEarth,
-    ),
     h("p", { class: "note", text: T.yearNote }),
   );
 
   const sensBody = h("div", { class: "sens-body" });
-  const sensBlock = h("div", { class: "block", hidden: true }, h("h3", { class: "block-title", text: T.sensTitle }), sensBody);
+  const sensBlock = h("div", { hidden: true }, h("h3", { class: "block-title", text: T.sensTitle }), sensBody);
 
   const heightButtons = HEIGHTS.map((m) => {
     const b = h("button", { class: "seg", type: "button", text: `${m} m` });
@@ -149,29 +137,29 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
       "div",
       { class: "sheet-scroll" },
       h("div", { class: "cond-head" }, name, place, tags),
-      h("h3", { class: "block-title", text: T.now }),
-      sun.row,
-      earth.row,
-      h("p", { class: "cond-note", text: T.elevation }),
-      h("div", { class: "block" }, h("h3", { class: "block-title", text: T.skyTitle }), sky.el, skyNote),
+      sun.el,
+      earth.el,
+      both,
+      insightList,
+      yearBlock,
+      compare,
       h(
-        "div",
-        { class: "block" },
+        "details",
+        { class: "more" },
+        h("summary", { text: T.moreTitle }),
+        h("h3", { class: "block-title", text: T.now }),
+        sunHeight.row,
+        earthHeight.row,
+        h("p", { class: "note", text: T.elevation }),
+        h("h3", { class: "block-title", text: T.skyTitle }),
+        sky.el,
+        skyNote,
         h("h3", { class: "block-title", text: T.over30 }),
-        sunShare.row,
-        earthShare.row,
-        overlapShare.row,
         night.row,
         blackout.row,
         maxSun.row,
         maxEarth.row,
-        insightList,
-      ),
-      yearBlock,
-      sensBlock,
-      h(
-        "div",
-        { class: "block" },
+        sensBlock,
         h("h3", { class: "block-title", text: T.height }),
         h("div", { class: "segmented" }, ...heightButtons),
         h("p", { class: "note", text: T.heightNote }),
@@ -263,9 +251,14 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     const lola = parseScenarioId(scenario.scenarioId)?.model === "lola";
     skyNote.textContent = lola && s.horizon ? T.skyNote : T.skyNoteFlat;
 
-    sunShare.set(metric(scenario, "sun.anyDisk.fraction"));
-    earthShare.set(metric(scenario, "earth.anyDisk.fraction"));
-    overlapShare.set(metric(scenario, "overlap.sunAny_earthAny.fraction"));
+    const share = (id: string, fill: HTMLElement): string => {
+      const v = metric(scenario, id);
+      fill.style.width = `${(v ?? 0) * 100}%`;
+      return percent(v);
+    };
+    sun.share.textContent = T.litShare(share("sun.anyDisk.fraction", sun.fill));
+    earth.share.textContent = T.linkShare(share("earth.anyDisk.fraction", earth.fill));
+    bothValue.textContent = share("overlap.sunAny_earthAny.fraction", bothFill);
     const hours = (id: string): string => {
       const v = metric(scenario, id);
       return v === null ? "—" : formatHours(v);
@@ -290,12 +283,16 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   function renderNow(s: AppState, scenario: Scenario): void {
     if (!s.series) return;
     const sample = sampleSeries(s.series, s.index);
-    sun.value.textContent = formatElevation(sample.sunElDeg);
-    sun.state.textContent = stateText(sample.sunState);
-    sun.next.textContent = countdown(visibilityAt(scenario, "sun.anyDisk", sample.tMs), sample.tMs);
-    earth.value.textContent = formatElevation(sample.earthElDeg);
-    earth.state.textContent = stateText(sample.earthState);
-    earth.next.textContent = countdown(visibilityAt(scenario, "earth.anyDisk", sample.tMs), sample.tMs);
+    const sunNow = visibilityAt(scenario, "sun.anyDisk", sample.tMs);
+    const earthNow = visibilityAt(scenario, "earth.anyDisk", sample.tMs);
+    sun.status.textContent = sunStatus(sample.sunState);
+    sun.next.textContent = countdown(sunNow, sample.tMs, "sun");
+    sun.el.classList.toggle("is-off", !sunNow.visible);
+    earth.status.textContent = earthStatus(sample.earthState);
+    earth.next.textContent = countdown(earthNow, sample.tMs, "earth");
+    earth.el.classList.toggle("is-off", !earthNow.visible);
+    sunHeight.value.textContent = formatElevation(sample.sunElDeg);
+    earthHeight.value.textContent = formatElevation(sample.earthElDeg);
     sky.setNow(sample);
   }
 

@@ -12,8 +12,10 @@ import {
   loadScenario,
   loadSeries,
   loadSites,
+  parseScenarioId,
   pickScenarioId,
   sampleSeries,
+  sweepValue,
   visibilityAt,
   type HorizonProfile,
   type Scenario,
@@ -29,7 +31,7 @@ import { createStore, type Actions } from "./state";
 import { createCaption } from "./ui/caption";
 import { createCompare } from "./ui/compare";
 import { h } from "./ui/dom";
-import { siteLabel } from "./ui/format";
+import { formatPercent0, siteLabel } from "./ui/format";
 import { createGuide } from "./ui/guide";
 import { createSiteList } from "./ui/sitelist";
 import { createSitePanel } from "./ui/sitepanel";
@@ -152,6 +154,7 @@ async function boot(): Promise<void> {
     showToast(T.siteError);
   };
 
+  let dateTimer = 0;
   const actions: Actions = {
     /** Zoom on the site and open its sheet at once. The flight is a separate, explicit step. */
     selectSite(id) {
@@ -171,6 +174,8 @@ async function boot(): Promise<void> {
       const s = store.get();
       const site = siteById(s.siteId);
       if (!site || s.phase !== "focus" || !siteData || !s.scenario || !s.series || s.lightSiteId !== site.id) return;
+      // The series of a new date loads a moment after the date changes: wait for it.
+      if (parseScenarioId(s.scenario.scenarioId)?.date !== s.date) return;
       // No Sun at the site at the chosen time: no landing (the caption offers the next sunrise instead).
       if (!visibilityAt(s.scenario, "sun.anyDisk", sampleSeries(s.series, s.index).tMs).visible) return;
       director.startFlight(site, siteData, reducedMotion.matches);
@@ -178,14 +183,20 @@ async function boot(): Promise<void> {
     hover: (id) => {
       if (store.get().hoverId !== id) store.set({ hoverId: id });
     },
+    /** The date changes at once (ranking, calendars). The 30-day series follows after a short pause, so a dragged date does not load every week on the way. */
     setDate(date) {
       const state = store.get();
-      const site = siteById(state.lightSiteId);
-      if (!site || date === state.date) return;
+      if (date === state.date || !state.dates.includes(date)) return;
       store.set({ date });
-      const data = loadActive(site, date, state.heightM);
-      if (site.id === state.siteId) siteData = data;
-      data.catch(reportError);
+      window.clearTimeout(dateTimer);
+      dateTimer = window.setTimeout(() => {
+        const s = store.get();
+        const site = siteById(s.lightSiteId);
+        if (!site) return;
+        const data = loadActive(site, s.date, s.heightM);
+        if (site.id === s.siteId) siteData = data;
+        data.catch(reportError);
+      }, 220);
     },
     setHeight(heightM) {
       const state = store.get();
@@ -236,7 +247,7 @@ async function boot(): Promise<void> {
     const pin = h(
       "button",
       { class: `pin ${site.status === "study_point" ? "is-study" : ""}`, type: "button", tabindex: -1 },
-      h("span", { class: "pin-label", text: siteLabel(site).title }),
+      h("span", { class: "pin-label" }, siteLabel(site).title, h("small", { "data-stats": site.id })),
     );
     pin.addEventListener("click", () => actions.selectSite(site.id));
     pin.addEventListener("pointerenter", () => actions.hover(site.id));
@@ -245,6 +256,17 @@ async function boot(): Promise<void> {
     pinLayer.append(pin);
   }
   store.subscribe((s, p) => {
+    if (s.date !== p.date || s.heightM !== p.heightM || s.sites !== p.sites) {
+      // Hover text of each point: its two 30-day shares for the chosen date.
+      const share = (site: Site, id: string): string => {
+        const v = sweepValue(derived, site, s.heightM, s.date, id);
+        return v === null ? "—" : formatPercent0(v);
+      };
+      for (const site of s.sites) {
+        const el = pins.get(site.id)?.querySelector<HTMLElement>("[data-stats]");
+        if (el) el.textContent = T.pinStats(share(site, "sun.anyDisk.fraction"), share(site, "earth.anyDisk.fraction"));
+      }
+    }
     if (s.hoverId !== p.hoverId) for (const [id, pin] of pins) pin.classList.toggle("is-hover", id === s.hoverId);
     if (s.phase !== p.phase) document.body.dataset.phase = s.phase;
   });

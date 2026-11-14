@@ -19,11 +19,13 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
   const stepper = h("ol", { class: "stepper" }, ...steps);
   const land = h("button", { class: "button button-primary", type: "button" }, icon("nav"), T.land);
   const sunrise = h("button", { class: "button button-primary", type: "button" }, icon("sun"), T.toSunrise);
+  const compare = h("button", { class: "button button-primary button-big", type: "button" }, icon("table"), T.compare);
   const skip = h("button", { class: "button", type: "button" }, icon("skip"), T.skip);
   const back = h("button", { class: "button", type: "button" }, icon("back"), h("span"));
-  const actionsRow = h("div", { class: "caption-actions" }, land, sunrise, skip, back);
+  const actionsRow = h("div", { class: "caption-actions" }, compare, land, sunrise, skip, back);
   const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, stepper, actionsRow);
   let riseMs: number | null = null;
+  compare.addEventListener("click", () => actions.setCompare(true));
   land.addEventListener("click", () => actions.land());
   sunrise.addEventListener("click", () => {
     // One display step after the rise, so the Sun is already above the terrain.
@@ -50,6 +52,7 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
     back.hidden = !selected;
     back.lastElementChild!.textContent = s.phase === "focus" ? T.close : T.back;
 
+    compare.hidden = selected;
     land.hidden = true;
     sunrise.hidden = true;
     riseMs = null;

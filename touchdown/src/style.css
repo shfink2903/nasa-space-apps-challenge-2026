@@ -890,6 +890,118 @@ body[data-phase="final"] #scene {
   transform: none;
 }
 
+/* ---------- Site sheet: status cards ---------- */
+
+.status {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 10px 12px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.status .cond-icon {
+  width: 40px;
+  height: 40px;
+}
+.status-kicker {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.status-text {
+  display: block;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.status-sun .status-text {
+  color: var(--amber);
+}
+.status-earth .status-text {
+  color: var(--ice);
+}
+.status.is-off .status-text {
+  color: #ff9a8a;
+}
+.status.is-off .cond-icon {
+  color: var(--faint);
+}
+.status-next {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.status-share {
+  grid-column: 1 / -1;
+}
+.status-share small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.conditions .meter {
+  margin-top: 6px;
+  padding: 8px 12px 10px;
+}
+.button-wide {
+  width: 100%;
+  justify-content: center;
+}
+.button-big {
+  height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.button-icon {
+  width: 38px;
+  padding: 0;
+  justify-content: center;
+  flex: none;
+}
+.button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.conditions .button-wide {
+  margin-top: 14px;
+}
+.sites .button-wide {
+  margin-top: 12px;
+}
+.more {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.more > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.more > summary:hover {
+  color: var(--ink);
+}
+.more[open] > summary {
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+.pin-label small {
+  display: block;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* ---------- Compare sheet ---------- */
 
 .sheet-backdrop {
@@ -899,32 +1011,145 @@ body[data-phase="final"] #scene {
   display: grid;
   place-items: center;
   padding: 28px;
-  background: rgba(4, 6, 10, 0.6);
+  background: rgba(4, 6, 10, 0.66);
 }
 .sheet {
   display: flex;
   flex-direction: column;
-  width: min(1120px, 100%);
+  width: min(1240px, 100%);
   max-height: calc(100vh - 56px);
   max-height: calc(100dvh - 56px);
-  background: var(--glass-strong);
+  padding: 22px 24px;
+  background: rgba(9, 12, 19, 0.92);
+}
+.sheet .panel-head {
+  align-items: flex-start;
+}
+.sheet-title {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 .sheet-sub {
-  display: block;
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13.5px;
 }
 .sheet-tools {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: none;
+}
+.cmp-date {
+  margin-top: 16px;
+  padding: 14px 16px 10px;
+  border: 1px solid rgba(255, 186, 96, 0.3);
+  border-radius: 14px;
+  background: var(--amber-soft);
+}
+.cmp-date-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cmp-date-text {
+  display: block;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.cmp-date-head small:not(.kicker) {
+  color: var(--muted);
+  font-size: 12px;
+}
+.cmp-date-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+}
+.cmp-slider-box {
+  flex: 1;
+  min-width: 0;
+}
+.cmp-slider {
+  display: block;
+  width: 100%;
+  height: 38px;
+  margin: 0;
+  background: none;
+  appearance: none;
+  cursor: pointer;
+}
+.cmp-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--amber) var(--p, 0%), rgba(255, 255, 255, 0.14) var(--p, 0%));
+}
+.cmp-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.cmp-slider::-moz-range-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--amber);
+}
+.cmp-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 4px rgba(255, 186, 96, 0.35),
+    0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.cmp-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 4px rgba(255, 186, 96, 0.35),
+    0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.cmp-months {
+  display: grid;
+  grid-template-columns: repeat(52, 1fr);
+  padding: 0 12px;
+}
+.cmp-months span {
+  overflow: visible;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cmp-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  margin-top: 14px;
+}
+.cmp-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
 }
 .sheet-body {
   flex: 0 1 auto;
   min-height: 0;
+  margin-top: 12px;
   padding-bottom: 4px;
-  margin-top: 14px;
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
@@ -932,72 +1157,141 @@ body[data-phase="final"] #scene {
 .compare-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
 }
 .compare-table th,
 .compare-table td {
-  padding: 9px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
-  text-align: right;
-  white-space: nowrap;
+  text-align: left;
+  vertical-align: middle;
 }
 .compare-table thead th {
   position: sticky;
   top: 0;
+  z-index: 1;
   background: #0b0f17;
-  font-family: var(--mono);
-  font-size: 10.5px;
+  vertical-align: bottom;
   font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
 }
 .compare-table thead th button {
+  display: block;
+  width: 100%;
   padding: 0;
   background: none;
   border: none;
   font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.compare-table thead th button:hover,
-.compare-table thead th.is-active button {
-  color: var(--amber);
-}
-.compare-table thead th.is-active button::after {
-  content: " ▾";
-}
-.compare-table th[scope="row"],
-.compare-table thead th:nth-child(2) {
-  text-align: left;
-}
-.compare-table th[scope="row"] {
+.col-title {
+  display: block;
+  font-size: 14px;
   font-weight: 600;
+  color: var(--ink);
 }
-.compare-table th[scope="row"] .tag {
-  margin-left: 6px;
-}
-.compare-table td {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-.compare-table td.rank,
-.compare-table thead th:first-child {
-  width: 34px;
-  text-align: center;
-  color: var(--amber);
-}
-.compare-table td.model {
-  font-family: var(--sans);
-  font-size: 11.5px;
+.compare-table thead th small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.3;
   color: var(--muted);
 }
+.col-title {
+  white-space: nowrap;
+}
+.compare-table thead th.is-detail small {
+  display: none;
+}
+.compare-table.is-precise td.has-bar {
+  min-width: 104px;
+}
+.compare-table.is-precise th.name {
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compare-table.is-precise th,
+.compare-table.is-precise td {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+.compare-table thead th.is-sortable button:hover .col-title {
+  color: var(--amber);
+}
+.compare-table thead th.is-active .col-title {
+  color: var(--amber);
+}
+.compare-table thead th.is-active .col-title::after {
+  content: " ▾";
+}
+.compare-table [data-col="sun"] .col-title::before {
+  content: "☀ ";
+  color: var(--amber);
+}
+.compare-table [data-col="earth"] .col-title::before {
+  content: "◍ ";
+  color: var(--ice);
+}
+.compare-table .rank {
+  width: 40px;
+  font-family: var(--mono);
+  text-align: center;
+  color: var(--muted);
+}
+.compare-table tr.is-first .rank {
+  color: var(--amber);
+  font-weight: 600;
+}
+.compare-table .name {
+  white-space: nowrap;
+}
+.compare-table th.name span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.compare-table th.name small {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.compare-table td b {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .compare-table td.has-bar {
-  background: linear-gradient(to right, rgba(var(--rgb), 0.2) var(--fill, 0%), transparent var(--fill, 0%));
+  min-width: 150px;
+}
+.compare-table td.has-bar b {
+  display: inline-block;
+  width: 58px;
+  text-align: right;
+}
+.cmp-bar {
+  display: inline-block;
+  width: calc(100% - 66px);
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.cmp-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .compare-table td.is-active {
-  color: var(--amber);
+  background: rgba(255, 255, 255, 0.035);
 }
 .compare-table tbody tr {
   cursor: pointer;
@@ -1010,26 +1304,17 @@ body[data-phase="final"] #scene {
 }
 .cal {
   display: grid;
-  grid-template-columns: 170px minmax(520px, 1fr);
+  grid-template-columns: 190px minmax(520px, 1fr);
   align-items: center;
   gap: 3px 12px;
+  margin-top: 12px;
 }
 .cal-name {
   overflow: hidden;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-.cal-name em {
-  flex: none;
-  font-size: 10.5px;
-  font-style: normal;
-  font-weight: 400;
-  color: var(--faint);
 }
 .cal-name.is-selected {
   color: var(--amber);
@@ -1047,7 +1332,7 @@ body[data-phase="final"] #scene {
   white-space: nowrap;
 }
 .cal-cell {
-  height: 20px;
+  height: 22px;
   padding: 0;
   border: none;
   border-radius: 3px;
@@ -1059,6 +1344,19 @@ body[data-phase="final"] #scene {
   outline-offset: 0;
   position: relative;
   z-index: 1;
+}
+.cal-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.cal-scale i {
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
 }
 .sheet > .note {
   margin-top: 12px;

@@ -25,7 +25,7 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
     { class: "select", id: "rank-by", "aria-label": T.rankBy },
     ...CRITERIA.map((c, i) => h("option", { value: c.id, text: i === 0 ? `${T.criteria[c.id]} (${T.defaultCriterion})` : T.criteria[c.id] })),
   );
-  const compare = h("button", { class: "button button-small", type: "button" }, icon("table"), T.compare);
+  const compare = h("button", { class: "button button-primary button-wide button-big", type: "button" }, icon("table"), T.compare);
   select.addEventListener("change", () => actions.setRankBy(select.value));
   compare.addEventListener("click", () => actions.setCompare(true));
 
@@ -61,8 +61,8 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
       "header",
       { class: "panel-head" },
       h("div", null, h("small", { class: "kicker", text: T.listKicker }), h("h2", { class: "panel-title panel-title-big", text: T.listTitle })),
-      compare,
     ),
+    compare,
     h("label", { class: "field-label", for: "rank-by" }, T.rankBy, date),
     select,
     body,
