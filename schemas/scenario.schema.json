@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:true-larpers:lunar-data:scenario:1",
+  "title": "Lunar site scenario v1",
+  "type": "object",
+  "required": ["schemaVersion", "scenarioId", "siteId", "datasetVersion", "engineVersion", "kernelSetId", "profileId", "request", "modelLevel", "coverageStatus", "validationStatus", "processingStatus", "events", "windows", "metrics", "evaluation", "provenance", "limits", "notEvaluated"],
+  "properties": {
+    "schemaVersion": {"type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$"},
+    "scenarioId": {"type": "string", "minLength": 1},
+    "siteId": {"type": "string", "minLength": 1},
+    "datasetVersion": {"type": "string"},
+    "engineVersion": {"type": "string"},
+    "kernelSetId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "profileId": {"type": ["string", "null"]},
+    "modelLevel": {"enum": ["geometric", "lola"]},
+    "coverageStatus": {"enum": ["covered", "partial", "outside"]},
+    "validationStatus": {"enum": ["validated_on_reference_cases", "not_validated", "failed"]},
+    "processingStatus": {"enum": ["complete", "partial", "failed"]},
+    "request": {
+      "type": "object",
+      "required": ["siteId", "surfaceStartUtc", "analysisDurationS", "observerHeightM", "computeStepS", "diskConvention", "hardConstraints", "missionMargins"],
+      "properties": {
+        "surfaceStartUtc": {"$ref": "#/$defs/parameter"},
+        "analysisDurationS": {"$ref": "#/$defs/parameter"},
+        "observerHeightM": {"$ref": "#/$defs/parameter"},
+        "computeStepS": {"$ref": "#/$defs/parameter"},
+        "hardConstraints": {"type": "array"},
+        "diskConvention": {"type": "array", "items": {"enum": ["anyDisk", "fullDisk"]}},
+        "missionMargins": {"type": ["object", "null"]}
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["body", "convention", "type", "tUtc", "bracketS"],
+        "properties": {
+          "body": {"enum": ["sun", "earth"]},
+          "convention": {"enum": ["anyDisk", "fullDisk"]},
+          "type": {"enum": ["rise", "set", "grazing"]},
+          "tUtc": {"type": "string"},
+          "bracketS": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+        }
+      }
+    },
+    "windows": {"type": "object"},
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metricId", "value", "unit", "denominatorS", "quality", "reason"],
+        "properties": {
+          "metricId": {"type": "string"},
+          "value": {"type": ["number", "null"]},
+          "unit": {"type": "string"},
+          "denominatorS": {"type": ["number", "null"], "minimum": 0},
+          "quality": {"enum": ["complete", "partial", "unknown", "sampled"]},
+          "reason": {"type": ["object", "null"]}
+        },
+        "allOf": [{"if": {"properties": {"value": {"type": "null"}}}, "then": {"properties": {"reason": {"type": "object", "required": ["code"]}}}}]
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "required": ["nominal", "prudent"],
+      "properties": {"nominal": {"$ref": "#/$defs/verdict"}, "prudent": {"$ref": "#/$defs/verdict"}}
+    },
+    "provenance": {"type": "object", "required": ["sources", "catalogueSources", "parameters"]},
+    "limits": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "notEvaluated": {"type": "array"},
+    "seriesRef": {
+      "type": "object", "required": ["path", "encoding", "sha256"],
+      "properties": {"path": {"type": "string"}, "encoding": {"const": "gzip"}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+    }
+  },
+  "$defs": {
+    "parameter": {"type": "object", "required": ["value", "unit", "origin"], "properties": {"unit": {"type": "string"}, "origin": {"type": "string"}}},
+    "verdict": {"type": "object", "required": ["status", "constraints"], "properties": {"status": {"enum": ["pass", "fail", "unknown", "not_evaluated"]}, "constraints": {"type": "array"}}}
+  }
+}

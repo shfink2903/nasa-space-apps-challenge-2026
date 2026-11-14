@@ -4,6 +4,8 @@
 
 **Statut : plan, mis à jour le 14 novembre 2026.** Aucun code, aucun noyau, aucun MNT ni aucun résultat calculé n'existe encore dans le dépôt. Les valeurs marquées « vérifié le 14/11/2026 » ont été relevées ce jour sur les sources officielles (annexe A). Celles marquées « à vérifier » ne doivent pas être publiées avant vérification.
 
+**Mise en œuvre ultérieure :** le statut ci-dessus décrit l'état à la rédaction du plan. Le pipeline exécutable, ses écarts explicités et ses résultats sont documentés dans [DATA_PIPELINE.md](DATA_PIPELINE.md) et [docs/validation/v1.md](docs/validation/v1.md). Le test T9 initial échoue ; les résultats LOLA restent expérimentaux.
+
 **Périmètre : DATA uniquement.** Préparer les sites, calculer les positions du Soleil et de la Terre, intégrer le relief LOLA, détecter les fenêtres, comparer des scénarios et livrer des fichiers traçables à l'UI et à la couche IA. L'interface (carte, animations, composants, rendu) est construite ailleurs. Ce plan ne fixe que le contrat de données qu'elle consomme. Contexte produit : [CHALLENGE.md](CHALLENGE.md), [README.md](README.md).
 
 **Objectif de livraison :** lot `data/processed/v1/` gelé le **15/11 à 12:00 (Paris)**, lisible sans réseau par l'UI et par l'outil IA.
