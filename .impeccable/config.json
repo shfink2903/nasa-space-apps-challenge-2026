@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "space grotesk",
+        "createdAt": "2026-11-14T19:42:16.898Z",
+        "reason": "user confirmed: keep Space Grotesk as the app typeface (chat, 14 Nov 2026)"
+      }
+    ]
+  }
+}
