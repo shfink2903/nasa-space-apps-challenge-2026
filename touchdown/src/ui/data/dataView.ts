@@ -320,7 +320,7 @@ function compare(ui: Ui): HTMLElement {
           return h(
             "article",
             { class: "compare-column", style: `--site:${SITE_COLORS[i]}` },
-            h("header", null, h("span", { class: `site-rank ${row?.rank === 1 ? "is-best" : ""}`, text: row?.rank ? String(row.rank) : "–" }), open, remove),
+            h("header", null, h("span", { class: `site-rank ${row?.rank === 1 ? "is-best" : ""}`, text: row?.rank ? String(row.rank) : "–" }), h("i", { class: "site-swatch", "aria-hidden": "true" }), open, remove),
             h("small", { class: "mono-small", text: fmt.coords(site.latDeg, site.lonDeg) }),
             now,
             fact(t.bothShare, fmt.percent(m?.bothShare ?? null), key === "bothShare"),

@@ -1382,15 +1382,21 @@ input[type="range"] {
 .compare-column {
   padding: 14px;
   border: 1px solid var(--line);
-  border-top: 3px solid var(--site);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
 }
 .compare-column header {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 8px;
+}
+/* Same colour square as in the legend and the curves below. */
+.site-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--site);
 }
 .compare-name {
   overflow: hidden;
