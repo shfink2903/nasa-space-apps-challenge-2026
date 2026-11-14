@@ -6,6 +6,8 @@ Event site: https://www.spaceappschallenge.org/2026/
 Challenge page: https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/
 Read CHALLENGE.md for any informations about the challenge itself. 
 
+Detailed DATA plan (French, documentation only): [data.md](data.md).
+
 ## Our challenge
 
 **Lunar Landing Site Navigator** (difficulty: Advanced / Intermediate; subjects: Human Exploration, Moon, Software, Space Exploration)
