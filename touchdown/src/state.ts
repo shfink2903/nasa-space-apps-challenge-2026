@@ -20,6 +20,8 @@ export interface AppState {
   /** Sites shown in the ranking and the comparison: the south pole (default) or every site. */
   region: Region;
   compareOpen: boolean;
+  /** Goes up each time a value of the free point is computed, so the panels redraw. */
+  customTick: number;
   hoverId: string | null;
   /** Fractional index in the display series (600 s steps). */
   index: number;
@@ -63,6 +65,8 @@ export function createStore(initial: AppState): Store {
 /** What the interface can ask the app to do. */
 export interface Actions {
   selectSite(id: string): void;
+  /** Creates (or moves) the free point at these lunar coordinates and opens it. */
+  selectPoint(latDeg: number, lonDeg: number): void;
   hover(id: string | null): void;
   /** Starts the illustrative flight to the selected site. Does nothing when the Sun is not visible there. */
   land(): void;
@@ -72,6 +76,7 @@ export interface Actions {
   setRegion(region: Region): void;
   setMode(mode: Mode): void;
   setCompare(open: boolean): void;
+  startTour(): void;
   /** Moves the time cursor to a UTC time inside the loaded 30 days. */
   jumpTo(tMs: number): void;
   setIndex(index: number): void;

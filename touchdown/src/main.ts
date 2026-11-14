@@ -11,6 +11,7 @@ import {
   loadHorizon,
   loadScenario,
   loadSeries,
+  loadSeriesById,
   loadSites,
   parseScenarioId,
   pickScenarioId,
@@ -22,6 +23,7 @@ import {
   type Series,
   type Site,
 } from "./data/dataset";
+import { CUSTOM_ID, customMetrics, customScenario, customSeries, customSite } from "./data/custom";
 import { inRegion } from "./data/ranking";
 import { Director } from "./scene/director";
 import { OrbitScene } from "./scene/orbitScene";
@@ -38,6 +40,7 @@ import { createSiteList } from "./ui/sitelist";
 import { createSitePanel } from "./ui/sitepanel";
 import { LANG, T } from "./ui/strings";
 import { createTimeBar } from "./ui/timebar";
+import { createTour } from "./ui/tour";
 
 const REFERENCE_SITE = "apollo11";
 const STEPS_PER_HOUR = 6; // the display series has one step per 600 s
@@ -110,6 +113,7 @@ async function boot(): Promise<void> {
     rankBy: "overlap",
     region: "south",
     compareOpen: false,
+    customTick: 0,
     hoverId: null,
     index: 0,
     playing: false,
@@ -151,6 +155,50 @@ async function boot(): Promise<void> {
   // --- Actions. ---
   const siteById = (id: string | null): Site | undefined => store.get().sites.find((s) => s.id === id);
 
+  // --- Free point: any lunar coordinates, by geometry from the reference site (see data/custom.ts). ---
+  const refCache = new Map<string, Promise<Series>>();
+  /** Published series of the reference site for a date and a height. Kept: the year of a free point reuses them. */
+  const refSeries = (date: string, heightM: number): Promise<Series> => {
+    const key = `${date}|${heightM}`;
+    let hit = refCache.get(key);
+    if (!hit) {
+      const id = pickScenarioId(reference, date, heightM, "geometric");
+      hit = id ? loadSeriesById(id) : Promise.reject(new Error(`No reference scenario on ${date}`));
+      hit.catch(() => refCache.delete(key));
+      refCache.set(key, hit);
+    }
+    return hit;
+  };
+  const loadCustom = async (site: Site, date: string, heightM: number): Promise<SiteData> => {
+    const series = customSeries(reference, await refSeries(date, heightM), site.latDeg, site.lonDeg, heightM);
+    return { scenario: customScenario(series, date, heightM), series, horizon: null };
+  };
+  /** Fills the 52 weekly starts of the free point, a few at a time, so its year strip and its compare rows appear. */
+  let yearRun = 0;
+  const fillCustomYear = (site: Site, heightM: number): void => {
+    const run = ++yearRun;
+    const all = store.get().dates;
+    const values: Record<string, (number | null)[]> = {};
+    for (const id of derived.metricIds) values[id] = all.map(() => null);
+    derived.sweeps[`${CUSTOM_ID}|${heightM}|geometric`] = { dates: all, validationStatus: "not_validated", values };
+    // The selected date first, then the rest of the year.
+    const queue = [...all].sort((a, b) => Number(b === store.get().date) - Number(a === store.get().date));
+    const worker = async (): Promise<void> => {
+      for (let date = queue.shift(); date !== undefined && run === yearRun; date = queue.shift()) {
+        try {
+          const metrics = customMetrics(customSeries(reference, await refSeries(date, heightM), site.latDeg, site.lonDeg, heightM)).values;
+          if (run !== yearRun) return;
+          const i = all.indexOf(date);
+          for (const id of derived.metricIds) values[id][i] = metrics[id] ?? null;
+          store.set({ customTick: store.get().customTick + 1 });
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    };
+    for (let k = 0; k < 4; k++) void worker();
+  };
+
   /** Data of the selected site, as a promise: the flight waits for it. */
   let siteData: Promise<{ horizon: HorizonProfile | null }> | null = null;
 
@@ -158,7 +206,10 @@ async function boot(): Promise<void> {
   const loadActive = (site: Site, date: string, heightM: number): Promise<{ horizon: HorizonProfile | null }> => {
     loadAbort.abort();
     loadAbort = new AbortController();
-    return loadSiteData(site, date, heightM, loadAbort.signal).then((d) => {
+    const load = site.status === "custom" ? loadCustom(site, date, heightM) : loadSiteData(site, date, heightM, loadAbort.signal);
+    const signal = loadAbort.signal;
+    return load.then((d) => {
+      if (signal.aborted) throw new DOMException("Superseded", "AbortError");
       store.set({ series: d.series, scenario: d.scenario, horizon: d.horizon, lightSiteId: site.id });
       return { horizon: d.horizon };
     });
@@ -184,6 +235,15 @@ async function boot(): Promise<void> {
         reportError(err);
         if (err.name !== "AbortError" && store.get().siteId === id) actions.back();
       });
+    },
+    selectPoint(latDeg, lonDeg) {
+      const site = customSite(latDeg, lonDeg);
+      site.name = T.customName;
+      const state = store.get();
+      // A new place for the free point: forget the old one, then open it like any site.
+      store.set({ sites: [...state.sites.filter((x) => x.status !== "custom"), site], siteId: state.siteId === CUSTOM_ID ? null : state.siteId });
+      fillCustomYear(site, state.heightM);
+      actions.selectSite(CUSTOM_ID);
     },
     land() {
       const s = store.get();
@@ -218,6 +278,8 @@ async function boot(): Promise<void> {
       const site = siteById(state.lightSiteId);
       if (!site || heightM === state.heightM) return;
       store.set({ heightM });
+      const free = state.sites.find((x) => x.status === "custom");
+      if (free) fillCustomYear(free, heightM);
       const data = loadActive(site, state.date, heightM);
       if (site.id === state.siteId) siteData = data;
       data.catch(reportError);
@@ -233,6 +295,7 @@ async function boot(): Promise<void> {
       store.set({ mode });
     },
     setCompare: (compareOpen) => store.set({ compareOpen }),
+    startTour: () => tour.start(),
     jumpTo(tMs) {
       const { series } = store.get();
       if (series) store.set({ index: indexAt(series, tMs), playing: false });
@@ -260,17 +323,20 @@ async function boot(): Promise<void> {
 
   // --- Interface. ---
   const pins = new Map<string, HTMLButtonElement>();
+  const tour = createTour(store, actions);
   hud.append(
     h("div", { class: "rail rail-left" }, createGuide(store, actions), createSitePanel(store, actions, derived)),
     h("div", { class: "rail rail-right" }, createTimeBar(store, actions), createSiteList(store, actions, derived)),
     createCaption(store, actions),
     h("p", { class: "footer", text: T.footer }),
+    tour.el,
     createCompare(store, actions, derived),
   );
-  for (const site of sites) {
+  const addPin = (site: Site): void => {
+    const kind = site.status === "study_point" ? "is-study" : site.status === "custom" ? "is-custom" : "";
     const pin = h(
       "button",
-      { class: `pin ${site.status === "study_point" ? "is-study" : ""}`, type: "button", tabindex: -1 },
+      { class: `pin ${kind}`, type: "button", tabindex: -1 },
       h("span", { class: "pin-label" }, siteLabel(site).title, h("small", { "data-stats": site.id })),
     );
     pin.addEventListener("click", () => actions.selectSite(site.id));
@@ -278,9 +344,11 @@ async function boot(): Promise<void> {
     pin.addEventListener("pointerleave", () => actions.hover(null));
     pins.set(site.id, pin);
     pinLayer.append(pin);
-  }
+  };
+  for (const site of sites) addPin(site);
   store.subscribe((s, p) => {
-    if (s.date !== p.date || s.heightM !== p.heightM || s.sites !== p.sites) {
+    if (s.sites !== p.sites && s.sites.some((x) => x.status === "custom") && !pins.has(CUSTOM_ID)) addPin(s.sites.find((x) => x.status === "custom")!);
+    if (s.date !== p.date || s.heightM !== p.heightM || s.sites !== p.sites || s.customTick !== p.customTick) {
       // Hover text of each point: its two 30-day shares for the chosen date.
       const share = (site: Site, id: string): string => {
         const v = sweepValue(derived, site, s.heightM, s.date, id);
@@ -323,8 +391,22 @@ async function boot(): Promise<void> {
     { passive: false },
   );
   let dragY: number | null = null;
-  canvas.addEventListener("pointerdown", (e) => (dragY = e.clientY));
+  let down: { x: number; y: number } | null = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    dragY = e.clientY;
+    down = { x: e.clientX, y: e.clientY };
+  });
   window.addEventListener("pointerup", () => (dragY = null));
+  // A plain click on the Moon (no drag) drops the free point there.
+  canvas.addEventListener("pointerup", (e) => {
+    const start = down;
+    down = null;
+    const phase = store.get().phase;
+    if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5 || (phase !== "cruise" && phase !== "focus")) return;
+    const rect = canvas.getBoundingClientRect();
+    const hit = orbit.pick(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
+    if (hit) actions.selectPoint(hit.latDeg, hit.lonDeg);
+  });
   canvas.addEventListener("pointermove", (e) => {
     if (dragY === null || store.get().phase !== "cruise") return;
     director.approach((dragY - e.clientY) * 0.002);

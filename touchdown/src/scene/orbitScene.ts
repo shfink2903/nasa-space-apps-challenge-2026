@@ -307,6 +307,20 @@ export class OrbitScene {
     this.setReticle(1, timeS);
   }
 
+  /** Lunar coordinates under a screen point (x, y in -1..1), or null when the point is off the Moon. */
+  pick(ndcX: number, ndcY: number): { latDeg: number; lonDeg: number } | null {
+    const origin = this.camera.position;
+    const dir = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(this.camera).sub(origin).normalize();
+    // Ray against the unit sphere at the centre: nearest crossing.
+    const b = origin.dot(dir);
+    const disc = b * b - (origin.lengthSq() - 1);
+    if (disc < 0) return null;
+    const t = -b - Math.sqrt(disc);
+    if (t <= 0) return null;
+    const p = origin.clone().addScaledVector(dir, t);
+    return { latDeg: Math.asin(THREE.MathUtils.clamp(p.y, -1, 1)) / DEG, lonDeg: Math.atan2(p.x, p.z) / DEG };
+  }
+
   /** Screen positions of the sites that face the camera. */
   projectPins(sites: Site[], width: number, height: number): PinScreen[] {
     const p = new THREE.Vector3();

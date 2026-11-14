@@ -6,7 +6,8 @@ import { lerpAngleDeg } from "./astro";
 
 export const DATA_BASE = "/data/v1";
 
-export type SiteStatus = "historical" | "study_point";
+/** "custom" is a free point chosen by the user; it is not in the dataset catalogue. */
+export type SiteStatus = "historical" | "study_point" | "custom";
 /** 0 = not visible, 1 = partly visible, 2 = fully visible, null = unknown. */
 export type DiskState = 0 | 1 | 2 | null;
 
@@ -147,6 +148,14 @@ export async function loadSeries(scenario: Scenario, signal?: AbortSignal): Prom
   if (!res.ok || !res.body) throw new Error(`${scenario.seriesRef.path}: HTTP ${res.status}`);
   const stream = res.body.pipeThrough(new DecompressionStream("gzip"));
   return (await new Response(stream).json()) as Series;
+}
+
+/** Series of a published scenario, straight from its id (the file is named after it). */
+export async function loadSeriesById(scenarioId: string, signal?: AbortSignal): Promise<Series> {
+  const path = `series/${scenarioId}.json.gz`;
+  const res = await fetch(`${DATA_BASE}/${path}`, { signal });
+  if (!res.ok || !res.body) throw new Error(`${path}: HTTP ${res.status}`);
+  return (await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).json()) as Series;
 }
 
 /** Horizon profiles exist only for terrain-aware scenarios. Returns null when there is none. */

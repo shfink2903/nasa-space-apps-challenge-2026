@@ -2,7 +2,7 @@ import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankR
 import type { Derived } from "../data/dataset";
 import type { Actions, Mode, Store } from "../state";
 import { h, icon } from "./dom";
-import { formatHours, formatHoursExact, formatPercent, formatShareDays, formatShortDate, siteLabel } from "./format";
+import { formatCoords, formatHours, formatHoursExact, formatPercent, formatShareDays, formatShortDate, siteLabel } from "./format";
 import { T } from "./strings";
 
 /**
@@ -43,7 +43,7 @@ export function createRegionSwitch(store: Store, actions: Actions): HTMLElement 
 export function createSiteList(store: Store, actions: Actions, derived: Derived): HTMLElement {
   const date = h("span", { class: "badge", text: "" });
   const body = h("div", { class: "site-scroll" });
-  const note = h("p", { class: "note rank-note" });
+  const note = h("span");
   const rows = new Map<string, HTMLButtonElement>();
   const select = h(
     "select",
@@ -54,19 +54,41 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
   select.addEventListener("change", () => actions.setRankBy(select.value));
   compare.addEventListener("click", () => actions.setCompare(true));
 
+  // Free coordinates: the challenge asks for any lunar point, not only the catalogue.
+  const lat = h("input", { class: "input", type: "number", min: -90, max: 90, step: "any", placeholder: T.latLabel, "aria-label": T.latLabel, title: T.latLabel });
+  const lon = h("input", { class: "input", type: "number", min: -180, max: 180, step: "any", placeholder: T.lonLabel, "aria-label": T.lonLabel, title: T.lonLabel });
+  const go = h("button", { class: "button button-small button-icon", type: "submit", "aria-label": T.coordsGo, title: T.coordsGo }, icon("target"));
+  const coordsError = h("small", { class: "coords-error", text: T.coordsError, hidden: true });
+  const coords = h(
+    "form",
+    { class: "coords" },
+    h("div", { class: "field-label" }, T.coordsTitle, h("span", { text: T.coordsHint })),
+    h("div", { class: "coords-row" }, lat, lon, go),
+    coordsError,
+  );
+  coords.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const a = Number(lat.value);
+    const b = Number(lon.value);
+    const ok = lat.value !== "" && lon.value !== "" && Number.isFinite(a) && Number.isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180;
+    coordsError.hidden = ok;
+    if (ok) actions.selectPoint(a, b);
+  });
+
   const row = (r: RankRow, criterion: Criterion): HTMLButtonElement => {
     const { site } = r;
     const label = siteLabel(site);
     const study = site.status === "study_point";
+    const custom = site.status === "custom";
     const button = h(
       "button",
-      { class: `site-row ${study ? "is-study" : ""}`, type: "button", "aria-label": T.flyTo(site.name) },
+      { class: `site-row ${study ? "is-study" : ""} ${custom ? "is-custom" : ""}`, type: "button", "aria-label": T.flyTo(site.name) },
       h("span", { class: "site-mark", text: r.rank === null ? "–" : String(r.rank) }),
       h(
         "span",
         { class: "site-text" },
         h("b", null, label.title, study && h("em", { class: "tag tag-ice", text: T.studyTag }), r.nonDominated && h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆" })),
-        h("small", { text: label.place || site.name }),
+        h("small", { text: custom ? formatCoords(site) : label.place || site.name }),
       ),
       h("span", { class: "site-value", text: formatCriterion(criterion, r.value, store.get().mode) }),
     );
@@ -85,15 +107,15 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
     h(
       "header",
       { class: "panel-head" },
-      h("div", null, h("small", { class: "kicker", text: T.listKicker }), h("h2", { class: "panel-title panel-title-big", text: T.listTitle })),
+      h("h2", { class: "panel-title panel-title-big", text: T.listTitle }),
+      date,
     ),
     compare,
     createRegionSwitch(store, actions),
-    h("label", { class: "field-label", for: "rank-by" }, T.rankBy, date),
     select,
     body,
-    h("p", { class: "note rank-legend only-expert" }, h("em", { class: "tag tag-amber", text: "◆" }), ` ${T.nonDominated}`),
-    note,
+    coords,
+    h("p", { class: "note rank-legend only-expert" }, h("em", { class: "tag tag-amber", text: "◆" }), ` ${T.nonDominated}. `, note),
   );
 
   const mark = (): void => {
@@ -107,7 +129,7 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
   };
 
   store.subscribe((s, p) => {
-    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.region !== p.region || s.mode !== p.mode) {
+    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.region !== p.region || s.mode !== p.mode || s.customTick !== p.customTick) {
       const criterion = criterionById(s.rankBy);
       select.value = criterion.id;
       date.textContent = s.date ? `${formatShortDate(s.date)} · ${s.heightM} m` : "";

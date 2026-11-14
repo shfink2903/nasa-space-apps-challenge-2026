@@ -116,6 +116,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   const traceModel = line(T.modelLevel);
   const traceValidation = line(T.validation);
   const traceCoverage = line(T.coverage);
+  const customNote = h("p", { class: "warn-box", text: T.customWarning, hidden: true });
   const factList = h("ul", { class: "facts" });
   const facts = h("div", { class: "block only-simple" }, h("h3", { class: "block-title", text: T.factsTitle }), factList);
   const insightList = h("ul", { class: "insights" });
@@ -134,7 +135,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   );
 
   const sensBody = h("div", { class: "sens-body" });
-  const sensBlock = h("div", { hidden: true }, h("h3", { class: "block-title", text: T.sensTitle }), sensBody);
+  const sensBlock = h("div", { class: "block sens-block", hidden: true }, h("h3", { class: "block-title", text: T.sensTitle }), sensBody);
 
   const heightButtons = HEIGHTS.map((m) => {
     const b = h("button", { class: "seg", type: "button", text: `${m} m` });
@@ -162,7 +163,6 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     maxSun.row,
     maxEarth.row,
     meanSun.row,
-    sensBlock,
     h("h3", { class: "block-title", text: T.height }),
     h("div", { class: "segmented" }, ...heightButtons),
     h("p", { class: "note", text: T.heightNote }),
@@ -186,11 +186,13 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
       "div",
       { class: "sheet-scroll" },
       h("div", { class: "cond-head" }, name, place, tags),
+      customNote,
       sun.el,
       earth.el,
       both,
       insightList,
       facts,
+      sensBlock,
       yearBlock,
       compare,
       more,
@@ -269,9 +271,13 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     const label = siteLabel(site);
     name.textContent = label.title;
     place.textContent = label.place ? `${label.place} · ${formatCoords(site)}` : formatCoords(site);
+    const custom = site.status === "custom";
+    customNote.hidden = !custom;
     tags.replaceChildren(
-      h("span", { class: "tag", text: site.status === "study_point" ? T.statusStudy : T.statusHistorical }),
-      h("span", { class: `tag ${site.verification === "unverified" ? "tag-warn" : ""}`, text: T.verification[site.verification] ?? site.verification }),
+      h("span", { class: "tag", text: custom ? T.statusCustom : site.status === "study_point" ? T.statusStudy : T.statusHistorical }),
+      custom
+        ? h("span", { class: "tag tag-warn", text: T.customTag })
+        : h("span", { class: `tag ${site.verification === "unverified" ? "tag-warn" : ""}`, text: T.verification[site.verification] ?? site.verification }),
     );
 
     sky.setData(s.series, s.horizon, site.latDeg < 0);
@@ -322,7 +328,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     renderYear(site, s);
     renderSensitivity(site, s);
     heightButtons.forEach((b, i) => b.classList.toggle("is-on", HEIGHTS[i] === s.heightM));
-    model.textContent = lola ? T.modelLola : T.modelGeometric;
+    model.textContent = custom ? T.modelCustom : lola ? T.modelLola : T.modelGeometric;
     limits.replaceChildren(...scenario.limits.map((text) => h("li", { text })));
   }
 
@@ -355,7 +361,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     panel.hidden = !show;
     panel.classList.toggle("is-loading", show && !ready);
     if (!show || !ready || !site || !s.scenario) return;
-    const still = wasHidden || s.mode !== p.mode || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
+    const still = wasHidden || s.mode !== p.mode || s.customTick !== p.customTick || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
     if (still) renderStill(site, s, s.scenario);
     if (still || s.index !== p.index) renderNow(s, s.scenario);
   });

@@ -74,38 +74,40 @@ function buildGround(seed: number): THREE.BufferGeometry {
 }
 
 /**
- * Far hills from the published horizon profile: for each azimuth, the wall top
- * is at the elevation the dataset gives. Unknown values are drawn at 0°.
+ * Far hills from the published horizon profile. For each azimuth the crest is
+ * at the elevation the dataset gives, seen from the pad. The hills are drawn as
+ * a long slope that starts on the plain and climbs to the crest, so they read
+ * as terrain and not as a wall. Only the crest height is data; the slope shape
+ * is for the picture. Unknown values are drawn at 0°.
  */
 function buildHorizon(profile: HorizonProfile): THREE.BufferGeometry {
   const n = profile.horizonElevationDeg.length;
   const position = new Float32Array(n * 2 * 3);
-  const normal = new Float32Array(n * 2 * 3);
   const color = new Float32Array(n * 2 * 3);
+  const foot = PATCH_RADIUS * 0.45;
   for (let i = 0; i < n; i++) {
     const az = i * profile.azimuthStepDeg;
     const el = profile.horizonElevationDeg[i] ?? 0;
     const d = surfaceDir(az, 0);
-    const top = Math.max(-60, PATCH_RADIUS * Math.tan(el * DEG));
-    position.set([d.x * PATCH_RADIUS * 0.985, -90, d.z * PATCH_RADIUS * 0.985], i * 6);
-    position.set([d.x * PATCH_RADIUS, top, d.z * PATCH_RADIUS], i * 6 + 3);
-    // Mostly upward, like the ground: far hills then get about the same light as the plain in front of them.
-    const nrm = new THREE.Vector3(-d.x * 0.3, 1, -d.z * 0.3).normalize();
-    normal.set([nrm.x, nrm.y, nrm.z, nrm.x, nrm.y, nrm.z], i * 6);
-    const shade = 0.8 + 0.4 * hash2(Math.floor(i / 6), 7, 4242);
-    color.set([0.1, 0.095, 0.09, 0.34 * shade, 0.325 * shade, 0.305 * shade], i * 6);
+    const crest = Math.max(-60, PATCH_RADIUS * Math.tan(el * DEG));
+    position.set([d.x * foot, -14, d.z * foot], i * 6);
+    position.set([d.x * PATCH_RADIUS, crest, d.z * PATCH_RADIUS], i * 6 + 3);
+    // Same grey as the regolith, with a slow change around the horizon.
+    const shade = 0.3 * (0.92 + 0.08 * Math.sin(az * DEG * 7) + 0.05 * Math.sin(az * DEG * 23 + 1.3));
+    color.set([shade, shade * 0.97, shade * 0.93, shade, shade * 0.97, shade * 0.93], i * 6);
   }
   const index: number[] = [];
   for (let i = 0; i < n; i++) {
     const a = i * 2;
     const b = ((i + 1) % n) * 2;
-    index.push(a, b, a + 1, b, b + 1, a + 1); // front faces look inward, toward the pad
+    index.push(a, b, a + 1, b, b + 1, a + 1); // front faces look inward and up, toward the pad
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(position, 3));
-  geometry.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(color, 3));
   geometry.setIndex(index);
+  // Real slope normals: the side facing the Sun is lit, the other side falls in shadow.
+  geometry.computeVertexNormals();
   return geometry;
 }
 
@@ -278,7 +280,7 @@ export class SurfaceScene {
 
     this.horizon = null;
     if (profile) {
-      const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+      const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide });
       this.horizon = new THREE.Mesh(buildHorizon(profile), material);
       this.scene.add(this.horizon);
     }

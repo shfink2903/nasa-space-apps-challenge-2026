@@ -171,6 +171,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     const tbody = h("tbody");
     for (const site of sitesIn(s.sites, s.region)) {
       const label = siteLabel(site);
+      const free = site.status === "custom";
       const rank = h("td", { class: "rank" });
       const mark = h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆", hidden: true });
       const cells = new Map<string, { value: HTMLElement; fill: HTMLElement | null }>();
@@ -186,7 +187,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         "tr",
         { tabindex: 0 },
         rank,
-        h("th", { scope: "row", class: "name", title: site.name }, h("span", null, label.title, site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }), mark)),
+        h("th", { scope: "row", class: "name", title: site.name }, h("span", null, label.title, site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }), free && h("em", { class: "tag tag-warn", title: T.customWarning, text: T.customTag }), mark)),
         ...tds,
       );
       tr.addEventListener("click", () => open(site.id));
@@ -366,6 +367,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   });
   store.subscribe((s, p) => {
     if (s.dates !== p.dates) fillMonths(s.dates);
+    if (s.compareOpen && s.compareOpen === p.compareOpen && (s.sites !== p.sites || s.customTick !== p.customTick)) render(s.sites !== p.sites || tab === "year");
     if (s.compareOpen !== p.compareOpen) {
       if (!s.compareOpen) stop();
       render(true);

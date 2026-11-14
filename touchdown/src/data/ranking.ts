@@ -33,7 +33,9 @@ export type Region = "south" | "all";
  */
 export const SOUTH_REGION_MAX_LAT_DEG = -60;
 
-export const inRegion = (site: Site, region: Region): boolean => region === "all" || site.latDeg <= SOUTH_REGION_MAX_LAT_DEG;
+/** The user's free point is always shown: it is the one they are studying. */
+export const inRegion = (site: Site, region: Region): boolean =>
+  region === "all" || site.status === "custom" || site.latDeg <= SOUTH_REGION_MAX_LAT_DEG;
 export const sitesIn = (sites: Site[], region: Region): Site[] => sites.filter((s) => inRegion(s, region));
 
 export const criterionById = (id: string): Criterion => CRITERIA.find((c) => c.id === id) ?? CRITERIA[0];

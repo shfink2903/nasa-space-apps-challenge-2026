@@ -44,6 +44,21 @@ The main job of the tool is to **compare sites and dates** for two things: **lig
 5. **Land here**: the illustrative flight starts only when the site is lit at the chosen time. If not, the button becomes **Go to sunrise**, or the caption says that no sunrise is published in these 30 days.
 6. **On the ground:** the Sun and the Earth are where the dataset says. **Back to the sheet** returns to the zoomed view.
 
+### Free point: any lunar coordinates
+
+Click anywhere on the Moon, or type a latitude and a longitude under the ranking. The free point opens like any site: lighting and communication now, the 30 days, the 52 weekly starts of the year, a row in the ranking and in the compare sheet, and the landing.
+
+How it is computed (`src/data/custom.ts`): the dataset gives, for a reference site (Apollo 11), the direction and the angular radius of the Sun and of the Earth every 600 s. Direction plus distance is a position in the Moon-fixed frame; the same position seen from another point of the sphere gives azimuth and elevation there. No ephemeris and no orbit model is added in the browser.
+
+- Model level: **geometric**. Smooth sphere, horizon at 0° as in the geometric scenarios of the dataset, **terrain ignored**. Near the poles the real windows can be very different, and the sheet says so in a red box.
+- Windows come from the 600 s samples, with a straight-line crossing: good to a few minutes, not to the second.
+- Check: `tests/custom.test.ts` treats six catalogue sites as free points (two dates, two heights, 24 cases) and compares with the geometric scenarios published by DATA. Elevation agrees within 0.02°, the 30-day shares within 0.2 point, the longest night and blackout within 30 minutes.
+- This is the one place where the interface computes values. They are always marked "geometric estimate" and never mixed with the non-dominated mark of DATA.
+
+### Guided tour
+
+**Guided tour (2 min)** on the first screen runs six steps on the real tool: the month-long lunar day at Apollo 11, the Earth fixed in the near-side sky, no link on the far side (Chang'e 4), the grazing Sun at 89.5° S, the 1 km grids where two kilometres change everything, then the compare sheet. It is made for classrooms and for a first visit.
+
 ### Two displays
 
 The switch at the top left changes how the same data is said. Nothing else changes: same sites, same dates, same values.
