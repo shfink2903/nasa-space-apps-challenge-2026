@@ -8,3 +8,8 @@ data/raw/**
 !data/raw/SOURCES.json
 data/interim/
 data/processed/*.tmp/
+
+# Touchdown app
+touchdown/node_modules/
+touchdown/dist/
+touchdown/.cache/

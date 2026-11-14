@@ -1,0 +1,4 @@
+Starship model: I_am_Darth, Thingiverse thing 7369010, CC BY-NC-SA (version not stated in the supplied archive). Adapted: upper stage extracted and assembled. Non-commercial use only.
+Moon colour and elevation: NASA's Scientific Visualization Studio, CGI Moon Kit (SVS 4720), from LRO LROC and LOLA data. The colour map is made for looks, not for science.
+Earth map: NASA's Scientific Visualization Studio (https://svs.gsfc.nasa.gov/vis/a000000/a003600/a003615/flat_earth_Largest_still.0330.jpg).
+The flight is illustrative. Sun and Earth directions come from the project dataset.
