@@ -20,11 +20,28 @@ Other commands:
 |---|---|
 | `npm test` | Unit tests (Vitest). They read the real dataset. |
 | `npm run typecheck` | TypeScript check. |
-| `npm run build` | Type check, then production build in `dist/`. |
-| `npm run preview` | Serves `dist/` and the dataset on port 5180. |
+| `npm run build` | Type check, production build, full dataset copy and SHA-256 verification in `dist/`. |
+| `npm run preview` | Serves the complete `dist/` on port 5180, with no dataset fallback to the repository. |
 | `npm run prepare:assets` | Downloads the NASA source images and rebuilds `public/textures/`. Not needed for a normal run: the textures are committed. |
 
-To host the build on a static server, also publish `data/processed/v1` at the path `/data/v1`, and send the `series/*.json.gz` files as raw bytes (no `Content-Encoding: gzip`).
+To host the build, publish the entire `dist/` directory. The build includes
+`data/v1/` automatically and fails if any manifest file or browser series copy
+is missing or altered. Series are also copied as `*.json.gz.bin` so static
+hosts serve raw bytes for browser decompression. The scientific source and its
+manifest remain unchanged. No separate data publication step is required.
+
+To verify the production build without Vite's development middleware:
+
+```bash
+# Terminal 1, from touchdown/
+python3 -m http.server 4180 --bind 127.0.0.1 --directory dist
+# Terminal 2, from touchdown/ (Google Chrome must be installed)
+npm run test:e2e
+```
+
+The browser test checks every site's displayed Sun/Earth elevations and solar
+fraction against the delivered dataset, a second start date, the final timeline
+sample, and mobile layout. Results and screenshots are saved under `.cache/`.
 
 ## What you see
 

@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
+import { packageDataset } from "./scripts/dataset-build.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const DATA_ROOT = resolve(here, "../data/processed/v1");
@@ -16,7 +17,8 @@ function serveDataset(): Plugin {
   const handler = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const url = (req.url ?? "").split("?")[0];
     if (!url.startsWith("/data/v1/")) return next();
-    const file = resolve(DATA_ROOT, decodeURIComponent(url.slice("/data/v1/".length)));
+    const path = decodeURIComponent(url.slice("/data/v1/".length));
+    const file = resolve(DATA_ROOT, path.endsWith(".gz.bin") ? path.slice(0, -4) : path);
     if (!file.startsWith(DATA_ROOT + sep)) {
       res.statusCode = 403;
       return res.end();
@@ -40,8 +42,10 @@ function serveDataset(): Plugin {
     configureServer(server) {
       server.middlewares.use(handler);
     },
-    configurePreviewServer(server) {
-      server.middlewares.use(handler);
+    async writeBundle(options) {
+      const target = resolve(here, options.dir ?? "dist", "data/v1");
+      const result = await packageDataset(DATA_ROOT, target);
+      console.log(`Dataset bundled and SHA-256 verified: ${result.files} files, ${result.series} browser gzip copies.`);
     },
   };
 }

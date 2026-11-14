@@ -120,9 +120,9 @@ export function loadScenario(id: string, signal?: AbortSignal): Promise<Scenario
   return getJson<Scenario>(`scenarios/${id}.json`, signal);
 }
 
-/** Series files are gzip on disk. The server sends the raw bytes; decode here. */
+/** Opaque suffix keeps static hosts from automatically decoding the gzip bytes. */
 export async function loadSeries(scenario: Scenario, signal?: AbortSignal): Promise<Series> {
-  const res = await fetch(`${DATA_BASE}/${scenario.seriesRef.path}`, { signal });
+  const res = await fetch(`${DATA_BASE}/${scenario.seriesRef.path}.bin`, { signal });
   if (!res.ok || !res.body) throw new Error(`${scenario.seriesRef.path}: HTTP ${res.status}`);
   const stream = res.body.pipeThrough(new DecompressionStream("gzip"));
   return (await new Response(stream).json()) as Series;

@@ -1,0 +1,26 @@
+{
+  "base": "http://127.0.0.1:4180",
+  "startedAt": "2026-11-14T17:35:35.153Z",
+  "checks": [
+    "Boot, 13 sites and 52 start dates from the static build",
+    "apollo11, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "apollo12, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "apollo14, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "apollo15, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "apollo16, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "apollo17, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "chandrayaan3, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (lola)",
+    "change4, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "blueghost1, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (geometric)",
+    "im1, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (lola)",
+    "sp_s8950, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (lola)",
+    "sp_s8800, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (lola)",
+    "sp_s8600, 20261201, sample 2160: Sun/Earth elevations and solar fraction match delivered data (lola)",
+    "sp_s8600, 20271123, sample 4320: Sun/Earth elevations and solar fraction match delivered data (lola)",
+    "Mobile layout fits viewport"
+  ],
+  "errors": [],
+  "failedDataRequests": [],
+  "pass": true,
+  "finishedAt": "2026-11-14T17:36:27.557Z"
+}
