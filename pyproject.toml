@@ -19,6 +19,8 @@ test = ["pytest>=8,<10"]
 
 [project.scripts]
 lunar-data = "lunar_data.cli:main"
+lunar-ai = "lunar_data.server:main"
+lunar-ai-check = "lunar_data.ai_check:main"
 
 [tool.setuptools.packages.find]
 include = ["lunar_data*"]

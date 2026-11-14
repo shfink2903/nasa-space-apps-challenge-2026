@@ -1,43 +1,41 @@
 import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/jetbrains-mono";
+import "./charts/charts-time.css";
+import "./charts/charts-grid.css";
 import "./style.css";
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import {
-  availableDates,
-  loadHorizon,
-  loadScenario,
-  loadSeries,
-  loadSites,
-  pickScenarioId,
-  sampleSeries,
-  type HorizonProfile,
-  type Scenario,
-  type Series,
-  type Site,
-} from "./data/dataset";
+import { availableDates, loadSites, sampleSeries, type Site } from "./data/dataset";
+import { Resources, type Bundle } from "./data/resources";
+import { initialLocale, saveLocale, strings } from "./i18n";
+import { groupOf, isPolar, orderedSites, scopeSites } from "./planner/catalog";
+import { bundleFor, focusSite, rankingFor, siteById } from "./planner/select";
 import { Director } from "./scene/director";
 import { OrbitScene } from "./scene/orbitScene";
 import { Stage } from "./scene/renderer";
 import { createHullEnvironment } from "./scene/sky";
 import { SurfaceScene } from "./scene/surfaceScene";
 import { createStore, type Actions } from "./state";
-import { createCaption } from "./ui/caption";
-import { createConditions } from "./ui/conditions";
+import { createAssistant } from "./ui/assistant";
+import { createUi } from "./ui/context";
+import { createDataView } from "./ui/data/dataView";
 import { h } from "./ui/dom";
-import { siteLabel } from "./ui/format";
+import { createFlightBar } from "./ui/explorer/flightBar";
+import { createSiteCard } from "./ui/explorer/siteCard";
+import { createSiteList } from "./ui/explorer/siteList";
+import { createTimePanel } from "./ui/explorer/timePanel";
+import { createFormat } from "./ui/format";
 import { createGuide } from "./ui/guide";
-import { createSiteList } from "./ui/sitelist";
-import { T } from "./ui/strings";
-import { createTimeBar } from "./ui/timebar";
+import { createTopBar } from "./ui/topbar";
 
-const REFERENCE_SITE = "apollo11";
+const FIRST_SITE = "sp_s8950";
 const STEPS_PER_HOUR = 6; // the display series has one step per 600 s
+const MAX_COMPARE = 3;
 
 const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) as E;
 const canvas = $<HTMLCanvasElement>("scene");
-const hud = $("hud");
+const root = $("ui");
 const pinLayer = $("pins");
 const veil = $("veil");
 const loader = $("loader");
@@ -47,21 +45,7 @@ const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 function showToast(message: string): void {
   toast.textContent = message;
   toast.hidden = false;
-  window.setTimeout(() => (toast.hidden = true), 6000);
-}
-
-interface SiteData {
-  scenario: Scenario;
-  series: Series;
-  horizon: HorizonProfile | null;
-}
-
-async function loadSiteData(site: Site, date: string, signal: AbortSignal): Promise<SiteData> {
-  const id = pickScenarioId(site, date);
-  if (!id) throw new Error(`No scenario for ${site.id} on ${date}`);
-  const scenario = await loadScenario(id, signal);
-  const [series, horizon] = await Promise.all([loadSeries(scenario, signal), loadHorizon(scenario, signal)]);
-  return { scenario, series, horizon };
+  window.setTimeout(() => (toast.hidden = true), 5000);
 }
 
 function loadTexture(manager: THREE.LoadingManager, url: string, srgb: boolean): Promise<THREE.Texture> {
@@ -74,30 +58,40 @@ function loadTexture(manager: THREE.LoadingManager, url: string, srgb: boolean):
 }
 
 async function boot(): Promise<void> {
+  const locale = initialLocale();
+  document.documentElement.lang = locale;
+  $("loader-text").textContent = strings(locale).loading;
   const stage = new Stage(canvas);
+
+  // --- Data: the catalogue first. Everything else loads when a view asks for it. ---
+  const sites = orderedSites(await loadSites());
+  const dates = availableDates(sites[0]);
   const store = createStore({
-    sites: [],
-    dates: [],
-    date: "",
-    siteId: null,
+    locale,
+    tab: "explorer",
+    sites,
+    dates,
+    date: dates[0],
+    heightM: 2,
+    scope: "polar",
+    criterion: "balanced",
+    // Example limits. The user can change or turn off each one.
+    requirements: { minSunShare: 0.25, minEarthShare: 0.25, maxDarkH: 360 },
+    focusId: sites.find((s) => s.id === FIRST_SITE)?.id ?? sites[0].id,
+    compareIds: [],
     hoverId: null,
     index: 0,
     playing: false,
     speedH: 6,
     phase: "cruise",
-    series: null,
-    scenario: null,
-    lightSiteId: null,
+    autoFlight: false,
+    assistantOpen: false,
+    guideOpen: false,
+    dataVersion: 0,
   });
+  const resources = new Resources(() => store.set({ dataVersion: store.get().dataVersion + 1 }));
 
-  // --- Data: catalogue first, then the series that lights the first view. ---
-  const sites = await loadSites();
-  const reference = sites.find((s) => s.id === REFERENCE_SITE) ?? sites[0];
-  const dates = availableDates(reference);
-  let loadAbort = new AbortController();
-  const first = await loadSiteData(reference, dates[0], loadAbort.signal);
-
-  // --- Assets. ---
+  // --- Assets and scenes. ---
   const fill = $("loader-fill");
   const manager = new THREE.LoadingManager();
   manager.onProgress = (_url, loaded, total) => (fill.style.width = `${Math.round((loaded / total) * 100)}%`);
@@ -113,98 +107,174 @@ async function boot(): Promise<void> {
   const surface = new SurfaceScene({ earth, ship: gltf.scene, hullEnv }, canvas);
   const director = new Director(stage, orbit, surface, veil, (phase) => store.set({ phase }));
 
-  // Build the ground once now, so the first landing does not wait for shader compilation.
-  surface.prepare(reference, null, sampleSeries(first.series, 0));
-  stage.renderer.compile(surface.scene, surface.camera);
+  /** The site and data that light the 3D view. Kept while the next choice loads, so the picture never goes blank. */
+  let light: { site: Site; bundle: Bundle } | null = null;
+  let userPicked = false;
+  let userScrubbed = false;
+  let pendingLand: string | null = null;
+  let compiled = false;
 
   // --- Actions. ---
-  const siteById = (id: string | null): Site | undefined => store.get().sites.find((s) => s.id === id);
-
   const actions: Actions = {
+    setLocale(next) {
+      if (next === store.get().locale) return;
+      saveLocale(next);
+      store.set({ locale: next });
+      mountUi();
+    },
+    setTab: (tab) => store.set({ tab }),
     selectSite(id) {
-      const site = siteById(id);
       const state = store.get();
-      if (!site || (state.siteId === id && state.phase !== "cruise")) return;
-      loadAbort.abort();
-      loadAbort = new AbortController();
-      const signal = loadAbort.signal;
-      store.set({ siteId: id, hoverId: null });
-      const data = loadSiteData(site, state.date, signal).then((d) => {
-        store.set({ series: d.series, scenario: d.scenario, lightSiteId: id });
-        return { horizon: d.horizon };
-      });
-      director.startFlight(site, data, reducedMotion.matches);
-      data.catch((err: Error) => {
-        if (err.name === "AbortError") return;
-        console.error(err);
-        showToast(T.siteError);
-        actions.back();
-      });
+      const site = siteById(state, id);
+      if (!site) return;
+      userPicked = true;
+      const scope = state.scope === "polar" && !isPolar(site) ? "all" : state.scope;
+      store.set({ focusId: id, hoverId: null, scope });
+      director.focus(site);
+      pendingLand = state.autoFlight ? id : null;
     },
     hover: (id) => {
       if (store.get().hoverId !== id) store.set({ hoverId: id });
     },
-    setDate(date) {
-      const state = store.get();
-      const site = siteById(state.lightSiteId);
-      if (!site || date === state.date) return;
-      loadAbort.abort();
-      loadAbort = new AbortController();
-      store.set({ date });
-      loadSiteData(site, date, loadAbort.signal).then(
-        (d) => store.set({ series: d.series, scenario: d.scenario }),
-        (err: Error) => {
-          if (err.name !== "AbortError") showToast(T.siteError);
-        },
-      );
+    toggleCompare(id) {
+      const { compareIds } = store.get();
+      userPicked = true;
+      if (compareIds.includes(id)) store.set({ compareIds: compareIds.filter((x) => x !== id) });
+      else if (compareIds.length >= MAX_COMPARE) showToast(strings(store.get().locale).compareMax);
+      else store.set({ compareIds: [...compareIds, id] });
     },
-    setIndex: (index) => store.set({ index }),
+    setDate: (date) => store.set({ date }),
+    shiftDate(weeks) {
+      const s = store.get();
+      const next = s.dates[s.dates.indexOf(s.date) + weeks];
+      if (next) store.set({ date: next });
+    },
+    setHeight: (heightM) => store.set({ heightM }),
+    setScope(scope) {
+      const s = store.get();
+      if (scope === s.scope) return;
+      const allowed = scopeSites(s.sites, scope);
+      const stay = allowed.some((x) => x.id === s.focusId);
+      store.set({ scope, compareIds: s.compareIds.filter((id) => allowed.some((x) => x.id === id)) });
+      if (!stay) actions.selectSite(allowed[0].id);
+    },
+    setCriterion: (criterion) => store.set({ criterion }),
+    setRequirements: (patch) => store.set({ requirements: { ...store.get().requirements, ...patch } }),
+    setIndex(index) {
+      userScrubbed = true;
+      store.set({ index });
+    },
+    setTime(tMs) {
+      const series = light?.bundle.series;
+      if (!series) return;
+      const index = (tMs - Date.parse(series.t0Utc)) / (series.stepS * 1000);
+      actions.setIndex(Math.min(series.n - 1, Math.max(0, index)));
+    },
     togglePlay() {
       const s = store.get();
-      const atEnd = s.series !== null && s.index >= s.series.n - 1;
-      store.set({ playing: !s.playing, index: !s.playing && atEnd ? 0 : s.index });
+      const end = (light?.bundle.series.n ?? 1) - 1;
+      store.set({ playing: !s.playing, index: !s.playing && s.index >= end ? 0 : s.index });
     },
     setSpeed: (speedH) => store.set({ speedH }),
-    skip: () => director.skip(),
-    back() {
-      director.back();
-      store.set({ siteId: null });
+    setAutoFlight: (autoFlight) => store.set({ autoFlight }),
+    land() {
+      const s = store.get();
+      const site = focusSite(s);
+      const bundle = bundleFor(s, resources, site);
+      if (!bundle || (s.phase !== "cruise" && s.phase !== "focus")) return;
+      // No Sun, no landing: the ship would arrive without power.
+      if ((sampleSeries(bundle.series, s.index).sunState ?? 0) === 0) {
+        showToast(strings(s.locale).landBlocked);
+        return;
+      }
+      if (s.tab !== "explorer") store.set({ tab: "explorer" });
+      director.startFlight(site, bundle.horizon, reducedMotion.matches);
     },
+    jumpToSunrise() {
+      const s = store.get();
+      const bundle = bundleFor(s, resources, focusSite(s));
+      if (!bundle) return;
+      const from = sampleSeries(bundle.series, s.index).tMs;
+      const sunrise = bundle.scenario.events
+        .filter((e) => e.body === "sun" && e.convention === "anyDisk" && e.type === "rise" && Date.parse(e.tUtc) > from)
+        .sort((a, b) => Date.parse(a.tUtc) - Date.parse(b.tUtc))[0];
+      if (!sunrise) return;
+      // One display step after the event, so the published state already shows the Sun.
+      const step = bundle.series.stepS * 1000;
+      const index = Math.ceil((Date.parse(sunrise.tUtc) - Date.parse(bundle.series.t0Utc)) / step) + 1;
+      actions.setIndex(Math.min(bundle.series.n - 1, index));
+    },
+    skip: () => director.skip(),
+    back: () => director.focus(focusSite(store.get())),
+    overview: () => director.overview(),
+    setAssistant: (assistantOpen) => store.set({ assistantOpen }),
+    setGuide: (guideOpen) => store.set({ guideOpen }),
   };
 
-  // --- Interface. ---
+  // --- Interface. Built again when the language changes. ---
   const pins = new Map<string, HTMLButtonElement>();
-  hud.append(
-    h("div", { class: "rail rail-left" }, createGuide(store), createConditions(store)),
-    h("div", { class: "rail rail-right" }, createTimeBar(store, actions), createSiteList(store, actions)),
-    createCaption(store, actions),
-    h("p", { class: "footer", text: T.footer }),
-  );
-  for (const site of sites) {
-    const pin = h(
-      "button",
-      { class: `pin ${site.status === "study_point" ? "is-study" : ""}`, type: "button", tabindex: -1 },
-      h("span", { class: "pin-label", text: siteLabel(site).title }),
-    );
-    pin.addEventListener("click", () => actions.selectSite(site.id));
-    pin.addEventListener("pointerenter", () => actions.hover(site.id));
-    pin.addEventListener("pointerleave", () => actions.hover(null));
-    pins.set(site.id, pin);
-    pinLayer.append(pin);
-  }
-  store.subscribe((s, p) => {
-    if (s.hoverId !== p.hoverId) for (const [id, pin] of pins) pin.classList.toggle("is-hover", id === s.hoverId);
-    if (s.phase !== p.phase) document.body.dataset.phase = s.phase;
-  });
-  document.body.dataset.phase = "cruise";
+  const beamLabels = { sun: h("span", { class: "beam-label beam-sun" }), earth: h("span", { class: "beam-label beam-earth" }) };
+  let ui: ReturnType<typeof createUi> | null = null;
 
-  store.set({
-    sites,
-    dates,
-    date: dates[0],
-    series: first.series,
-    scenario: first.scenario,
-    lightSiteId: reference.id,
+  function mountUi(): void {
+    ui?.dispose();
+    const s = store.get();
+    const t = strings(s.locale);
+    const fmt = createFormat(t);
+    document.documentElement.lang = s.locale;
+    document.title = `${t.brand} — ${t.tagline}`;
+    canvas.setAttribute("aria-label", t.tabExplorer);
+    surface.setCompassLetters(t.compass);
+    ui = createUi(store, actions, resources, t, fmt);
+
+    root.replaceChildren(
+      createTopBar(ui),
+      h(
+        "div",
+        { class: "explorer" },
+        h("div", { class: "rail rail-left" }, createSiteCard(ui)),
+        h("div", { class: "rail rail-right" }, createTimePanel(ui), createSiteList(ui)),
+        createFlightBar(ui),
+        h("p", { class: "footer", text: t.footer }),
+      ),
+      createDataView(ui),
+      createAssistant(ui),
+      createGuide(ui),
+    );
+
+    pins.clear();
+    pinLayer.replaceChildren(beamLabels.sun, beamLabels.earth);
+    for (const site of s.sites) {
+      const pin = h("button", { class: `pin pin-${groupOf(site)}`, type: "button", tabindex: -1 }, h("span", { class: "pin-label", text: fmt.site(site) }));
+      pin.addEventListener("click", () => actions.selectSite(site.id));
+      pin.addEventListener("pointerenter", () => actions.hover(site.id));
+      pin.addEventListener("pointerleave", () => actions.hover(null));
+      pins.set(site.id, pin);
+      pinLayer.append(pin);
+    }
+    ui.watch(
+      (state) => [state.hoverId, state.focusId, state.tab, state.phase],
+      (state) => {
+        for (const [id, pin] of pins) {
+          pin.classList.toggle("is-hover", id === state.hoverId);
+          pin.classList.toggle("is-selected", id === state.focusId);
+        }
+        document.body.dataset.tab = state.tab;
+        document.body.dataset.phase = state.phase;
+      },
+    );
+  }
+  mountUi();
+
+  // First results: show the best site and compare the top three, unless the user already chose.
+  store.subscribe((s) => {
+    if (userPicked) return;
+    const ranking = rankingFor(s, resources);
+    if (!ranking.complete || ranking.rows.length === 0) return;
+    userPicked = true;
+    // The best candidate, compared with the other candidates.
+    const best = ranking.rows[0].metrics.siteId;
+    store.set({ focusId: best, compareIds: ranking.rows.slice(0, MAX_COMPARE).map((r) => r.metrics.siteId) });
   });
 
   // --- Input. ---
@@ -229,24 +299,28 @@ async function boot(): Promise<void> {
     const tag = (event.target as HTMLElement).tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     const s = store.get();
+    const series = light?.bundle.series;
     if (event.key === " " && tag !== "BUTTON") {
       event.preventDefault();
       actions.togglePlay();
-    } else if (event.key === "Escape" && s.phase !== "cruise") {
-      actions.back();
-    } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && s.series) {
+    } else if (event.key === "Escape") {
+      if (s.assistantOpen) actions.setAssistant(false);
+      else if (s.guideOpen) actions.setGuide(false);
+      else if (s.phase === "focus") actions.overview();
+      else if (s.phase !== "cruise") actions.back();
+    } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && series) {
       const step = (event.key === "ArrowRight" ? 1 : -1) * STEPS_PER_HOUR;
-      actions.setIndex(Math.min(s.series.n - 1, Math.max(0, s.index + step)));
+      actions.setIndex(Math.min(series.n - 1, Math.max(0, s.index + step)));
     }
   });
   canvas.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();
-    showToast(T.contextLost);
+    showToast(strings(store.get().locale).contextLost);
   });
   canvas.addEventListener("webglcontextrestored", () => window.location.reload());
 
   // Development hook: lets a test freeze time and inspect one moment of a shot.
-  const debug = { store, actions, director, timeScale: 1 };
+  const debug = { store, actions, director, resources, timeScale: 1 };
   if (import.meta.env.DEV) (window as unknown as { __touchdown: typeof debug }).__touchdown = debug;
 
   // --- Frame loop. ---
@@ -261,34 +335,78 @@ async function boot(): Promise<void> {
     timeS += dt;
 
     let s = store.get();
-    if (s.playing && s.series) {
-      const end = s.series.n - 1;
+    const site = focusSite(s);
+    const bundle = bundleFor(s, resources, site);
+    if (bundle && light?.bundle !== bundle) {
+      const first = light === null;
+      const sameSite = light?.site.id === site.id;
+      light = { site, bundle };
+      // A new mast height or model changes the terrain profile under a landed ship.
+      if (sameSite) director.setHorizon(bundle.horizon);
+      if (first && !userScrubbed) {
+        // Open on a sunlit moment of the first site, when there is one.
+        const lit = bundle.series.sunState.findIndex((state) => state === 2);
+        if (lit > 0) store.set({ index: lit });
+      }
+      if (!compiled) {
+        // Build the ground once now, so the first landing does not wait for shader compilation.
+        compiled = true;
+        surface.prepare(site, null, sampleSeries(bundle.series, 0));
+        stage.renderer.compile(surface.scene, surface.camera);
+        loader.classList.add("is-done");
+        window.setTimeout(() => loader.remove(), 900);
+      }
+      s = store.get();
+    }
+    if (!light) return;
+
+    if (s.playing) {
+      const end = light.bundle.series.n - 1;
       const index = Math.min(end, s.index + dt * s.speedH * STEPS_PER_HOUR);
       store.set({ index, playing: index < end });
       s = store.get();
     }
-    const lightSite = siteById(s.lightSiteId);
-    if (!s.series || !lightSite) return;
-    director.update(dt, timeS, sampleSeries(s.series, s.index), lightSite, realDt);
+    if (pendingLand && pendingLand === s.focusId && light.site.id === s.focusId && bundle) {
+      pendingLand = null;
+      actions.land();
+    }
+    if (s.tab !== "explorer") return; // the 3D view is hidden: no need to draw it
 
-    const showPins = s.phase === "cruise";
+    director.update(dt, timeS, sampleSeries(light.bundle.series, s.index), light.site, realDt);
+
+    const showPins = s.phase === "cruise" || s.phase === "focus";
     pinLayer.classList.toggle("is-hidden", !showPins);
-    if (showPins) {
-      for (const p of orbit.projectPins(s.sites, canvas.clientWidth, canvas.clientHeight)) {
-        const pin = pins.get(p.id)!;
-        pin.classList.toggle("is-off", !p.visible);
-        if (p.visible) pin.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`;
+    if (!showPins) return;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const inScope = new Set(scopeSites(s.sites, s.scope).map((x) => x.id));
+    for (const p of orbit.projectPins(s.sites, width, height)) {
+      const pin = pins.get(p.id)!;
+      const on = p.visible && inScope.has(p.id);
+      pin.classList.toggle("is-off", !on);
+      if (on) pin.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`;
+    }
+    const t = strings(s.locale);
+    const sample = sampleSeries(light.bundle.series, s.index);
+    const beams = orbit.projectBeams(width, height);
+    for (const [name, point, on, textOn, textOff] of [
+      ["sun", beams.sun, (sample.sunState ?? 0) > 0, t.beamSunOn, t.beamSunOff],
+      ["earth", beams.earth, (sample.earthState ?? 0) > 0, t.beamEarthOn, t.beamEarthOff],
+    ] as const) {
+      const el = beamLabels[name];
+      const show = s.phase === "focus" && point.visible && on;
+      el.classList.toggle("is-off", !show);
+      if (show) {
+        el.textContent = on ? textOn : textOff;
+        el.style.transform = `translate(${point.x.toFixed(1)}px, ${point.y.toFixed(1)}px)`;
       }
     }
   };
   requestAnimationFrame(frame);
-
-  loader.classList.add("is-done");
-  window.setTimeout(() => loader.remove(), 900);
 }
 
 boot().catch((err) => {
   console.error(err);
-  $("loader-text").textContent = T.loadError;
+  $("loader-text").textContent = strings(initialLocale()).loadError;
   loader.classList.add("is-error");
 });

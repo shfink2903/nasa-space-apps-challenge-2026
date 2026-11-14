@@ -1,3 +1,6 @@
+// End-to-end check of the production build (dist/) in a real browser.
+// Usage: npm run build, serve dist/ on port 4180 with any static server, then npm run test:e2e.
+// Every expected number is read from the built dataset files, never typed here.
 import { chromium, expect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
@@ -10,57 +13,110 @@ const json = async (path) => JSON.parse(await readFile(new URL(path, data), "utf
 const { sites } = await json("sites.json");
 const report = { base, startedAt: new Date().toISOString(), checks: [], errors: [], failedDataRequests: [], pass: false };
 await mkdir(output, { recursive: true });
+
+const n1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const elevation = (value) => `${value < 0 ? "−" : "+"}${n1.format(Math.abs(value))}°`;
+const percent = (value) => (value === null ? "—" : `${n1.format(value * 100)} %`);
+const siteName = (site) => (site.status === "study_point" ? `Point d'étude ${n1.format(Math.abs(site.latDeg))}° S` : site.name.split(" – ")[0]);
+const metric = (metrics, id) => metrics.find((m) => m.metricId === id).value;
+const POLAR = ["sp_s8950", "sp_s8800", "sp_s8600", "chandrayaan3", "im1"];
+const CANDIDATES = ["sp_s8950", "sp_s8800", "sp_s8600"];
+
 const browser = await chromium.launch({
-  channel: "chrome", headless: true,
+  channel: "chrome",
+  headless: true,
   args: ["--enable-webgl", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  await page.addInitScript(() => window.localStorage.setItem("touchdown.locale", "fr"));
   page.on("pageerror", (error) => report.errors.push(error.message));
   page.on("response", (response) => {
-    if (response.url().includes("/data/v1/") && !response.ok())
-      report.failedDataRequests.push({ url: response.url(), status: response.status() });
+    if (response.url().includes("/data/v1/") && !response.ok()) report.failedDataRequests.push({ url: response.url(), status: response.status() });
   });
   await page.goto(base);
-  await expect(page.locator("#loader")).toHaveCount(0, { timeout: 60000 });
-  await expect(page.locator(".site-row")).toHaveCount(13);
+  await expect(page.locator("#loader")).toHaveCount(0, { timeout: 90000 });
+  await expect(page.locator(".sites .site-row")).toHaveCount(5);
   await expect(page.locator("#start-date option")).toHaveCount(52);
-  report.checks.push("Boot, 13 sites and 52 start dates from the static build");
-  const number = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const elevation = (value) => `${value < 0 ? "−" : "+"}${number.format(Math.abs(value))}°`;
+  report.checks.push("Boot: 5 south-pole sites (3 candidates, 2 references) and 52 start dates, no flight needed to see numbers");
 
-  async function checkSite(site, date, index) {
-    const candidates = site.scenarioIds.filter((id) => id.includes(`_${date}_30d_h2m_`));
-    const id = candidates.find((id) => id.includes("_lola_")) ?? candidates[0];
-    const scenario = await json(`scenarios/${id}.json`);
-    const series = JSON.parse(gunzipSync(await readFile(new URL(scenario.seriesRef.path, data))).toString());
-    await page.getByRole("button", { name: `Se poser à ${site.name}`, exact: true }).click();
-    await expect(page.locator(".cond-site")).toHaveText(site.name.split(" – ")[0], { timeout: 30000 });
-    await expect(page.locator("body")).toHaveAttribute("data-phase", "surface", { timeout: 30000 });
-    await page.locator(".scrub-range").fill(String(index));
-    await expect(page.locator(".cond-value").nth(0)).toHaveText(elevation(series.sunElDeg[index]));
-    await expect(page.locator(".cond-value").nth(1)).toHaveText(elevation(series.earthElDeg[index]));
-    const fraction = scenario.metrics.find((metric) => metric.metricId === "sun.anyDisk.fraction").value;
-    await expect(page.locator(".cond-line b").last()).toHaveText(fraction === null ? "—" : `${number.format(fraction * 100)} %`);
-    await expect(page.locator(".cond-model")).toContainText(scenario.modelLevel === "lola" ? "LOLA" : "géométrique");
-    if (scenario.profileId)
-      expect((await page.request.get(`${base}/data/v1/horizons/${site.id}_h2m_${scenario.profileId}.json`)).ok()).toBeTruthy();
-    report.checks.push(`${site.id}, ${date}, sample ${index}: Sun/Earth elevations and solar fraction match delivered data (${scenario.modelLevel})`);
+  const select = (site) => page.locator(".sites .site-main", { hasText: siteName(site) }).click();
+  const scenarioOf = async (site, date, model) => json(`scenarios/${site.scenarioIds.find((id) => id.includes(`_${date}_30d_h2m_${model}_`))}.json`);
+  const seriesOf = async (scenario) => JSON.parse(gunzipSync(await readFile(new URL(scenario.seriesRef.path, data))).toString());
+
+  // 1. Site card: live elevations and 30-day shares equal the delivered data, for each polar site (terrain model).
+  for (const id of POLAR) {
+    const site = sites.find((s) => s.id === id);
+    const scenario = await scenarioOf(site, "20261201", "lola");
+    const series = await seriesOf(scenario);
+    await select(site);
+    await expect(page.locator(".site-card .card-title")).toHaveText(siteName(site));
+    await page.locator(".scrub-range").fill("2160");
+    await expect(page.locator(".site-card .now-sun .now-value")).toHaveText(elevation(series.sunElDeg[2160]), { timeout: 30000 });
+    await expect(page.locator(".site-card .now-earth .now-value")).toHaveText(elevation(series.earthElDeg[2160]));
+    await expect(page.locator(".site-card .share-sun b")).toHaveText(percent(metric(scenario.metrics, "sun.anyDisk.fraction")));
+    await expect(page.locator(".site-card .share-earth b")).toHaveText(percent(metric(scenario.metrics, "earth.anyDisk.fraction")));
+    await expect(page.locator(".site-card .share-both b")).toHaveText(percent(metric(scenario.metrics, "overlap.sunAny_earthAny.fraction")));
+    await expect(page.locator(".site-card .now-sun .now-countdown")).toHaveText(/Coucher dans|Lever dans|Pas de (coucher|lever)/);
+    await expect(page.locator(".site-card .now-earth .now-countdown")).toHaveText(/Coucher dans|Lever dans|Pas de (coucher|lever)/);
+    await expect(page.locator("body")).toHaveAttribute("data-phase", /cruise|focus/);
+    report.checks.push(`${id}: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started`);
   }
 
-  for (const site of sites) await checkSite(site, "20261201", 2160);
-  await page.locator("#start-date").selectOption("20271123");
-  const last = sites.at(-1);
-  // Wait for the new date's series before checking its published values.
-  await expect(page.locator(".clock-date")).toContainText("2027");
-  await page.getByRole("button", { name: "Retour en orbite", exact: true }).click();
-  await expect(page.locator("body")).toHaveAttribute("data-phase", "cruise", { timeout: 30000 });
-  await checkSite(last, "20271123", 4320);
-  await page.screenshot({ path: fileURLToPath(new URL("build-desktop.png", output)) });
+  // 2. A site with no Sun at the chosen time cannot be landed on.
+  const dark = sites.find((s) => s.id === "sp_s8800");
+  await select(dark);
+  await expect(page.locator(".site-card .button-primary")).toBeDisabled();
+  await expect(page.locator(".site-card .button-primary")).toContainText("refusé");
+  report.checks.push("sp_s8800 (0 % Sun): landing refused");
+
+  // 3. A sunlit site can: the landing runs (instant with reduced motion) and ends on the ground.
+  const lit = sites.find((s) => s.id === "sp_s8600");
+  const litSeries = await seriesOf(await scenarioOf(lit, "20261201", "lola"));
+  await select(lit);
+  await page.locator(".scrub-range").fill(String(litSeries.sunState.findIndex((state) => state === 2)));
+  await expect(page.locator(".site-card .button-primary")).toBeEnabled();
+  await page.locator(".site-card .button-primary").click();
+  await expect(page.locator("body")).toHaveAttribute("data-phase", "surface", { timeout: 60000 });
+  await page.getByRole("button", { name: "Retour au site", exact: true }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-phase", "focus", { timeout: 30000 });
+  report.checks.push("sp_s8600 at a sunlit time: landing reaches the ground view, and Back returns to the site view");
+
+  // 4. Compare tab: the candidates are ranked on the published Sun+Earth share; references are not ranked.
+  await page.getByRole("tab", { name: "Comparer les sites" }).click();
+  const overlap = {};
+  for (const id of POLAR) overlap[id] = metric((await scenarioOf(sites.find((s) => s.id === id), "20261201", "lola")).metrics, "overlap.sunAny_earthAny.fraction");
+  const expected = [...CANDIDATES].sort((a, b) => overlap[b] - overlap[a]).map((id) => siteName(sites.find((s) => s.id === id)));
+  await expect(page.locator(".rank-table tbody tr:not(.row-divider)")).toHaveCount(5);
+  await expect(page.locator(".rank-table tbody tr:not(.row-divider) .link-button")).toHaveText([...expected, ...(await page.locator(".rank-table tbody tr:not(.row-divider) .link-button").allTextContents()).slice(3)]);
+  await expect(page.locator(".rank-table tbody tr:not(.row-divider) .site-rank").first()).toHaveText("1");
+  await expect(page.locator(".compare-column")).toHaveCount(3);
+  await expect(page.locator(".chart-calendar .cal-cell").first()).toBeVisible();
+  report.checks.push(`Compare tab: candidates ranked ${expected.join(" > ")}; 3 sites side by side; 52-week calendar drawn`);
+
+  // 5. All sites, geometric model, last start date: one mid-latitude site matches the dataset too.
+  await page.locator(".data-toolbar .segment", { hasText: "Tous · sans relief" }).click();
+  await expect(page.locator(".rank-table tbody tr:not(.row-divider)")).toHaveCount(13);
+  await page.locator(".data-toolbar select").first().selectOption("20271123");
+  const apollo = sites.find((s) => s.id === "apollo15");
+  const apolloScenario = await scenarioOf(apollo, "20271123", "geometric");
+  await expect(page.locator(".rank-table tbody tr", { hasText: "Apollo 15" }).locator(".cell-share").nth(1)).toContainText(percent(metric(apolloScenario.metrics, "sun.anyDisk.fraction")));
+  report.checks.push("All 13 sites listed with the geometric model; Apollo 15 Sun share on 2027-11-23 matches the dataset");
+
+  // 6. The 1 km grids load when scrolled to.
+  await page.locator(".data-card", { hasText: "Un petit déplacement" }).scrollIntoViewIfNeeded();
+  await expect(page.locator(".chart-grid .sg-cell")).toHaveCount(75, { timeout: 60000 });
+  report.checks.push("Three 5 x 5 sensitivity grids drawn (75 cells)");
+  await page.screenshot({ path: fileURLToPath(new URL("build-compare.png", output)) });
+
+  // 7. Small screen: nothing wider than the page, in both tabs.
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-  await page.screenshot({ path: fileURLToPath(new URL("build-mobile.png", output)), fullPage: true });
-  report.checks.push("Mobile layout fits viewport");
+  await page.getByRole("tab", { name: "Explorer en 3D" }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.screenshot({ path: fileURLToPath(new URL("build-mobile.png", output)) });
+  report.checks.push("Mobile width: both tabs fit the viewport");
+
   expect(report.errors).toEqual([]);
   expect(report.failedDataRequests).toEqual([]);
   report.pass = true;

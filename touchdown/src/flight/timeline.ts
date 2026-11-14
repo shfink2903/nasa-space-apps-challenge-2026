@@ -5,7 +5,11 @@
  */
 import { length, normalize, scale, slerp, type Vec3 } from "../data/astro";
 
-export type Phase = "cruise" | "transfer" | "descent" | "final" | "surface";
+/**
+ * cruise: whole south pole. focus: one site, seen from orbit, numbers on screen.
+ * transfer, descent, final: the illustrative landing. surface: on the ground.
+ */
+export type Phase = "cruise" | "focus" | "transfer" | "descent" | "final" | "surface";
 
 export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 export const mix = (a: number, b: number, t: number): number => a + (b - a) * t;

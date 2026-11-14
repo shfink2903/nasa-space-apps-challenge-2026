@@ -5,35 +5,29 @@ import type { OrbitScene } from "./orbitScene";
 import type { Stage } from "./renderer";
 import type { SurfaceScene } from "./surfaceScene";
 
-export interface SurfaceData {
-  horizon: HorizonProfile | null;
-}
-
 interface Fade {
   t: number;
   done: boolean;
-  /** Runs once, when the screen is fully covered. Returns false to wait one more frame. */
-  atPeak: () => boolean;
+  /** Runs once, when the screen is fully covered. */
+  atPeak: () => void;
 }
 
-const FADE_IN_S = 0.4;
-const FADE_OUT_S = 0.7;
+const FADE_IN_S = 0.3;
+const FADE_OUT_S = 0.55;
 const APPROACH_SECONDS = 150;
-/** The descent holds here until the site data is loaded. */
-const DESCENT_HOLD_K = 0.9;
+const FOCUS_SECONDS = 1.5;
 
 /**
- * Runs the shots: cruise, transfer, descent, the cut to the ground camera,
- * final descent, then the free surface view.
+ * Runs the views and the shots:
+ * cruise (whole south pole) -> focus (one site, from orbit) -> transfer ->
+ * descent -> cut to the ground camera -> final -> surface.
  */
 export class Director {
   phase: Phase = "cruise";
   private t = 0;
   private progress = 0;
   private transferS = 6;
-  private site: Site | null = null;
-  private data: SurfaceData | null = null;
-  private flight = 0;
+  private horizon: HorizonProfile | null = null;
   private fade: Fade | null = null;
   private skipAsked = false;
   private exposure = 1.05;
@@ -53,26 +47,42 @@ export class Director {
     if (this.phase === "cruise") this.progress = clamp01(this.progress + delta);
   }
 
-  /** Starts the flight to a site. `data` resolves when the site's series is the active one. */
-  startFlight(site: Site, data: Promise<SurfaceData>, instant: boolean): void {
-    const flight = ++this.flight;
-    this.data = null;
+  /** Shows a site from orbit. From the overview or another site the camera glides; from a flight it cuts. */
+  focus(site: Site): void {
+    this.skipAsked = false;
+    if (this.phase === "cruise" || this.phase === "focus") {
+      this.orbit.beginFocus(site);
+      this.setPhase("focus");
+      return;
+    }
+    this.cut(() => {
+      this.showOrbit();
+      this.orbit.beginFocus(site);
+      this.setPhase("focus");
+      this.t = FOCUS_SECONDS;
+    });
+  }
+
+  /** Back to the whole south pole. */
+  overview(): void {
+    this.skipAsked = false;
+    if (this.phase === "cruise") return;
+    this.cut(() => {
+      this.showOrbit();
+      this.setPhase("cruise");
+    });
+  }
+
+  /** Starts the illustrative landing on a site. `horizon` is its terrain profile, or null. */
+  startFlight(site: Site, horizon: HorizonProfile | null, instant: boolean): void {
+    this.horizon = horizon;
     this.skipAsked = instant;
-    data.then(
-      (d) => {
-        if (flight === this.flight) this.data = d;
-      },
-      () => undefined, // the caller reports the error and calls back()
-    );
-    const begin = (): boolean => {
-      this.surface.leave();
-      this.stage.show(this.orbit.scene, this.orbit.camera, this.orbit.shipScene);
-      this.site = site;
+    const begin = (): void => {
+      this.showOrbit();
       this.transferS = transferSeconds(this.orbit.beginFlight(site));
       this.setPhase("transfer");
-      return true;
     };
-    if (this.phase === "final" || this.phase === "surface") this.fade = { t: 0, done: false, atPeak: begin };
+    if (this.phase === "final" || this.phase === "surface") this.cut(begin);
     else begin();
   }
 
@@ -81,55 +91,41 @@ export class Director {
     if (this.phase === "transfer" || this.phase === "descent" || this.phase === "final") this.skipAsked = true;
   }
 
-  /** Returns to the cruise view. */
-  back(): void {
-    this.flight++;
-    this.skipAsked = false;
-    if (this.phase === "cruise") return;
-    this.fade = {
-      t: 0,
-      done: false,
-      atPeak: () => {
-        this.surface.leave();
-        this.stage.show(this.orbit.scene, this.orbit.camera, this.orbit.shipScene);
-        this.site = null;
-        this.setPhase("cruise");
-        return true;
-      },
-    };
+  /** The terrain profile changed (other mast height or model) while the ship is on the ground. */
+  setHorizon(horizon: HorizonProfile | null): void {
+    this.horizon = horizon;
+    if (this.phase === "final" || this.phase === "surface") this.surface.setHorizon(horizon);
   }
 
-  /** dt drives the animation. realDt is the true frame time, used to keep the frame rate up. */
-  update(dt: number, timeS: number, sample: Sample, lightSite: Site, realDt = dt): void {
+  /**
+   * One frame. `site` is the selected site and `sample` its Sun and Earth at the chosen time.
+   * dt drives the animation. realDt is the true frame time, used to keep the frame rate up.
+   */
+  update(dt: number, timeS: number, sample: Sample, site: Site, realDt = dt): void {
     let veilAlpha = 0;
     let veilWhite = false;
 
-    if (this.skipAsked && !this.fade && this.site && this.data && lightSite.id === this.site.id) {
+    if (this.skipAsked && !this.fade) {
       this.skipAsked = false;
-      const site = this.site;
-      const data = this.data;
-      this.fade = {
-        t: 0,
-        done: false,
-        atPeak: () => {
-          this.surface.prepare(site, data.horizon, sample);
-          this.surface.snapLanded();
-          this.stage.show(this.surface.scene, this.surface.camera, null);
-          this.surface.enterLanded();
-          this.setPhase("surface");
-          return true;
-        },
-      };
+      this.cut(() => {
+        this.surface.prepare(site, this.horizon, sample);
+        this.surface.snapLanded();
+        this.stage.show(this.surface.scene, this.surface.camera, null);
+        this.surface.enterLanded();
+        this.setPhase("surface");
+      });
     }
 
-    const inOrbit = this.phase === "cruise" || this.phase === "transfer" || this.phase === "descent";
+    const inOrbit = this.phase !== "final" && this.phase !== "surface";
     if (inOrbit) {
       this.orbit.setSky(
-        azElToMoonFixed(sample.sunAzDeg, sample.sunElDeg, lightSite.latDeg, lightSite.lonDeg),
-        azElToMoonFixed(sample.earthAzDeg, sample.earthElDeg, lightSite.latDeg, lightSite.lonDeg),
+        azElToMoonFixed(sample.sunAzDeg, sample.sunElDeg, site.latDeg, site.lonDeg),
+        azElToMoonFixed(sample.earthAzDeg, sample.earthElDeg, site.latDeg, site.lonDeg),
         sample.sunRadiusDeg,
         sample.earthRadiusDeg,
         timeS,
+        (sample.sunState ?? 0) > 0,
+        (sample.earthState ?? 0) > 0,
       );
     }
 
@@ -137,6 +133,10 @@ export class Director {
       case "cruise":
         this.progress = clamp01(this.progress + dt / APPROACH_SECONDS);
         this.orbit.setCruise(this.progress, timeS);
+        break;
+      case "focus":
+        this.t += dt;
+        this.orbit.setFocus(clamp01(this.t / FOCUS_SECONDS), timeS);
         break;
       case "transfer": {
         this.t += dt;
@@ -146,19 +146,14 @@ export class Director {
         break;
       }
       case "descent": {
-        const ready = this.site !== null && this.data !== null && lightSite.id === this.site.id;
         this.t += dt;
-        let k = clamp01(this.t / DESCENT_SECONDS);
-        if (!ready && k > DESCENT_HOLD_K) {
-          k = DESCENT_HOLD_K;
-          this.t = k * DESCENT_SECONDS;
-        }
+        const k = clamp01(this.t / DESCENT_SECONDS);
         this.orbit.setDescent(k, timeS);
-        veilAlpha = smoothstep(0.9, 1, k);
+        veilAlpha = smoothstep(0.95, 1, k);
         veilWhite = true;
-        if (k >= 1 && ready) {
+        if (k >= 1) {
           // The screen is white with engine glare: build the ground and cut to it.
-          this.surface.prepare(this.site!, this.data!.horizon, sample);
+          this.surface.prepare(site, this.horizon, sample);
           this.stage.show(this.surface.scene, this.surface.camera, null);
           this.setPhase("final");
         }
@@ -169,7 +164,7 @@ export class Director {
         const k = clamp01(this.t / FINAL_SECONDS);
         this.surface.setFinal(k, timeS, dt);
         this.surface.setSky(sample, timeS);
-        veilAlpha = 1 - smoothstep(0, 0.085, k);
+        veilAlpha = 1 - smoothstep(0, 0.05, k);
         veilWhite = true;
         if (k >= 1) {
           this.surface.enterLanded();
@@ -185,10 +180,11 @@ export class Director {
 
     if (this.fade) {
       const f = this.fade;
-      f.t += dt;
+      f.t += Math.max(dt, Math.min(realDt, 0.05)); // fades also run when the flight is paused
       if (!f.done && f.t >= FADE_IN_S) {
-        f.done = f.atPeak();
-        if (f.done) f.t = FADE_IN_S;
+        f.atPeak();
+        f.done = true;
+        f.t = FADE_IN_S;
       }
       const alpha = f.done ? 1 - clamp01((f.t - FADE_IN_S) / FADE_OUT_S) : clamp01(f.t / FADE_IN_S);
       if (alpha >= veilAlpha) {
@@ -206,6 +202,16 @@ export class Director {
     this.exposure += (wanted - this.exposure) * Math.min(1, dt * 2.5);
     this.stage.renderer.toneMappingExposure = this.exposure;
     this.stage.render(timeS, realDt);
+  }
+
+  /** Short fade to black, then `atPeak`, then fade back in. */
+  private cut(atPeak: () => void): void {
+    this.fade = { t: 0, done: false, atPeak };
+  }
+
+  private showOrbit(): void {
+    this.surface.leave();
+    this.stage.show(this.orbit.scene, this.orbit.camera, this.orbit.shipScene);
   }
 
   private setPhase(phase: Phase): void {
