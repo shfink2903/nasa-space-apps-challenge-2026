@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "true-larpers-lunar-data"
+version = "0.1.0"
+description = "Offline, traceable lunar site geometry and terrain data"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2,<3", "scipy>=1.14,<2", "spiceypy>=6,<9",
+  "rasterio>=1.4,<2", "pyproj>=3.7,<4", "jsonschema>=4,<5",
+  "tiktoken>=0.8,<1",
+  "certifi>=2025",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+lunar-data = "lunar_data.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["lunar_data*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["scientific: requires downloaded scientific data"]

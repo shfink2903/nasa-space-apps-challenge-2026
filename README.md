@@ -7,6 +7,7 @@ Challenge page: https://www.spaceappschallenge.org/2026/challenges/lunar-landing
 Read CHALLENGE.md for any informations about the challenge itself. 
 
 Detailed DATA plan (French, documentation only): [data.md](data.md).
+Executable DATA pipeline and offline reader: [DATA_PIPELINE.md](DATA_PIPELINE.md).
 
 ## Our challenge
 

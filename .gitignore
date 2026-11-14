@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.DS_Store
+.env
+data/raw/**
+!data/raw/SOURCES.json
+data/interim/
+data/processed/*.tmp/
