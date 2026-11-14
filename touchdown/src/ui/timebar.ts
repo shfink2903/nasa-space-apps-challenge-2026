@@ -61,20 +61,28 @@ export function createTimeBar(store: Store, actions: Actions): HTMLElement {
   );
   const lightOf = h("span", { class: "legend-site", text: "" });
 
+  // Bottom dock, full width: play, the landing date and time, then the 30 days as two bands.
+  play.classList.add("button-primary", "dock-play");
   const panel = h(
     "section",
-    { class: "panel time", "aria-label": T.timeTitle },
-    h("header", { class: "panel-head" }, h("h2", { class: "panel-title" }, icon("clock"), T.timeTitle), h("span", { class: "badge", text: "UTC" })),
-    h("div", { class: "clock" }, clock, date),
-    h("label", { class: "field-label", for: "landing-time", text: T.landingTime }),
-    when,
-    period,
-    h("label", { class: "field-label only-expert", for: "start-date" }, T.startDate, h("span", { text: T.days30 })),
-    h("div", { class: "only-expert" }, select),
-    h("div", { class: "scrub" }, track, range),
-    h("div", { class: "scrub-scale" }, h("span", { text: `${T.dayLetter} + 0` }), offset, h("span", { text: `${T.dayLetter} + 30` })),
-    h("div", { class: "legend" }, h("i", { class: "dot dot-day" }), T.legendSun, h("i", { class: "dot dot-earth" }), T.legendEarth, lightOf),
-    h("div", { class: "time-actions" }, play, speed),
+    { class: "panel time dock", "aria-label": T.timeTitle },
+    h("div", { class: "dock-controls" }, play, speed),
+    h(
+      "div",
+      { class: "dock-when" },
+      h("div", { class: "clock" }, clock, date, h("span", { class: "badge", text: "UTC" })),
+      h("label", { class: "field-label", for: "landing-time", text: T.landingTime }),
+      when,
+      h("div", { class: "only-expert dock-start" }, h("label", { class: "field-label", for: "start-date" }, T.startDate), select),
+    ),
+    h(
+      "div",
+      { class: "dock-track" },
+      h("div", { class: "legend" }, h("i", { class: "dot dot-day" }), T.legendSun, h("i", { class: "dot dot-earth" }), T.legendEarth, lightOf),
+      h("div", { class: "scrub" }, track, range),
+      h("div", { class: "scrub-scale" }, h("span", { text: `${T.dayLetter} + 0` }), offset, h("span", { text: `${T.dayLetter} + 30` })),
+      h("div", { class: "dock-foot" }, period, h("small", { class: "credits", text: T.credits })),
+    ),
   );
 
   select.addEventListener("change", () => actions.setDate(select.value));

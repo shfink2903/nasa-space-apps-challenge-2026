@@ -141,7 +141,8 @@ export class OrbitScene {
     this.pose.target
       .set(0, 0, 0)
       .addScaledVector(right, -distance * Math.tan(4.6 * DEG) * wide)
-      .addScaledVector(up, -distance * Math.tan(mix(-0.5, 2.2, wide) * DEG));
+      // Narrow screens: the panels fill the lower half, so the Moon is shown in the upper part.
+      .addScaledVector(up, -distance * Math.tan(mix(9, 2.2, wide) * DEG));
     this.pose.up.copy(UP);
     this.applyPose();
     this.placeCruiseShip(e, timeS, 0);
@@ -196,7 +197,8 @@ export class OrbitScene {
     const f = this.shipFocus;
     const wide = smoothstep(0.75, 1.5, this.camera.aspect);
     const cam = this.camera;
-    const local = new THREE.Vector3(mix(-0.045, -0.118, wide) + 0.02 * e, mix(-0.07, -0.058, wide) + 0.012 * e, mix(-0.42, -0.3, wide) - 0.1 * e);
+    // Wide screens: upper left, above the title of the overview. Narrow screens: lower left.
+    const local = new THREE.Vector3(mix(-0.045, -0.1, wide) + 0.02 * e, mix(-0.07, 0.05, wide) + 0.012 * e, mix(-0.42, -0.34, wide) - 0.1 * e);
     // Focus: up and to the right of the site, clear of the panels and of the caption.
     local.lerp(new THREE.Vector3(mix(0.02, 0.062, wide), 0.045, -0.44), f);
     local.y += Math.sin(timeS * 0.5) * 0.0025;

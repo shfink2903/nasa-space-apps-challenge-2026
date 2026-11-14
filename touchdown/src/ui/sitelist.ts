@@ -89,7 +89,7 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
         "span",
         { class: "site-text" },
         h("b", null, label.title, site.computed && h("em", { class: "tag tag-warn", title: T.customWarning, text: "≈" }), study && h("em", { class: "tag tag-ice", text: T.studyTag }), r.nonDominated && h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆" })),
-        h("small", { text: custom ? formatCoords(site) : label.place || site.name }),
+        custom && h("small", { text: formatCoords(site) }),
       ),
       h(
         "span",

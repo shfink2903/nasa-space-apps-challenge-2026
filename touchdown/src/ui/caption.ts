@@ -1,91 +1,78 @@
 import { sampleSeries, visibilityAt, type Derived } from "../data/dataset";
 import { verdictAt } from "../data/mission";
-import type { Actions, Store } from "../state";
+import type { Actions, AppState, Store } from "../state";
 import { h, icon } from "./dom";
 import { formatDuration, siteLabel } from "./format";
 import { T } from "./strings";
 
 const ORDER = ["transfer", "descent", "final", "surface"] as const;
 
+export interface LandingChoice {
+  /** What the site sheet offers: land, jump to sunrise, look at other options, or nothing. */
+  kind: "land" | "sunrise" | "options" | "none";
+  text: string;
+  riseMs: number | null;
+}
+
 /**
- * Bottom-left: what is happening now. On a selected site it says whether the
- * Sun is up and offers the landing. No Sun, no landing: the button is replaced
- * by a jump to the next published sunrise.
+ * Can the ship land on the selected site now? No when the user's criteria are
+ * not met for this date, and no when the Sun is not up at the chosen time.
  */
-export function createCaption(store: Store, actions: Actions, derived: Derived): HTMLElement {
+export function landingChoice(s: AppState, derived: Derived): LandingChoice {
+  const site = s.sites.find((x) => x.id === s.siteId);
+  if (!site || !s.scenario || !s.series || s.lightSiteId !== s.siteId) return { kind: "none", text: "", riseMs: null };
+  if (verdictAt(derived, site, s.heightM, s.date, s.criteria).status === "nogo") return { kind: "options", text: T.focusNoGo, riseMs: null };
+  const tMs = sampleSeries(s.series, s.index).tMs;
+  const sun = visibilityAt(s.scenario, "sun.anyDisk", tMs);
+  if (sun.visible) return { kind: "land", text: T.focusSunUp(sun.changeMs === null ? null : formatDuration(sun.changeMs - tMs)), riseMs: null };
+  if (sun.changeMs !== null) return { kind: "sunrise", text: T.focusSunDown, riseMs: sun.changeMs };
+  return { kind: "none", text: `${T.focusSunDown} ${T.focusNoRise}`, riseMs: null };
+}
+
+/**
+ * Centre of the screen. On the overview: the question the tool answers and its
+ * two entries. During the flight and on the ground: the steps, Skip and Back.
+ * With a site open the sheet says everything, so this stays out of the way.
+ */
+export function createCaption(store: Store, actions: Actions): HTMLElement {
   const kicker = h("small", { class: "kicker" });
   const title = h("h1", { class: "caption-title" });
   const text = h("p", { class: "caption-text" });
   const steps = T.steps.map((label) => h("li", { text: label }));
   const stepper = h("ol", { class: "stepper" }, ...steps);
-  const land = h("button", { class: "button button-primary", type: "button" }, icon("nav"), T.land);
-  const sunrise = h("button", { class: "button button-primary", type: "button" }, icon("sun"), T.toSunrise);
   const compare = h("button", { class: "button button-primary button-big", type: "button" }, icon("table"), T.compare);
   const tour = h("button", { class: "button button-big", type: "button" }, icon("play"), T.tourStart);
-  tour.addEventListener("click", () => actions.startTour());
-  const options = h("button", { class: "button button-primary", type: "button" }, icon("table"), T.seeOptions);
-  options.addEventListener("click", () => actions.setCompare(true, "delay"));
+  const hint = h("span", { class: "caption-hint", text: T.heroHint });
   const skip = h("button", { class: "button", type: "button" }, icon("skip"), T.skip);
-  const back = h("button", { class: "button", type: "button" }, icon("back"), h("span"));
-  const actionsRow = h("div", { class: "caption-actions" }, compare, tour, options, land, sunrise, skip, back);
-  const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, stepper, actionsRow);
-  let riseMs: number | null = null;
-  compare.addEventListener("click", () => actions.setCompare(true));
-  land.addEventListener("click", () => actions.land());
-  sunrise.addEventListener("click", () => {
-    // One display step after the rise, so the Sun is already above the terrain.
-    if (riseMs !== null) actions.jumpTo(riseMs + 600_000);
-  });
+  const back = h("button", { class: "button", type: "button" }, icon("back"), T.back);
+  const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, stepper, h("div", { class: "caption-actions" }, compare, tour, hint, skip, back));
+  compare.addEventListener("click", () => actions.setCompare(true, "date"));
+  tour.addEventListener("click", () => actions.startTour());
   skip.addEventListener("click", () => actions.skip());
   back.addEventListener("click", () => actions.back());
 
   const render = (): void => {
     const s = store.get();
     const site = s.sites.find((x) => x.id === s.siteId);
-    const selected = s.phase !== "cruise" && site !== undefined;
-    const flying = selected && s.phase !== "focus";
-    kicker.textContent = T.phaseKicker[s.phase];
-    title.textContent = selected ? siteLabel(site).title : T.cruiseTitle;
+    const cruise = s.phase === "cruise" || !site;
+    const flying = !cruise && s.phase !== "focus";
+    el.hidden = !cruise && !flying;
     el.dataset.phase = s.phase;
+    kicker.textContent = cruise ? T.heroKicker : T.phaseKicker[s.phase];
+    title.textContent = cruise ? T.cruiseTitle : siteLabel(site).title;
+    text.textContent = cruise ? T.cruiseText : s.phase === "surface" ? T.surfaceText : T.flightText;
     stepper.hidden = !flying;
     const at = ORDER.indexOf(s.phase as (typeof ORDER)[number]);
     steps.forEach((step, i) => {
       step.classList.toggle("is-done", i < at);
       step.classList.toggle("is-current", i === at);
     });
+    compare.hidden = tour.hidden = hint.hidden = !cruise;
     skip.hidden = !(s.phase === "transfer" || s.phase === "descent" || s.phase === "final");
-    back.hidden = !selected;
-    back.lastElementChild!.textContent = s.phase === "focus" ? T.close : T.back;
-
-    compare.hidden = selected;
-    tour.hidden = selected;
-    land.hidden = true;
-    sunrise.hidden = true;
-    options.hidden = true;
-    riseMs = null;
-    if (!selected) text.textContent = T.cruiseText;
-    else if (s.phase === "surface") text.textContent = T.surfaceText;
-    else if (s.phase !== "focus") text.textContent = T.flightText;
-    else if (s.scenario && s.series && s.lightSiteId === s.siteId) {
-      const tMs = sampleSeries(s.series, s.index).tMs;
-      const sun = visibilityAt(s.scenario, "sun.anyDisk", tMs);
-      if (site && verdictAt(derived, site, s.heightM, s.date, s.criteria).status === "nogo") {
-        // The mission criteria are not met for this date: no landing, but a way to the alternatives.
-        text.textContent = T.focusNoGo;
-        options.hidden = false;
-      } else if (sun.visible) {
-        text.textContent = T.focusSunUp(sun.changeMs === null ? null : formatDuration(sun.changeMs - tMs));
-        land.hidden = false;
-      } else if (sun.changeMs !== null) {
-        text.textContent = T.focusSunDown;
-        riseMs = sun.changeMs;
-        sunrise.hidden = false;
-      } else text.textContent = `${T.focusSunDown} ${T.focusNoRise}`;
-    } else text.textContent = "";
+    back.hidden = !flying;
   };
   store.subscribe((s, p) => {
-    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites || s.scenario !== p.scenario || s.lightSiteId !== p.lightSiteId || s.criteria !== p.criteria || s.customTick !== p.customTick) render();
-    else if (s.phase === "focus" && s.index !== p.index) render();
+    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites) render();
   });
   render();
   return el;

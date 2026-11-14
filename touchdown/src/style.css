@@ -2049,23 +2049,367 @@ body[data-phase="surface"] .caption-title {
   backdrop-filter: blur(12px);
 }
 
+/* ---------- Shell: top bar, two rails, bottom dock ---------- */
+
+:root {
+  --bar: 56px;
+  --dock: 122px;
+  --rail: 356px;
+  --gap: 16px;
+}
+.topbar {
+  position: absolute;
+  top: var(--gap);
+  left: var(--gap);
+  right: var(--gap);
+  height: var(--bar);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 12px 0 16px;
+  border-radius: 16px;
+}
+.topbar .brand small {
+  max-width: 330px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topnav {
+  display: flex;
+  gap: 6px;
+}
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.18s,
+    color 0.18s;
+}
+.nav-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.nav-button.is-primary {
+  background: var(--amber);
+  color: #1a1206;
+  font-weight: 600;
+}
+.nav-button.is-primary:hover {
+  background: #ffc97f;
+}
+.nav-button.is-current:not(.is-primary) {
+  background: var(--amber-soft);
+  border-color: rgba(255, 186, 96, 0.4);
+  color: var(--amber);
+}
+.toptools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rail {
+  top: calc(var(--gap) * 2 + var(--bar));
+  bottom: calc(var(--gap) * 2 + var(--dock));
+}
+.rail-right {
+  justify-content: flex-start;
+}
+.sites {
+  flex: 0 1 auto;
+}
+.sites .panel-head {
+  align-items: baseline;
+}
+.sites .site-row {
+  padding: 7px 8px;
+}
+.sites .site-text b {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sites .site-row.is-selected .site-text b {
+  font-weight: 600;
+}
+
+/* Bottom dock: time. */
+.dock {
+  position: absolute;
+  left: var(--gap);
+  right: var(--gap);
+  bottom: var(--gap);
+  height: var(--dock);
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  padding: 12px 18px;
+  border-radius: 16px;
+}
+.dock-controls {
+  display: grid;
+  gap: 8px;
+}
+.dock-play {
+  justify-content: center;
+  min-width: 124px;
+  height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.dock-controls .select-small {
+  width: 100%;
+}
+.dock .clock {
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 6px;
+}
+.dock .clock-time {
+  font-size: 30px;
+}
+.dock-when .field-label {
+  margin-bottom: 3px;
+  font-size: 11px;
+}
+.dock .when {
+  width: 218px;
+  height: 32px;
+}
+.dock-start {
+  display: none !important;
+}
+.dock .legend {
+  margin: 0 0 4px;
+}
+.dock .legend-site {
+  flex-basis: auto;
+  margin-left: auto;
+}
+.dock .scrub {
+  margin-top: 0;
+}
+.dock-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 2px;
+}
+.dock-foot .note {
+  margin: 0;
+  white-space: nowrap;
+}
+.credits {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Centre: the question on the overview, the flight status afterwards. */
+.caption {
+  left: calc(var(--gap) + 36px);
+  bottom: calc(var(--gap) * 2 + var(--dock) + 30px);
+  max-width: 600px;
+}
+.caption-title {
+  font-size: clamp(40px, 4.6vw, 64px);
+}
+.caption-text {
+  max-width: 480px;
+  font-size: 16px;
+  color: var(--ink);
+}
+.caption-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.caption-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+body[data-phase="transfer"] .caption,
+body[data-phase="descent"] .caption,
+body[data-phase="final"] .caption,
+body[data-phase="surface"] .caption {
+  left: 50%;
+  bottom: calc(var(--gap) * 2 + var(--dock));
+  width: min(440px, calc(100vw - 2 * var(--rail) - 96px));
+  padding: 14px 18px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  text-shadow: none;
+  transform: translateX(-50%);
+}
+body[data-phase="transfer"] .caption::before,
+body[data-phase="descent"] .caption::before {
+  display: none;
+}
+body[data-phase="transfer"] .caption-title,
+body[data-phase="descent"] .caption-title,
+body[data-phase="final"] .caption-title,
+body[data-phase="surface"] .caption-title {
+  margin: 4px 0;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+body:not([data-phase="cruise"]) .caption-text {
+  font-size: 13px;
+  color: var(--muted);
+}
+body:not([data-phase="cruise"]) .stepper,
+body:not([data-phase="cruise"]) .caption-actions {
+  margin-top: 12px;
+}
+
+/* Site sheet: head, one action, four tabs. */
+.conditions {
+  padding: 16px 8px 14px 16px;
+}
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-right: 8px;
+}
+.sheet-head .cond-head {
+  margin: 0;
+}
+.cond-site {
+  font-size: 20px;
+}
+.sheet-action {
+  margin: 12px 8px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.sheet-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sheet-action .pill {
+  padding: 5px 13px;
+  font-size: 14px;
+}
+.sheet-action-text {
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+.sheet-tabs {
+  margin: 12px 8px 0 0;
+}
+.sheet-tabs .seg {
+  padding: 0 4px;
+  font-size: 12px;
+}
+.pane > .block:first-child,
+.pane > .more:first-child {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: none;
+}
+.pane > .button-wide:first-child {
+  margin-top: 10px;
+}
+.sky-fig {
+  margin: 12px 0 0;
+}
+.sky-chart {
+  height: 128px;
+}
+.sky-fig .note p {
+  display: inline;
+}
+.more > summary {
+  display: none;
+}
+.verdict-box .pill {
+  display: none;
+}
+
+/* Tour and compare sheet sit under the top bar, which stays usable. */
+.tour {
+  top: calc(var(--gap) * 2 + var(--bar));
+}
+.sheet-backdrop {
+  inset: calc(var(--gap) + var(--bar) + 8px) 0 0 0;
+  place-items: start center;
+  padding: 8px 20px 20px;
+}
+.sheet {
+  max-height: calc(100vh - var(--gap) - var(--bar) - 36px);
+  max-height: calc(100dvh - var(--gap) - var(--bar) - 36px);
+}
+.crit-details {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.crit-details > summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.crit-details > summary::-webkit-details-marker {
+  display: none;
+}
+.crit-details > summary em {
+  color: var(--amber);
+  font-style: normal;
+  font-weight: 600;
+}
+.crit-details[open] .criteria {
+  margin-top: 8px;
+}
+
 /* ---------- Small screens ---------- */
 
-@media (max-width: 1180px) {
+@media (max-width: 1280px) {
   :root {
-    --rail: 300px;
-    --gap: 16px;
+    --rail: 320px;
   }
-  .caption {
-    left: calc(var(--gap) + var(--rail) + 24px);
-    bottom: 36px;
-    max-width: calc(100vw - 2 * var(--rail) - 80px);
-  }
-  .caption-title {
-    font-size: 34px;
-  }
-  .footer {
+  .topbar .brand small,
+  .credits {
     display: none;
+  }
+  .nav-button {
+    padding: 0 10px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .nav-button span {
+    display: none;
+  }
+  .nav-button.is-primary span {
+    display: inline;
+  }
+  .dock {
+    gap: 14px;
   }
 }
 
@@ -2082,7 +2426,7 @@ body[data-phase="surface"] .caption-title {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 42vh var(--gap) var(--gap);
+    padding: 46vh var(--gap) var(--gap);
     overflow-y: auto;
   }
   .rail-left,
@@ -2094,15 +2438,35 @@ body[data-phase="surface"] .caption-title {
     border-radius: 14px;
     background: var(--glass-strong);
   }
-  .caption {
+  .topbar {
+    position: fixed;
+    z-index: 4;
+    height: auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .topbar .brand > div {
+    display: none;
+  }
+  .topnav {
+    flex: 1;
+  }
+  .toptools .seg {
+    padding: 0 8px;
+  }
+  .caption,
+  body[data-phase] .caption {
     position: static;
     order: 1;
+    width: auto;
     max-width: none;
     padding: 14px;
     background: var(--glass-strong);
     border: 1px solid var(--line);
     border-radius: 14px;
     text-shadow: none;
+    transform: none;
   }
   .caption::before {
     display: none;
@@ -2124,30 +2488,43 @@ body[data-phase="surface"] .caption-title {
     max-width: none;
     margin: 0;
   }
-  .time {
-    order: 2;
-  }
   .conditions {
-    order: 3;
+    order: 2;
     flex: none;
+  }
+  .dock {
+    position: static;
+    order: 3;
+    height: auto;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .dock-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dock .when {
+    width: 100%;
+  }
+  .dock-foot {
+    flex-direction: column;
+    gap: 2px;
   }
   .sites {
     order: 4;
     flex: none;
   }
-  .guide {
-    order: 5;
-  }
   .sheet-scroll,
   .site-scroll {
     overflow: visible;
   }
-  .clock-time {
-    font-size: 30px;
-  }
   .sheet-backdrop {
     position: fixed;
+    inset: 0;
+    z-index: 6;
     padding: 8px;
+  }
+  .sheet {
+    max-height: calc(100dvh - 16px);
   }
   .sheet .panel-head {
     flex-wrap: wrap;

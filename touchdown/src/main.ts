@@ -37,7 +37,7 @@ import { createCaption } from "./ui/caption";
 import { createCompare } from "./ui/compare";
 import { h } from "./ui/dom";
 import { formatPercent0, siteLabel } from "./ui/format";
-import { createGuide } from "./ui/guide";
+import { createTopBar } from "./ui/topbar";
 import { createSiteList } from "./ui/sitelist";
 import { createSitePanel } from "./ui/sitepanel";
 import { LANG, T } from "./ui/strings";
@@ -384,10 +384,11 @@ async function boot(): Promise<void> {
   const pins = new Map<string, HTMLButtonElement>();
   const tour = createTour(store, actions);
   hud.append(
-    h("div", { class: "rail rail-left" }, createGuide(store, actions), createSitePanel(store, actions, derived)),
-    h("div", { class: "rail rail-right" }, createTimeBar(store, actions), createSiteList(store, actions, derived)),
-    createCaption(store, actions, derived),
-    h("p", { class: "footer", text: T.footer }),
+    createTopBar(store, actions),
+    h("div", { class: "rail rail-left" }, createSitePanel(store, actions, derived)),
+    h("div", { class: "rail rail-right" }, createSiteList(store, actions, derived)),
+    createCaption(store, actions),
+    createTimeBar(store, actions),
     tour.el,
     createCompare(store, actions, derived),
   );

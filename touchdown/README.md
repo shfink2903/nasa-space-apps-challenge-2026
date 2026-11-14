@@ -28,21 +28,30 @@ To host the build on a static server, also publish `data/processed/v1` at the pa
 
 ## What you see
 
-The main job of the tool is to **compare sites and dates** for two things: **lighting** (is the Sun up at the site) and **communication** (is the Earth in view, so a direct link is possible).
+The tool answers one question: **where to land, and when**, judged on **lighting** (is the Sun up at the site) and **communication** (is the Earth in view, so a direct link is possible).
 
-1. **Overview.** The Moon seen from the south, so the south pole faces you. A large **Compare the sites** button sits under the title and on top of the ranking.
-2. **Compare sheet.**
-   - **By date**: one row per site with three bars (lighting, communication, both together). Drag the start date, step week by week or press **Play through the year**: the bars and the ranking move as the date changes.
-   - Click a column title to rank by it. Each title has one line that says what it measures.
-   - **Precision**: *Simple* shows the three bars. *Detailed* adds one decimal, the longest night, the longest link blackout, the maximum Sun height and the model level.
-   - **Over the year**: one row per site, one cell per weekly start. Click a cell to open that site at that date.
-3. **Click a site** (gold pin, ranking row or compare row): the camera zooms on it and the **site sheet** opens at once, with no flight to wait for.
-   - Two cards, no angle: **Lighting** ("Lit" / "In the dark", time left before night) and **Communication** ("Direct link possible" / "No direct link", time left before the blackout), each with its share of the 30 days.
-   - A date strip (52 weekly starts) to change the date.
-   - **More precision** (closed by default): Sun and Earth heights, the sky map with the terrain horizon, longest night and blackout, the 1 km grid of the study points, observer height (2 m or 10 m), model level and published limits.
-4. **Time bar**: two bands over the 30 days, lighting on top and link with Earth under it.
-5. **Land here**: the illustrative flight starts only when the site is lit at the chosen time. If not, the button becomes **Go to sunrise**, or the caption says that no sunrise is published in these 30 days.
-6. **On the ground:** the Sun and the Earth are where the dataset says. **Back to the sheet** returns to the zoomed view.
+The screen has four fixed places, each with one job:
+
+| Place | What it holds |
+|---|---|
+| **Top bar** | The three things the tool is for: **Compare the sites**, **Launch delay**, **Guided tour**. Then the display level (Everyone / Scientist) and the language. |
+| **Right** | The sites, ranked by the criterion you pick, with a green or red dot for the verdict. South pole or all sites. Free coordinates at the bottom. |
+| **Bottom** | Time: play, the landing date and time, and the 30 days as two bands (lit, link with Earth). |
+| **Left** | The sheet of the selected site. Empty on the overview, so the Moon stays in view. |
+
+Click a site (gold point, ranking row, or anywhere on the Moon) and its sheet opens at once:
+
+- **Head**: the name, the verdict, and the one action that makes sense now: *Land here*, *Go to sunrise*, or *See the other options* when the criteria are not met.
+- **Summary**: lighting and communication now, with the time left; their share of the 30 days; and the sky seen from the site, with the Sun and the Earth against the horizon.
+- **Year**: 52 weekly starts to pick another date, and the 1 km grid of the study points.
+- **Understand**: what the Sun gives a lander, and why conditions change.
+- **Precision** (Scientist display): angles, longest night and blackout, observer height, model level, validation status, scenario id and published limits.
+
+The compare sheet opens under the top bar and has three tabs: **By date** (bars and ranking that move as you drag the date), **Over the year** (a green and red calendar, or one metric), **Launch delay**. The mission criteria are one line at the top of the sheet; click it to change them.
+
+"Lit" and "link possible" are the published visibility states of the Sun and the Earth above the terrain. They are not a power budget or a radio link budget.
+
+Keys: `Space` play/pause, `←` `→` one hour, `Esc` back. With "reduce motion" on, the flight is skipped. `?lang=en` and `?mode=expert` force the language and the display.
 
 ### Mission criteria and verdict
 

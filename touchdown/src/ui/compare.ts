@@ -7,7 +7,7 @@ import { formatDeg, formatMonth, formatPercent0, formatShortDate, formatStartDat
 import { createPlanner } from "./planner";
 import { createRegionSwitch, formatCriterion } from "./sitelist";
 import { T } from "./strings";
-import { verdictPill } from "./verdict";
+import { createCriteria, verdictPill } from "./verdict";
 
 const RGB: Record<string, string> = { overlap: "232,236,244", sun: "255,186,96", earth: "157,188,255" };
 const FRACTIONS = ["sun", "earth", "overlap"].map(criterionById);
@@ -107,6 +107,16 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     precisionOption,
   );
 
+  // The thresholds behind every verdict: one line when closed, the three sliders when opened.
+  const critSummary = h("span");
+  const criteria = h(
+    "details",
+    { class: "crit-details" },
+    h("summary", null, critSummary, h("em", { text: T.critEdit })),
+    createCriteria(store, actions),
+  );
+  const sheetTitle = h("h2", { class: "sheet-title", text: T.compareTitle });
+  const sheetSub = h("p", { class: "sheet-sub", text: T.compareLead });
   const body = h("div", { class: "sheet-body" });
   const note = h("p", { class: "note" });
   const sheet = h(
@@ -115,9 +125,10 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     h(
       "header",
       { class: "panel-head" },
-      h("div", null, h("h2", { class: "sheet-title", text: T.compareTitle }), h("p", { class: "sheet-sub", text: T.compareLead })),
+      h("div", null, sheetTitle, sheetSub),
       h("div", { class: "sheet-tools" }, h("div", { class: "segmented" }, tabDate, tabYear, tabDelay), close),
     ),
+    criteria,
     dateBar,
     options,
     body,
@@ -195,7 +206,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         "tr",
         { tabindex: 0 },
         rank,
-        h("th", { scope: "row", class: "name", title: site.name }, h("span", null, label.title, site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }), free && h("em", { class: "tag tag-warn", title: T.customWarning, text: T.customTag }), mark)),
+        h("th", { scope: "row", class: "name", title: site.name }, h("span", null, label.title, site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }), free && h("em", { class: "tag tag-warn", title: T.customWarning, text: "≈" }), mark)),
         verdict,
         ...tds,
       );
@@ -305,6 +316,14 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     tabDate.classList.toggle("is-on", tab === "date");
     tabYear.classList.toggle("is-on", tab === "year");
     tabDelay.classList.toggle("is-on", tab === "delay");
+    sheetTitle.textContent = tab === "delay" ? T.delayTitle : T.compareTitle;
+    sheetSub.textContent = tab === "delay" ? T.delayLead : T.compareLead;
+    const share = criterionById("sun");
+    critSummary.textContent = T.critSummary(
+      formatCriterion(share, s.criteria.minSun, s.mode),
+      formatCriterion(share, s.criteria.minEarth, s.mode),
+      s.criteria.maxNightH === null ? T.critNoLimit : formatCriterion(criterionById("night"), s.criteria.maxNightH, s.mode),
+    );
     options.hidden = tab === "delay";
     simpleBtn.classList.toggle("is-on", !precise);
     preciseBtn.classList.toggle("is-on", precise);

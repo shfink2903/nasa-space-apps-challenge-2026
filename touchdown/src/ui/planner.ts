@@ -6,7 +6,7 @@ import { h, icon } from "./dom";
 import { formatShortDate, formatStartDate, siteLabel } from "./format";
 import { formatCriterion } from "./sitelist";
 import { T } from "./strings";
-import { createCriteria, failureLines, verdictPill } from "./verdict";
+import { failureLines, verdictPill } from "./verdict";
 
 const MAX_DELAY_WEEKS = 26;
 
@@ -31,7 +31,6 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
   const el = h(
     "div",
     { class: "planner" },
-    h("p", { class: "plan-lead", text: T.delayLead }),
     h(
       "div",
       { class: "plan-inputs" },
@@ -39,7 +38,6 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
       h("label", { class: "plan-field" }, h("span", { text: T.planDate }), dateSelect),
       h("label", { class: "plan-field plan-field-wide" }, h("span", null, T.planDelay, delayText), delayRange),
     ),
-    createCriteria(store, actions),
     cards,
     h("h3", { class: "block-title", text: T.planOthers }),
     others,

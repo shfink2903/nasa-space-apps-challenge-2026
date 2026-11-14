@@ -28,6 +28,7 @@ import {
   siteLabel,
 } from "./format";
 import { nextGoDate, valuesAt, verdictAt } from "../data/mission";
+import { landingChoice } from "./caption";
 import { createSkyChart } from "./skychart";
 import { failureLines, verdictPill } from "./verdict";
 import { T } from "./strings";
@@ -162,15 +163,12 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   // Everything precise lives here. Closed for everyone, open and first-class for scientists.
   const more = h(
     "details",
-    { class: "more only-expert" },
+    { class: "more", open: true },
     h("summary", { text: T.moreTitle }),
     h("h3", { class: "block-title", text: T.now }),
     sunHeight.row,
     earthHeight.row,
     h("p", { class: "note", text: T.elevation }),
-    h("h3", { class: "block-title", text: T.skyTitle }),
-    sky.el,
-    skyNote,
     h("h3", { class: "block-title", text: T.over30 }),
     night.row,
     blackout.row,
@@ -192,27 +190,63 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     traceCoverage.row,
   );
 
-  const panel = h(
-    "section",
-    { class: "panel conditions", "aria-label": T.sheetTitle, hidden: true },
-    h("header", { class: "panel-head" }, h("h2", { class: "panel-title" }, icon("target"), T.sheetTitle)),
-    h(
+  // Head of the sheet: what the site is, the verdict, and the one action that makes sense now.
+  const verdictSlot = h("span");
+  const actionText = h("p", { class: "sheet-action-text" });
+  const land = h("button", { class: "button button-primary", type: "button" }, icon("nav"), T.land);
+  const sunrise = h("button", { class: "button button-primary", type: "button" }, icon("sun"), T.toSunrise);
+  const options = h("button", { class: "button button-primary", type: "button" }, icon("table"), T.seeOptions);
+  const close = h("button", { class: "panel-toggle", type: "button", "aria-label": T.closeSheet, title: T.closeSheet }, icon("close"));
+  let riseMs: number | null = null;
+  land.addEventListener("click", () => actions.land());
+  sunrise.addEventListener("click", () => {
+    // One display step after the rise, so the Sun is already above the terrain.
+    if (riseMs !== null) actions.jumpTo(riseMs + 600_000);
+  });
+  options.addEventListener("click", () => actions.setCompare(true, "delay"));
+  close.addEventListener("click", () => actions.back());
+
+  // Four short tabs instead of one long scroll.
+  type Tab = "summary" | "year" | "learn" | "detail";
+  let tab: Tab = "summary";
+  const panes: Record<Tab, HTMLElement> = {
+    summary: h(
       "div",
-      { class: "sheet-scroll" },
-      h("div", { class: "cond-head" }, name, place, tags),
+      { class: "pane" },
       customNote,
       verdictBox,
       sun.el,
       earth.el,
       both,
+      h("figure", { class: "sky-fig" }, sky.el, h("figcaption", { class: "note" }, h("span", { class: "only-simple", text: T.skyCaption }), h("span", { class: "only-expert" }, skyNote))),
       insightList,
-      facts,
-      sensBlock,
-      uses,
-      yearBlock,
-      compare,
-      more,
     ),
+    year: h("div", { class: "pane" }, yearBlock, sensBlock, compare),
+    learn: h("div", { class: "pane" }, uses, facts),
+    detail: h("div", { class: "pane" }, more),
+  };
+  const tabButtons = (Object.keys(panes) as Tab[]).map((id) => {
+    const label = { summary: T.tabSummary, year: T.tabYear, learn: T.tabLearn, detail: T.tabDetail }[id];
+    const b = h("button", { class: `seg ${id === "detail" ? "only-expert" : ""}`, type: "button", text: label });
+    b.addEventListener("click", () => showTab(id));
+    return { id, b };
+  });
+  function showTab(next: Tab): void {
+    tab = next;
+    for (const { id, b } of tabButtons) {
+      b.classList.toggle("is-on", id === tab);
+      panes[id].hidden = id !== tab;
+    }
+  }
+  showTab("summary");
+
+  const panel = h(
+    "section",
+    { class: "panel conditions", "aria-label": T.sheetTitle, hidden: true },
+    h("header", { class: "sheet-head" }, h("div", { class: "cond-head" }, name, place, tags), close),
+    h("div", { class: "sheet-action" }, h("div", { class: "sheet-action-row" }, verdictSlot, land, sunrise, options), actionText),
+    h("div", { class: "segmented segmented-wide sheet-tabs" }, ...tabButtons.map((t) => t.b)),
+    h("div", { class: "sheet-scroll" }, ...Object.values(panes)),
   );
 
   yearGrid.addEventListener("click", (event) => {
@@ -327,7 +361,8 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
         .filter((text): text is string => text !== null)
         .map((text) => h("li", { text })),
     );
-    more.open = expert;
+    // The precision tab is for scientists: leaving that display brings back the summary.
+    if (!expert && tab === "detail") showTab("summary");
 
     const verdict = verdictAt(derived, site, s.heightM, s.date, s.criteria);
     const lines = failureLines(verdict, valuesAt(derived, site, s.heightM, s.date), s.criteria, s.mode).map((text) => h("p", { class: "plan-fail", text }));
@@ -340,12 +375,12 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
         const weeks = s.dates.indexOf(next) - s.dates.indexOf(s.date);
         exits.push(h("p", { class: "plan-next", text: T.nextGo(formatShortDate(next), weeks) }), go);
       } else exits.push(h("p", { class: "plan-next", text: T.nextGoNone }));
-      const options = h("button", { class: "button button-small", type: "button" }, icon("table"), T.seeOptions);
-      options.addEventListener("click", () => actions.setCompare(true, "delay"));
-      exits.push(options);
     }
+    verdictSlot.replaceChildren(verdictPill(verdict));
+    // The reasons and the ways out are only needed when the answer is not a plain yes.
+    verdictBox.hidden = verdict.status === "go";
     verdictBox.className = `verdict-box is-${verdict.status}`;
-    verdictBox.replaceChildren(verdictPill(verdict), ...lines, ...exits, h("p", { class: "note", text: T.verdictNote }));
+    verdictBox.replaceChildren(...lines, ...exits, h("p", { class: "note", text: T.verdictNote }));
     traceScenario.value.textContent = scenario.scenarioId;
     traceModel.value.textContent = scenario.modelLevel;
     traceValidation.value.textContent = scenario.validationStatus;
@@ -393,6 +428,15 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
       s.mode === "expert" ? T.panelExpert(flat.toFixed(2)) : flat < 0.5 ? T.panelFlat(formatPercent0(flat)) : T.panelHigh(formatPercent0(flat));
     earth.event.textContent = at(earthNow, T.eventLabels.earthSet, T.eventLabels.earthRise);
     sky.setNow(sample);
+
+    // One action at a time, and only before the flight.
+    const choice = s.phase === "focus" ? landingChoice(s, derived) : { kind: "none" as const, text: "", riseMs: null };
+    land.hidden = choice.kind !== "land";
+    sunrise.hidden = choice.kind !== "sunrise";
+    options.hidden = choice.kind !== "options";
+    riseMs = choice.riseMs;
+    actionText.textContent = choice.text;
+    actionText.hidden = choice.text === "";
   }
 
   store.subscribe((s, p) => {
@@ -405,7 +449,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     if (!show || !ready || !site || !s.scenario) return;
     const still = wasHidden || s.mode !== p.mode || s.criteria !== p.criteria || s.date !== p.date || s.customTick !== p.customTick || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
     if (still) renderStill(site, s, s.scenario);
-    if (still || s.index !== p.index) renderNow(s, s.scenario);
+    if (still || s.index !== p.index || s.phase !== p.phase) renderNow(s, s.scenario);
   });
   return panel;
 }
