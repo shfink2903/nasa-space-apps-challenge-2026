@@ -50,8 +50,9 @@ Keys: `Space` play/pause, `←` `→` one hour, `Esc` back. With "reduce motion"
 
 ### Ranking rules
 
+- **South pole / All sites**: the ranking and the compare sheet show the south pole sites by default (south of 60° S: Chandrayaan-3, IM-1 and the three study points). "All sites" adds the Apollo and other landings as a reference. The 60° S limit only groups the display; it is shown next to the switch and is not a mission rule. On the globe, the sites outside the chosen group stay clickable but are drawn smaller.
 - The ranking is a sort on one published metric, chosen by the user. No score, weight or threshold is invented (data.md §10.2). The default criterion (Sun and Earth together) is a team default and can be changed.
-- "Best" always means best among the 13 explored sites, for this date and this criterion. It is not a mission validation.
+- "Best" always means best among the sites shown, for this date and this criterion. It is not a mission validation.
 - ◆ marks the non-dominated set published by DATA in `comparisons/`. It is read, never recomputed.
 - Polar rows use the LOLA terrain model (experimental, not validated); the other rows ignore terrain. The model level is shown on every row.
 

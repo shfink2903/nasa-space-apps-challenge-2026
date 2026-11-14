@@ -43,7 +43,7 @@ const FR = {
 
   guideTitle: "Mode d'emploi",
   guideSteps: [
-    { title: "Comparez les sites", text: "Le bouton Comparer classe les 13 sites : éclairage du Soleil et communication avec la Terre." },
+    { title: "Comparez les sites", text: "Le bouton Comparer classe les sites du pôle Sud : éclairage du Soleil et communication avec la Terre." },
     { title: "Changez la date", text: "Faites glisser la date : le classement bouge sous vos yeux, semaine après semaine." },
     { title: "Ouvrez un site", text: "Un clic sur un point du globe : zoom, éclairage et communication en un coup d'œil." },
     { title: "Posez-vous", text: "Starship ne se pose que si le site est éclairé." },
@@ -89,7 +89,11 @@ const FR = {
   nonDominated: "Non dominé",
   nonDominatedHelp:
     "Non dominé : aucun autre scénario exploré au même niveau de modèle (hauteurs 2 m et 10 m réunies) ne fait au moins aussi bien sur les 4 critères de l'équipe DATA (Soleil, Terre, plus longue nuit, Soleil + Terre) et mieux sur un.",
-  rankNote: (n: number) => `Classement parmi les ${n} sites explorés, pour cette date et ce critère. Ce n'est pas une validation de mission.`,
+  rankNote: (n: number) => `Classement parmi les ${n} sites affichés, pour cette date et ce critère. Ce n'est pas une validation de mission.`,
+  regionLabel: "Sites",
+  regionSouth: "Pôle Sud",
+  regionAll: "Tous les sites",
+  regionHint: "Pôle Sud : les sites au sud de 60° S. Les autres (Apollo, etc.) servent de référence.",
   flyTo: (name: string) => `Voir ${name}`,
   unknown: "inconnu",
 
@@ -102,7 +106,7 @@ const FR = {
     surface: "Posé",
   } satisfies Record<Phase, string>,
   cruiseTitle: "Où se poser, et quand ?",
-  cruiseText: "Comparez les 13 sites, ou cliquez un point du globe pour voir son éclairage et sa communication.",
+  cruiseText: "Comparez les sites du pôle Sud, ou cliquez un point du globe pour voir son éclairage et sa communication.",
   flightText: "Vol illustratif. Aucune trajectoire n'est calculée.",
   surfaceText: "Faites glisser pour tourner autour du vaisseau. Le curseur de temps déplace le Soleil et la Terre.",
   focusSunUp: (left: string | null) => (left ? `Site éclairé : encore ${left} avant la nuit.` : "Site éclairé jusqu'à la fin des 30 jours."),
@@ -241,7 +245,7 @@ const EN: typeof FR = {
 
   guideTitle: "How it works",
   guideSteps: [
-    { title: "Compare the sites", text: "The Compare button ranks the 13 sites: lighting from the Sun and communication with Earth." },
+    { title: "Compare the sites", text: "The Compare button ranks the south pole sites: lighting from the Sun and communication with Earth." },
     { title: "Change the date", text: "Drag the date: the ranking moves as you watch, week after week." },
     { title: "Open a site", text: "Click a point on the globe: zoom, lighting and communication at a glance." },
     { title: "Land", text: "Starship only lands when the site is lit." },
@@ -287,7 +291,11 @@ const EN: typeof FR = {
   nonDominated: "Non-dominated",
   nonDominatedHelp:
     "Non-dominated: no other explored scenario at the same model level (2 m and 10 m heights together) does at least as well on the 4 criteria of the DATA team (Sun, Earth, longest night, Sun + Earth) and better on one.",
-  rankNote: (n: number) => `Ranking among the ${n} explored sites, for this date and this criterion. This is not a mission validation.`,
+  rankNote: (n: number) => `Ranking among the ${n} sites shown, for this date and this criterion. This is not a mission validation.`,
+  regionLabel: "Sites",
+  regionSouth: "South pole",
+  regionAll: "All sites",
+  regionHint: "South pole: the sites south of 60° S. The others (Apollo, etc.) are there as a reference.",
   flyTo: (name: string) => `View ${name}`,
   unknown: "unknown",
 
@@ -300,7 +308,7 @@ const EN: typeof FR = {
     surface: "Landed",
   },
   cruiseTitle: "Where to land, and when?",
-  cruiseText: "Compare the 13 sites, or click a point on the globe to see its lighting and its communication.",
+  cruiseText: "Compare the south pole sites, or click a point on the globe to see its lighting and its communication.",
   flightText: "Illustrative flight. No trajectory is computed.",
   surfaceText: "Drag to turn around the ship. The time slider moves the Sun and the Earth.",
   focusSunUp: (left: string | null) => (left ? `Site lit: ${left} left before night.` : "Site lit until the end of the 30 days."),

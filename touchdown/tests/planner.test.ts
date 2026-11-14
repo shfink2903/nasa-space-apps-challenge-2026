@@ -13,7 +13,7 @@ import {
   type Series,
   type Site,
 } from "../src/data/dataset";
-import { CRITERIA, criterionById, rankSites } from "../src/data/ranking";
+import { CRITERIA, criterionById, rankSites, sitesIn, SOUTH_REGION_MAX_LAT_DEG } from "../src/data/ranking";
 
 const DATA = resolve(__dirname, "../../data/processed/v1");
 const read = <T>(path: string): T => JSON.parse(readFileSync(resolve(DATA, path), "utf8")) as T;
@@ -122,5 +122,17 @@ describe("ranking", () => {
       const published = derived.comparisons[`${DATE}|${r.model}`].nonDominated;
       expect(r.nonDominated).toBe(published.includes(r.scenarioId!));
     }
+  });
+});
+
+describe("region filter", () => {
+  it("keeps only the sites south of the shown limit, and ranks among them", () => {
+    const south = sitesIn(sites, "south");
+    expect(south.map((s) => s.id).sort()).toEqual(["chandrayaan3", "im1", "sp_s8600", "sp_s8800", "sp_s8950"]);
+    expect(south.every((s) => s.latDeg <= SOUTH_REGION_MAX_LAT_DEG)).toBe(true);
+    expect(sitesIn(sites, "all")).toHaveLength(sites.length);
+    const rows = rankSites(south, derived, DATE, 2, criterionById("overlap"));
+    expect(rows).toHaveLength(5);
+    expect(rows[0].rank).toBe(1);
   });
 });

@@ -1,4 +1,4 @@
-import { criterionById, CRITERIA, rankSites, type Criterion, type RankRow } from "../data/ranking";
+import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow, type Region } from "../data/ranking";
 import type { Derived } from "../data/dataset";
 import type { Actions, Store } from "../state";
 import { h, icon } from "./dom";
@@ -9,6 +9,27 @@ import { T } from "./strings";
 export function formatCriterion(criterion: Criterion, value: number | null): string {
   if (value === null) return "—";
   return criterion.kind === "fraction" ? formatPercent0(value) : formatHours(value);
+}
+
+/** Two-way switch: south pole sites only, or every site. Shared by the ranking and the compare sheet. */
+export function createRegionSwitch(store: Store, actions: Actions): HTMLElement {
+  const make = (region: Region, label: string): HTMLButtonElement => {
+    const b = h("button", { class: "seg", type: "button", text: label, title: T.regionHint });
+    b.addEventListener("click", () => actions.setRegion(region));
+    return b;
+  };
+  const south = make("south", T.regionSouth);
+  const all = make("all", T.regionAll);
+  const paint = (): void => {
+    const { region } = store.get();
+    south.classList.toggle("is-on", region === "south");
+    all.classList.toggle("is-on", region === "all");
+  };
+  store.subscribe((s, p) => {
+    if (s.region !== p.region) paint();
+  });
+  paint();
+  return h("div", { class: "segmented segmented-wide", role: "group", "aria-label": T.regionLabel }, south, all);
 }
 
 /**
@@ -63,6 +84,7 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
       h("div", null, h("small", { class: "kicker", text: T.listKicker }), h("h2", { class: "panel-title panel-title-big", text: T.listTitle })),
     ),
     compare,
+    createRegionSwitch(store, actions),
     h("label", { class: "field-label", for: "rank-by" }, T.rankBy, date),
     select,
     body,
@@ -81,13 +103,14 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
   };
 
   store.subscribe((s, p) => {
-    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy) {
+    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.region !== p.region) {
       const criterion = criterionById(s.rankBy);
       select.value = criterion.id;
       date.textContent = s.date ? `${formatShortDate(s.date)} · ${s.heightM} m` : "";
-      note.textContent = T.rankNote(s.sites.length);
+      const shown = sitesIn(s.sites, s.region);
+      note.textContent = T.rankNote(shown.length);
       rows.clear();
-      body.replaceChildren(...rankSites(s.sites, derived, s.date, s.heightM, criterion).map((r) => row(r, criterion)));
+      body.replaceChildren(...rankSites(shown, derived, s.date, s.heightM, criterion).map((r) => row(r, criterion)));
       mark();
     } else if (s.siteId !== p.siteId || s.hoverId !== p.hoverId) mark();
   });

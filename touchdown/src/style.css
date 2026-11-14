@@ -838,6 +838,24 @@ body[data-phase="final"] #scene {
   font-weight: 500;
   cursor: pointer;
 }
+.segmented-wide {
+  display: flex;
+}
+.segmented-wide .seg {
+  flex: 1;
+  white-space: nowrap;
+}
+.sites .segmented-wide {
+  margin-top: 10px;
+}
+.pin.is-dim::before {
+  inset: 8.5px;
+  opacity: 0.55;
+  box-shadow: 0 0 0 1px rgba(4, 6, 10, 0.8);
+}
+.pin.is-dim::after {
+  display: none;
+}
 .seg.is-on {
   background: var(--amber-soft);
   color: var(--amber);

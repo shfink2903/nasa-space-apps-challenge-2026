@@ -1,8 +1,9 @@
 import { sweepFor, type Derived } from "../data/dataset";
-import { criterionById, CRITERIA, rankSites, type Criterion, type RankRow } from "../data/ranking";
+import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow } from "../data/ranking";
 import type { Actions, AppState, Store } from "../state";
 import { h, icon } from "./dom";
 import { formatDeg, formatHours, formatMonth, formatPercent, formatPercent0, formatShortDate, formatStartDate, siteLabel } from "./format";
+import { createRegionSwitch } from "./sitelist";
 import { T } from "./strings";
 
 const RGB: Record<string, string> = { overlap: "232,236,244", sun: "255,186,96", earth: "157,188,255" };
@@ -84,11 +85,14 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   );
   const simpleBtn = h("button", { class: "seg", type: "button", text: T.simple });
   const preciseBtn = h("button", { class: "seg", type: "button", text: T.precise });
+  const sortOption = h("label", { class: "cmp-option", for: "cmp-sort" }, h("span", { text: T.sortedBy }), sortSelect);
+  const precisionOption = h("div", { class: "cmp-option" }, h("span", { text: T.precision }), h("div", { class: "segmented" }, simpleBtn, preciseBtn));
   const options = h(
     "div",
     { class: "cmp-options" },
-    h("label", { class: "cmp-option", for: "cmp-sort" }, h("span", { text: T.sortedBy }), sortSelect),
-    h("div", { class: "cmp-option" }, h("span", { text: T.precision }), h("div", { class: "segmented" }, simpleBtn, preciseBtn)),
+    h("div", { class: "cmp-option" }, h("span", { text: T.regionLabel }), createRegionSwitch(store, actions)),
+    sortOption,
+    precisionOption,
   );
 
   const body = h("div", { class: "sheet-body" });
@@ -159,7 +163,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       }),
     );
     const tbody = h("tbody");
-    for (const site of s.sites) {
+    for (const site of sitesIn(s.sites, s.region)) {
       const label = siteLabel(site);
       const rank = h("td", { class: "rank" });
       const mark = h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: "◆", hidden: true });
@@ -261,7 +265,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     backdrop.hidden = !s.compareOpen;
     if (!s.compareOpen || s.sites.length === 0) return;
     const active = criterionById(s.rankBy);
-    const rows = rankSites(s.sites, derived, s.date, s.heightM, active);
+    const shown = sitesIn(s.sites, s.region);
+    const rows = rankSites(shown, derived, s.date, s.heightM, active);
     const i = s.dates.indexOf(s.date);
 
     tabDate.classList.toggle("is-on", tab === "date");
@@ -269,7 +274,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     simpleBtn.classList.toggle("is-on", !precise);
     preciseBtn.classList.toggle("is-on", precise);
     dateBar.hidden = tab !== "date";
-    options.hidden = tab !== "date";
+    sortOption.hidden = tab !== "date";
+    precisionOption.hidden = tab !== "date";
     sortSelect.value = active.id;
     slider.max = String(Math.max(0, s.dates.length - 1));
     slider.value = String(Math.max(0, i));
@@ -286,7 +292,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     }
     note.replaceChildren(
       tab === "date" ? `${T.clickToSort} ` : `${T.calendarNote} `,
-      `${T.rankNote(s.sites.length)} `,
+      `${T.rankNote(shown.length)} ${s.region === "south" ? `${T.regionHint} ` : ""}`,
       h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: "◆" }),
       ` ${T.nonDominated}. `,
       precise && tab === "date" ? T.compareNote : "",
@@ -357,8 +363,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       if (!s.compareOpen) stop();
       render(true);
       if (s.compareOpen) slider.focus();
-    } else if (s.compareOpen && (s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.siteId !== p.siteId)) {
-      render(tab === "year" || s.heightM !== p.heightM);
+    } else if (s.compareOpen && (s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.siteId !== p.siteId || s.region !== p.region)) {
+      render(tab === "year" || s.heightM !== p.heightM || s.region !== p.region);
     }
   });
   return backdrop;

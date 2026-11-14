@@ -22,6 +22,7 @@ import {
   type Series,
   type Site,
 } from "./data/dataset";
+import { inRegion } from "./data/ranking";
 import { Director } from "./scene/director";
 import { OrbitScene } from "./scene/orbitScene";
 import { Stage } from "./scene/renderer";
@@ -94,6 +95,7 @@ async function boot(): Promise<void> {
     siteId: null,
     heightM: 2,
     rankBy: "overlap",
+    region: "south",
     compareOpen: false,
     hoverId: null,
     index: 0,
@@ -208,6 +210,7 @@ async function boot(): Promise<void> {
       data.catch(reportError);
     },
     setRankBy: (rankBy) => store.set({ rankBy }),
+    setRegion: (region) => store.set({ region }),
     setCompare: (compareOpen) => store.set({ compareOpen }),
     jumpTo(tMs) {
       const { series } = store.get();
@@ -266,6 +269,10 @@ async function boot(): Promise<void> {
         const el = pins.get(site.id)?.querySelector<HTMLElement>("[data-stats]");
         if (el) el.textContent = T.pinStats(share(site, "sun.anyDisk.fraction"), share(site, "earth.anyDisk.fraction"));
       }
+    }
+    if (s.region !== p.region || s.sites !== p.sites) {
+      // Sites outside the chosen region stay clickable, but smaller: they are the reference, not the subject.
+      for (const site of s.sites) pins.get(site.id)?.classList.toggle("is-dim", !inRegion(site, s.region));
     }
     if (s.hoverId !== p.hoverId) for (const [id, pin] of pins) pin.classList.toggle("is-hover", id === s.hoverId);
     if (s.phase !== p.phase) document.body.dataset.phase = s.phase;

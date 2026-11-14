@@ -24,6 +24,18 @@ export const CRITERIA: Criterion[] = [
   { id: "blackout", metricId: "earth.anyDisk.longestGapH", direction: "min", kind: "hours" },
 ];
 
+/** Which sites the ranking and the comparison show. */
+export type Region = "south" | "all";
+
+/**
+ * Display grouping only, not a mission rule: "south pole" means south of 60° S.
+ * The limit is shown to the user next to the filter.
+ */
+export const SOUTH_REGION_MAX_LAT_DEG = -60;
+
+export const inRegion = (site: Site, region: Region): boolean => region === "all" || site.latDeg <= SOUTH_REGION_MAX_LAT_DEG;
+export const sitesIn = (sites: Site[], region: Region): Site[] => sites.filter((s) => inRegion(s, region));
+
 export const criterionById = (id: string): Criterion => CRITERIA.find((c) => c.id === id) ?? CRITERIA[0];
 
 export interface RankRow {

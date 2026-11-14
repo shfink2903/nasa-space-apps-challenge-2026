@@ -1,4 +1,5 @@
 import type { HorizonProfile, Scenario, Series, Site } from "./data/dataset";
+import type { Region } from "./data/ranking";
 import type { Phase } from "./flight/timeline";
 
 export interface AppState {
@@ -12,6 +13,8 @@ export interface AppState {
   heightM: number;
   /** Id of the criterion that orders the site list (see data/ranking.ts). */
   rankBy: string;
+  /** Sites shown in the ranking and the comparison: the south pole (default) or every site. */
+  region: Region;
   compareOpen: boolean;
   hoverId: string | null;
   /** Fractional index in the display series (600 s steps). */
@@ -62,6 +65,7 @@ export interface Actions {
   setDate(date: string): void;
   setHeight(heightM: number): void;
   setRankBy(id: string): void;
+  setRegion(region: Region): void;
   setCompare(open: boolean): void;
   /** Moves the time cursor to a UTC time inside the loaded 30 days. */
   jumpTo(tMs: number): void;
