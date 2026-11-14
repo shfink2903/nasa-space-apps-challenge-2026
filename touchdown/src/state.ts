@@ -1,12 +1,18 @@
 import type { HorizonProfile, Scenario, Series, Site } from "./data/dataset";
+import type { Criteria } from "./data/mission";
 import type { Region } from "./data/ranking";
 import type { Phase } from "./flight/timeline";
 
 /** "simple": plain words for everyone. "expert": angles, UTC times, model level and limits. */
 export type Mode = "simple" | "expert";
 
+export type CompareTab = "date" | "year" | "delay";
+
 export interface AppState {
   mode: Mode;
+  /** The user's mission thresholds. They decide the go / no-go answer. */
+  criteria: Criteria;
+  compareTab: CompareTab;
   sites: Site[];
   dates: string[];
   /** Analysis start date, YYYYMMDD. */
@@ -75,7 +81,10 @@ export interface Actions {
   setRankBy(id: string): void;
   setRegion(region: Region): void;
   setMode(mode: Mode): void;
-  setCompare(open: boolean): void;
+  setCompare(open: boolean, tab?: CompareTab): void;
+  setCriteria(patch: Partial<Criteria>): void;
+  /** Moves to a UTC date and time: picks the weekly start that contains it, then the time inside it. */
+  goToTime(tMs: number): void;
   startTour(): void;
   /** Moves the time cursor to a UTC time inside the loaded 30 days. */
   jumpTo(tMs: number): void;

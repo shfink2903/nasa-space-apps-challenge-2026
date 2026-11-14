@@ -1,10 +1,13 @@
 import { sweepFor, type Derived } from "../data/dataset";
+import { verdictAt } from "../data/mission";
 import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow } from "../data/ranking";
-import type { Actions, AppState, Store } from "../state";
+import type { Actions, AppState, CompareTab, Store } from "../state";
 import { h, icon } from "./dom";
 import { formatDeg, formatMonth, formatPercent0, formatShortDate, formatStartDate, siteLabel } from "./format";
+import { createPlanner } from "./planner";
 import { createRegionSwitch, formatCriterion } from "./sitelist";
 import { T } from "./strings";
+import { verdictPill } from "./verdict";
 
 const RGB: Record<string, string> = { overlap: "232,236,244", sun: "255,186,96", earth: "157,188,255" };
 const FRACTIONS = ["sun", "earth", "overlap"].map(criterionById);
@@ -42,6 +45,7 @@ const COLUMNS: Column[] = [
 interface RowView {
   tr: HTMLTableRowElement;
   rank: HTMLElement;
+  verdict: HTMLElement;
   mark: HTMLElement;
   cells: Map<string, { value: HTMLElement; fill: HTMLElement | null }>;
 }
@@ -54,17 +58,19 @@ interface RowView {
  * dataset index; nothing is computed here.
  */
 export function createCompare(store: Store, actions: Actions, derived: Derived): HTMLElement {
-  let tab: "date" | "year" = "date";
+  let tab: CompareTab = store.get().compareTab;
+  const planner = createPlanner(store, actions, derived);
   /** The scientist display starts detailed. Everyone always gets the three simple bars. */
   let detailed = true;
   let precise = false;
-  let calendarMetric = "sun";
+  let calendarMetric = "verdict";
   let timer = 0;
   let views = new Map<string, RowView>();
   let order = "";
 
   const tabDate = h("button", { class: "seg", type: "button", text: T.tabTable });
   const tabYear = h("button", { class: "seg", type: "button", text: T.tabCalendar });
+  const tabDelay = h("button", { class: "seg", type: "button", text: T.tabDelay });
   const close = h("button", { class: "panel-toggle", type: "button", "aria-label": T.closeLabel }, icon("close"));
 
   // --- Date control: the interactive part. ---
@@ -110,7 +116,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       "header",
       { class: "panel-head" },
       h("div", null, h("h2", { class: "sheet-title", text: T.compareTitle }), h("p", { class: "sheet-sub", text: T.compareLead })),
-      h("div", { class: "sheet-tools" }, h("div", { class: "segmented" }, tabDate, tabYear), close),
+      h("div", { class: "sheet-tools" }, h("div", { class: "segmented" }, tabDate, tabYear, tabDelay), close),
     ),
     dateBar,
     options,
@@ -157,6 +163,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       null,
       h("th", { scope: "col", class: "rank", text: "#" }),
       h("th", { scope: "col", class: "name", text: T.colSite }),
+      h("th", { scope: "col", class: "verdict", title: T.verdictNote }, h("span", { class: "col-title", text: T.verdictCol }), h("small", { text: T.verdictHint })),
       ...columns.map((c) => {
         const label = h("span", { class: "col-title", text: c.title });
         const id = metricOf(c);
@@ -171,8 +178,9 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     const tbody = h("tbody");
     for (const site of sitesIn(s.sites, s.region)) {
       const label = siteLabel(site);
-      const free = site.status === "custom";
+      const free = site.computed === true;
       const rank = h("td", { class: "rank" });
+      const verdict = h("td", { class: "verdict" });
       const mark = h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆", hidden: true });
       const cells = new Map<string, { value: HTMLElement; fill: HTMLElement | null }>();
       const tds = columns.map((c) => {
@@ -188,6 +196,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         { tabindex: 0 },
         rank,
         h("th", { scope: "row", class: "name", title: site.name }, h("span", null, label.title, site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }), free && h("em", { class: "tag tag-warn", title: T.customWarning, text: T.customTag }), mark)),
+        verdict,
         ...tds,
       );
       tr.addEventListener("click", () => open(site.id));
@@ -195,7 +204,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         if (event.key === "Enter") open(site.id);
       });
       tbody.append(tr);
-      views.set(site.id, { tr, rank, mark, cells });
+      views.set(site.id, { tr, rank, verdict, mark, cells });
     }
     return h("table", { class: `compare-table ${precise ? "is-precise" : ""}` }, h("thead", null, head), tbody);
   }
@@ -209,6 +218,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       const view = views.get(r.site.id);
       if (!view) return;
       view.rank.textContent = r.rank === null ? "–" : String(r.rank);
+      view.verdict.replaceChildren(verdictPill(verdictAt(derived, r.site, s.heightM, s.date, s.criteria), true));
       view.mark.hidden = !r.nonDominated;
       view.tr.classList.toggle("is-selected", r.site.id === s.siteId);
       view.tr.classList.toggle("is-first", r.rank === 1);
@@ -228,13 +238,14 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   }
 
   function calendar(s: AppState, rows: RankRow[]): HTMLElement {
-    const criterion = criterionById(calendarMetric);
+    const byVerdict = calendarMetric === "verdict";
+    const criterion = criterionById(byVerdict ? "sun" : calendarMetric);
     const rgb = RGB[criterion.id];
     const pick = h("div", { class: "segmented" });
-    for (const c of FRACTIONS) {
-      const b = h("button", { class: `seg ${c.id === criterion.id ? "is-on" : ""}`, type: "button", text: T.criteriaShort[c.id] });
+    for (const [id, label] of [["verdict", T.verdictCol], ...FRACTIONS.map((c) => [c.id, T.criteriaShort[c.id]])]) {
+      const b = h("button", { class: `seg ${id === calendarMetric ? "is-on" : ""}`, type: "button", text: label });
       b.addEventListener("click", () => {
-        calendarMetric = c.id;
+        calendarMetric = id;
         render(true);
       });
       pick.append(b);
@@ -250,9 +261,19 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       const values = sweepFor(derived, r.site, s.heightM, r.model)?.values[criterion.metricId] ?? [];
       const cells = s.dates.map((d, i) => {
         const v = values[i] ?? null;
-        const label = `${siteLabel(r.site).title} · ${formatShortDate(d)} · ${T.criteriaShort[criterion.id]} ${v === null ? "—" : formatPercent0(v)}`;
+        const status = byVerdict ? verdictAt(derived, r.site, s.heightM, d, s.criteria).status : null;
+        const what = status ? (status === "go" ? T.go : status === "nogo" ? T.nogo : T.unknownVerdict) : `${T.criteriaShort[criterion.id]} ${v === null ? "—" : formatPercent0(v)}`;
+        const label = `${siteLabel(r.site).title} · ${formatShortDate(d)} · ${what}`;
         const cell = h("button", { class: `cal-cell ${d === s.date ? "is-current" : ""}`, type: "button", "data-site": r.site.id, "data-date": d, title: label, "aria-label": label });
-        cell.style.background = v === null ? "rgba(255,255,255,0.05)" : `rgba(${rgb},${(0.06 + 0.94 * v).toFixed(3)})`;
+        cell.style.background = status
+          ? status === "go"
+            ? "rgba(126,224,161,0.9)"
+            : status === "nogo"
+              ? "rgba(255,154,138,0.22)"
+              : "rgba(255,255,255,0.05)"
+          : v === null
+            ? "rgba(255,255,255,0.05)"
+            : `rgba(${rgb},${(0.06 + 0.94 * v).toFixed(3)})`;
         return cell;
       });
       grid.append(h("span", { class: `cal-name ${r.site.id === s.siteId ? "is-selected" : ""}`, text: siteLabel(r.site).title }), h("div", { class: "cal-row" }, ...cells));
@@ -261,8 +282,10 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       const cell = (event.target as HTMLElement).closest<HTMLElement>(".cal-cell");
       if (cell?.dataset.site && cell.dataset.date) open(cell.dataset.site, cell.dataset.date);
     });
-    const scale = h("div", { class: "cal-scale" }, h("span", { text: "0 %" }), h("i"), h("span", { text: "100 %" }));
-    (scale.children[1] as HTMLElement).style.background = `linear-gradient(to right, rgba(${rgb},0.06), rgb(${rgb}))`;
+    const scale = byVerdict
+      ? h("div", { class: "cal-scale" }, h("i", { class: "dot dot-go" }), T.go, h("i", { class: "dot dot-nogo" }), T.nogo)
+      : h("div", { class: "cal-scale" }, h("span", { text: "0 %" }), h("i", { class: "cal-ramp" }), h("span", { text: "100 %" }));
+    if (!byVerdict) (scale.children[1] as HTMLElement).style.background = `linear-gradient(to right, rgba(${rgb},0.06), rgb(${rgb}))`;
     return h("div", null, h("div", { class: "cmp-options" }, h("div", { class: "cmp-option" }, h("span", { text: T.calendarMetric }), pick), scale), grid);
   }
 
@@ -281,6 +304,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
 
     tabDate.classList.toggle("is-on", tab === "date");
     tabYear.classList.toggle("is-on", tab === "year");
+    tabDelay.classList.toggle("is-on", tab === "delay");
+    options.hidden = tab === "delay";
     simpleBtn.classList.toggle("is-on", !precise);
     preciseBtn.classList.toggle("is-on", precise);
     dateBar.hidden = tab !== "date";
@@ -295,6 +320,12 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     prev.disabled = i <= 0;
     next.disabled = i >= s.dates.length - 1;
 
+    if (tab === "delay") {
+      if (body.firstElementChild !== planner.el) body.replaceChildren(planner.el);
+      planner.render();
+      note.replaceChildren(T.verdictNote);
+      return;
+    }
     if (tab === "year") body.replaceChildren(calendar(s, rows));
     else {
       if (rebuild || !body.querySelector("table")) body.replaceChildren(buildTable(s));
@@ -352,15 +383,9 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     detailed = true;
     render(true);
   });
-  tabDate.addEventListener("click", () => {
-    tab = "date";
-    render(true);
-  });
-  tabYear.addEventListener("click", () => {
-    stop();
-    tab = "year";
-    render(true);
-  });
+  tabDate.addEventListener("click", () => actions.setCompare(true, "date"));
+  tabYear.addEventListener("click", () => actions.setCompare(true, "year"));
+  tabDelay.addEventListener("click", () => actions.setCompare(true, "delay"));
   close.addEventListener("click", () => actions.setCompare(false));
   backdrop.addEventListener("click", (event) => {
     if (event.target === backdrop) actions.setCompare(false);
@@ -368,11 +393,17 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   store.subscribe((s, p) => {
     if (s.dates !== p.dates) fillMonths(s.dates);
     if (s.compareOpen && s.compareOpen === p.compareOpen && (s.sites !== p.sites || s.customTick !== p.customTick)) render(s.sites !== p.sites || tab === "year");
+    if (s.compareTab !== p.compareTab) {
+      stop();
+      tab = s.compareTab;
+      if (s.compareOpen === p.compareOpen && s.compareOpen) render(true);
+    }
     if (s.compareOpen !== p.compareOpen) {
       if (!s.compareOpen) stop();
+      else planner.reset();
       render(true);
       if (s.compareOpen) slider.focus();
-    } else if (s.compareOpen && (s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.siteId !== p.siteId || s.region !== p.region || s.mode !== p.mode)) {
+    } else if (s.compareOpen && (s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.siteId !== p.siteId || s.region !== p.region || s.mode !== p.mode || s.criteria !== p.criteria)) {
       render(tab === "year" || s.heightM !== p.heightM || s.region !== p.region || s.mode !== p.mode);
     }
   });

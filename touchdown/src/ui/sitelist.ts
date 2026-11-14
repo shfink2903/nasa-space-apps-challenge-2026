@@ -1,3 +1,4 @@
+import { verdictAt } from "../data/mission";
 import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow, type Region } from "../data/ranking";
 import type { Derived } from "../data/dataset";
 import type { Actions, Mode, Store } from "../state";
@@ -87,10 +88,15 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
       h(
         "span",
         { class: "site-text" },
-        h("b", null, label.title, study && h("em", { class: "tag tag-ice", text: T.studyTag }), r.nonDominated && h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆" })),
+        h("b", null, label.title, site.computed && h("em", { class: "tag tag-warn", title: T.customWarning, text: "≈" }), study && h("em", { class: "tag tag-ice", text: T.studyTag }), r.nonDominated && h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆" })),
         h("small", { text: custom ? formatCoords(site) : label.place || site.name }),
       ),
-      h("span", { class: "site-value", text: formatCriterion(criterion, r.value, store.get().mode) }),
+      h(
+        "span",
+        { class: "site-value" },
+        formatCriterion(criterion, r.value, store.get().mode),
+        h("i", { class: `verdict-dot is-${verdictAt(derived, site, store.get().heightM, store.get().date, store.get().criteria).status}`, title: T.verdictNote }),
+      ),
     );
     button.addEventListener("click", () => actions.selectSite(site.id));
     button.addEventListener("pointerenter", () => actions.hover(site.id));
@@ -129,7 +135,7 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
   };
 
   store.subscribe((s, p) => {
-    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.region !== p.region || s.mode !== p.mode || s.customTick !== p.customTick) {
+    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.region !== p.region || s.mode !== p.mode || s.customTick !== p.customTick || s.criteria !== p.criteria) {
       const criterion = criterionById(s.rankBy);
       select.value = criterion.id;
       date.textContent = s.date ? `${formatShortDate(s.date)} · ${s.heightM} m` : "";

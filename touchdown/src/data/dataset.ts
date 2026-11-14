@@ -7,7 +7,7 @@ import { lerpAngleDeg } from "./astro";
 export const DATA_BASE = "/data/v1";
 
 /** "custom" is a free point chosen by the user; it is not in the dataset catalogue. */
-export type SiteStatus = "historical" | "study_point" | "custom";
+export type SiteStatus = "historical" | "study_point" | "announced" | "custom";
 /** 0 = not visible, 1 = partly visible, 2 = fully visible, null = unknown. */
 export type DiskState = 0 | 1 | 2 | null;
 
@@ -22,6 +22,10 @@ export interface Site {
   /** "single_source", "unverified" or "team_defined", as published. */
   verification: string;
   scenarioIds: string[];
+  /** True when the dataset has no scenario for the site: its values are a geometric estimate made in the browser. */
+  computed?: boolean;
+  /** Where the position comes from, for the sites added to the dataset catalogue. */
+  source?: { title: string; url: string };
 }
 
 export interface Series {

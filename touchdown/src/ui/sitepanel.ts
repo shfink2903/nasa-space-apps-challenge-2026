@@ -27,7 +27,9 @@ import {
   formatShortDate,
   siteLabel,
 } from "./format";
+import { nextGoDate, valuesAt, verdictAt } from "../data/mission";
 import { createSkyChart } from "./skychart";
+import { failureLines, verdictPill } from "./verdict";
 import { T } from "./strings";
 
 const SUN_RGB = "255,186,96";
@@ -93,7 +95,9 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     );
     return { el, status, next, exact, event, share, fill };
   };
+  const panelLine = h("p", { class: "status-why" });
   const sun = card("sun", T.power, SUN_RGB);
+  sun.el.append(panelLine);
   const earth = card("earth", T.comms, EARTH_RGB);
   const bothFill = h("i");
   const bothValue = h("b");
@@ -117,6 +121,16 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   const traceValidation = line(T.validation);
   const traceCoverage = line(T.coverage);
   const customNote = h("p", { class: "warn-box", text: T.customWarning, hidden: true });
+  // Go / no-go for this site and this date, by the user's criteria, with a way out when it is no.
+  const verdictBox = h("div", { class: "verdict-box" });
+  const uses = h(
+    "div",
+    { class: "block" },
+    h("h3", { class: "block-title", text: T.solarTitle }),
+    h("ul", { class: "facts" }, ...T.solarUses.map((text) => h("li", { text }))),
+    h("h3", { class: "block-title", text: T.whyChanges }),
+    h("ul", { class: "facts" }, h("li", { text: T.whyDay }), h("li", { text: T.whySeason }), h("li", { text: T.whyEarthMoves })),
+  );
   const factList = h("ul", { class: "facts" });
   const facts = h("div", { class: "block only-simple" }, h("h3", { class: "block-title", text: T.factsTitle }), factList);
   const insightList = h("ul", { class: "insights" });
@@ -187,12 +201,14 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
       { class: "sheet-scroll" },
       h("div", { class: "cond-head" }, name, place, tags),
       customNote,
+      verdictBox,
       sun.el,
       earth.el,
       both,
       insightList,
       facts,
       sensBlock,
+      uses,
       yearBlock,
       compare,
       more,
@@ -271,10 +287,12 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     const label = siteLabel(site);
     name.textContent = label.title;
     place.textContent = label.place ? `${label.place} · ${formatCoords(site)}` : formatCoords(site);
-    const custom = site.status === "custom";
+    const custom = site.computed === true;
     customNote.hidden = !custom;
+    const statusText =
+      site.status === "custom" ? T.statusCustom : site.status === "study_point" ? T.statusStudy : site.status === "announced" ? T.statusAnnounced : T.statusHistorical;
     tags.replaceChildren(
-      h("span", { class: "tag", text: custom ? T.statusCustom : site.status === "study_point" ? T.statusStudy : T.statusHistorical }),
+      h("span", { class: "tag", text: statusText }),
       custom
         ? h("span", { class: "tag tag-warn", text: T.customTag })
         : h("span", { class: `tag ${site.verification === "unverified" ? "tag-warn" : ""}`, text: T.verification[site.verification] ?? site.verification }),
@@ -310,6 +328,24 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
         .map((text) => h("li", { text })),
     );
     more.open = expert;
+
+    const verdict = verdictAt(derived, site, s.heightM, s.date, s.criteria);
+    const lines = failureLines(verdict, valuesAt(derived, site, s.heightM, s.date), s.criteria, s.mode).map((text) => h("p", { class: "plan-fail", text }));
+    const exits: HTMLElement[] = [];
+    if (verdict.status === "nogo") {
+      const next = nextGoDate(derived, site, s.heightM, s.date, s.criteria);
+      if (next) {
+        const go = h("button", { class: "button button-small", type: "button" }, icon("right"), T.goToDate);
+        go.addEventListener("click", () => actions.setDate(next));
+        const weeks = s.dates.indexOf(next) - s.dates.indexOf(s.date);
+        exits.push(h("p", { class: "plan-next", text: T.nextGo(formatShortDate(next), weeks) }), go);
+      } else exits.push(h("p", { class: "plan-next", text: T.nextGoNone }));
+      const options = h("button", { class: "button button-small", type: "button" }, icon("table"), T.seeOptions);
+      options.addEventListener("click", () => actions.setCompare(true, "delay"));
+      exits.push(options);
+    }
+    verdictBox.className = `verdict-box is-${verdict.status}`;
+    verdictBox.replaceChildren(verdictPill(verdict), ...lines, ...exits, h("p", { class: "note", text: T.verdictNote }));
     traceScenario.value.textContent = scenario.scenarioId;
     traceModel.value.textContent = scenario.modelLevel;
     traceValidation.value.textContent = scenario.validationStatus;
@@ -330,6 +366,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     heightButtons.forEach((b, i) => b.classList.toggle("is-on", HEIGHTS[i] === s.heightM));
     model.textContent = custom ? T.modelCustom : lola ? T.modelLola : T.modelGeometric;
     limits.replaceChildren(...scenario.limits.map((text) => h("li", { text })));
+    if (site.source) limits.append(h("li", { text: `Position: ${site.source.title} — ${site.source.url}` }));
   }
 
   function renderNow(s: AppState, scenario: Scenario): void {
@@ -349,6 +386,11 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     earth.exact.textContent = `${T.expertNow(formatElevation(sample.earthElDeg), formatDeg(sample.earthAzDeg))} · ${diskText(sample.earthState)}`;
     const at = (v: Visibility, set: string, rise: string): string => (v.changeMs === null ? "" : `${v.visible ? set : rise} : ${formatStamp(new Date(v.changeMs).toISOString())}`);
     sun.event.textContent = at(sunNow, T.eventLabels.sunSet, T.eventLabels.sunRise);
+    // Light caught by a flat panel: the sine of the Sun's height. Geometry only, no panel size or power.
+    const flat = Math.max(0, Math.sin((sample.sunElDeg * Math.PI) / 180));
+    panelLine.hidden = !sunNow.visible;
+    panelLine.textContent =
+      s.mode === "expert" ? T.panelExpert(flat.toFixed(2)) : flat < 0.5 ? T.panelFlat(formatPercent0(flat)) : T.panelHigh(formatPercent0(flat));
     earth.event.textContent = at(earthNow, T.eventLabels.earthSet, T.eventLabels.earthRise);
     sky.setNow(sample);
   }
@@ -361,7 +403,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     panel.hidden = !show;
     panel.classList.toggle("is-loading", show && !ready);
     if (!show || !ready || !site || !s.scenario) return;
-    const still = wasHidden || s.mode !== p.mode || s.customTick !== p.customTick || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
+    const still = wasHidden || s.mode !== p.mode || s.criteria !== p.criteria || s.date !== p.date || s.customTick !== p.customTick || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
     if (still) renderStill(site, s, s.scenario);
     if (still || s.index !== p.index) renderNow(s, s.scenario);
   });

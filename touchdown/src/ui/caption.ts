@@ -1,4 +1,5 @@
-import { sampleSeries, visibilityAt } from "../data/dataset";
+import { sampleSeries, visibilityAt, type Derived } from "../data/dataset";
+import { verdictAt } from "../data/mission";
 import type { Actions, Store } from "../state";
 import { h, icon } from "./dom";
 import { formatDuration, siteLabel } from "./format";
@@ -11,7 +12,7 @@ const ORDER = ["transfer", "descent", "final", "surface"] as const;
  * Sun is up and offers the landing. No Sun, no landing: the button is replaced
  * by a jump to the next published sunrise.
  */
-export function createCaption(store: Store, actions: Actions): HTMLElement {
+export function createCaption(store: Store, actions: Actions, derived: Derived): HTMLElement {
   const kicker = h("small", { class: "kicker" });
   const title = h("h1", { class: "caption-title" });
   const text = h("p", { class: "caption-text" });
@@ -22,9 +23,11 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
   const compare = h("button", { class: "button button-primary button-big", type: "button" }, icon("table"), T.compare);
   const tour = h("button", { class: "button button-big", type: "button" }, icon("play"), T.tourStart);
   tour.addEventListener("click", () => actions.startTour());
+  const options = h("button", { class: "button button-primary", type: "button" }, icon("table"), T.seeOptions);
+  options.addEventListener("click", () => actions.setCompare(true, "delay"));
   const skip = h("button", { class: "button", type: "button" }, icon("skip"), T.skip);
   const back = h("button", { class: "button", type: "button" }, icon("back"), h("span"));
-  const actionsRow = h("div", { class: "caption-actions" }, compare, tour, land, sunrise, skip, back);
+  const actionsRow = h("div", { class: "caption-actions" }, compare, tour, options, land, sunrise, skip, back);
   const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, stepper, actionsRow);
   let riseMs: number | null = null;
   compare.addEventListener("click", () => actions.setCompare(true));
@@ -58,6 +61,7 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
     tour.hidden = selected;
     land.hidden = true;
     sunrise.hidden = true;
+    options.hidden = true;
     riseMs = null;
     if (!selected) text.textContent = T.cruiseText;
     else if (s.phase === "surface") text.textContent = T.surfaceText;
@@ -65,7 +69,11 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
     else if (s.scenario && s.series && s.lightSiteId === s.siteId) {
       const tMs = sampleSeries(s.series, s.index).tMs;
       const sun = visibilityAt(s.scenario, "sun.anyDisk", tMs);
-      if (sun.visible) {
+      if (site && verdictAt(derived, site, s.heightM, s.date, s.criteria).status === "nogo") {
+        // The mission criteria are not met for this date: no landing, but a way to the alternatives.
+        text.textContent = T.focusNoGo;
+        options.hidden = false;
+      } else if (sun.visible) {
         text.textContent = T.focusSunUp(sun.changeMs === null ? null : formatDuration(sun.changeMs - tMs));
         land.hidden = false;
       } else if (sun.changeMs !== null) {
@@ -76,7 +84,7 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
     } else text.textContent = "";
   };
   store.subscribe((s, p) => {
-    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites || s.scenario !== p.scenario || s.lightSiteId !== p.lightSiteId) render();
+    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites || s.scenario !== p.scenario || s.lightSiteId !== p.lightSiteId || s.criteria !== p.criteria || s.customTick !== p.customTick) render();
     else if (s.phase === "focus" && s.index !== p.index) render();
   });
   render();

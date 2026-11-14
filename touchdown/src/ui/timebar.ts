@@ -1,7 +1,7 @@
 import { sampleSeries, type Series } from "../data/dataset";
 import type { Actions, Store } from "../state";
 import { h, icon } from "./dom";
-import { formatClock, formatDay, formatStartDate, siteLabel } from "./format";
+import { formatClock, formatDay, formatShortDate, formatStartDate, siteLabel } from "./format";
 import { LOCALE, T } from "./strings";
 
 const SUN_RGB = "255,186,96";
@@ -43,6 +43,13 @@ export function createTimeBar(store: Store, actions: Actions): HTMLElement {
   const date = h("span", { class: "clock-date", text: "" });
   const offset = h("span", { class: "scrub-now", text: `${T.dayLetter} + 0` });
   const select = h("select", { class: "select", id: "start-date", "aria-label": T.startDate });
+  // Any date and time inside the data: the app finds the weekly start that contains it.
+  const when = h("input", { class: "select when", id: "landing-time", type: "datetime-local", min: "2026-12-01T00:00", max: "2027-12-23T00:00" });
+  const period = h("p", { class: "note" });
+  when.addEventListener("change", () => {
+    const t = Date.parse(`${when.value}Z`);
+    if (Number.isFinite(t)) actions.goToTime(t);
+  });
   const track = h("canvas", { class: "scrub-track", "aria-hidden": "true" });
   const range = h("input", { class: "scrub-range", type: "range", min: 0, max: 4320, step: 1, value: 0, "aria-label": T.timeTitle });
   const playLabel = h("span", { text: T.play });
@@ -59,8 +66,11 @@ export function createTimeBar(store: Store, actions: Actions): HTMLElement {
     { class: "panel time", "aria-label": T.timeTitle },
     h("header", { class: "panel-head" }, h("h2", { class: "panel-title" }, icon("clock"), T.timeTitle), h("span", { class: "badge", text: "UTC" })),
     h("div", { class: "clock" }, clock, date),
-    h("label", { class: "field-label", for: "start-date" }, T.startDate, h("span", { text: T.days30 })),
-    select,
+    h("label", { class: "field-label", for: "landing-time", text: T.landingTime }),
+    when,
+    period,
+    h("label", { class: "field-label only-expert", for: "start-date" }, T.startDate, h("span", { text: T.days30 })),
+    h("div", { class: "only-expert" }, select),
     h("div", { class: "scrub" }, track, range),
     h("div", { class: "scrub-scale" }, h("span", { text: `${T.dayLetter} + 0` }), offset, h("span", { text: `${T.dayLetter} + 30` })),
     h("div", { class: "legend" }, h("i", { class: "dot dot-day" }), T.legendSun, h("i", { class: "dot dot-earth" }), T.legendEarth, lightOf),
@@ -80,6 +90,11 @@ export function createTimeBar(store: Store, actions: Actions): HTMLElement {
     }
     if (s.date !== p.date || s.dates !== p.dates) select.value = s.date;
     if (s.series !== p.series) {
+      if (s.series) {
+        const t0 = Date.parse(s.series.t0Utc);
+        const day = (ms: number): string => formatShortDate(new Date(ms).toISOString().slice(0, 10).replaceAll("-", ""));
+        period.textContent = T.windowOf(day(t0), day(t0 + (s.series.n - 1) * s.series.stepS * 1000));
+      }
       drawTrack(track, s.series);
       if (s.series) range.max = String(s.series.n - 1);
     }
@@ -90,6 +105,8 @@ export function createTimeBar(store: Store, actions: Actions): HTMLElement {
     if ((s.index !== p.index || s.series !== p.series) && s.series) {
       const sample = sampleSeries(s.series, s.index);
       clock.textContent = formatClock(sample.tMs);
+      const stamp = new Date(sample.tMs).toISOString().slice(0, 16);
+      if (document.activeElement !== when && when.value !== stamp) when.value = stamp;
       date.textContent = formatDay(sample.tMs);
       offset.textContent = `${T.dayLetter} + ${fraction.format((s.index * s.series.stepS) / 86400)}`;
       if (document.activeElement !== range) range.value = String(Math.round(s.index));

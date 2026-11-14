@@ -24,6 +24,8 @@ import {
   type Site,
 } from "./data/dataset";
 import { CUSTOM_ID, customMetrics, customScenario, customSeries, customSite } from "./data/custom";
+import { EXTRA_SITES } from "./data/targets";
+import { DEFAULT_CRITERIA, verdictAt, type Criteria } from "./data/mission";
 import { inRegion } from "./data/ranking";
 import { Director } from "./scene/director";
 import { OrbitScene } from "./scene/orbitScene";
@@ -66,6 +68,19 @@ function readMode(): Mode {
   return (asked ?? stored) === "expert" ? "expert" : "simple";
 }
 
+/** The user's thresholds are kept between visits. Anything unreadable falls back to the team default. */
+function readCriteria(): Criteria {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("touchdown.criteria") ?? "null") as Partial<Criteria> | null;
+    if (saved && typeof saved.minSun === "number" && typeof saved.minEarth === "number") {
+      return { minSun: saved.minSun, minEarth: saved.minEarth, maxNightH: typeof saved.maxNightH === "number" ? saved.maxNightH : null };
+    }
+  } catch {
+    // Blocked storage or bad content: the default is used.
+  }
+  return { ...DEFAULT_CRITERIA };
+}
+
 document.documentElement.lang = LANG;
 document.title = T.pageTitle;
 $("loader-text").textContent = T.loading;
@@ -105,6 +120,8 @@ async function boot(): Promise<void> {
   const stage = new Stage(canvas);
   const store = createStore({
     mode: readMode(),
+    criteria: readCriteria(),
+    compareTab: "date",
     sites: [],
     dates: [],
     date: "",
@@ -126,7 +143,9 @@ async function boot(): Promise<void> {
   });
 
   // --- Data: catalogue and compact index first, then the series that lights the first view. ---
-  const [sites, derived] = await Promise.all([loadSites(), loadDerived()]);
+  const [catalogue, derived] = await Promise.all([loadSites(), loadDerived()]);
+  // The dataset catalogue, then the sourced sites it lacks (CLPS, Artemis, other agencies).
+  const sites = [...catalogue, ...EXTRA_SITES];
   const reference = sites.find((s) => s.id === REFERENCE_SITE) ?? sites[0];
   const dates = availableDates(reference);
   let loadAbort = new AbortController();
@@ -171,25 +190,36 @@ async function boot(): Promise<void> {
   };
   const loadCustom = async (site: Site, date: string, heightM: number): Promise<SiteData> => {
     const series = customSeries(reference, await refSeries(date, heightM), site.latDeg, site.lonDeg, heightM);
-    return { scenario: customScenario(series, date, heightM), series, horizon: null };
+    return { scenario: customScenario(series, date, heightM, site.id), series, horizon: null };
   };
-  /** Fills the 52 weekly starts of the free point, a few at a time, so its year strip and its compare rows appear. */
-  let yearRun = 0;
-  const fillCustomYear = (site: Site, heightM: number): void => {
-    const run = ++yearRun;
+  /**
+   * Fills the 52 weekly starts of the computed sites (free point, added sites), a few dates at a time, so
+   * their year strip, their verdict and their compare rows appear. One run per group; a new run replaces it.
+   */
+  const yearRuns = new Map<string, number>();
+  const fillYear = (group: string, list: Site[], heightM: number): void => {
+    const run = (yearRuns.get(group) ?? 0) + 1;
+    yearRuns.set(group, run);
+    const live = (): boolean => yearRuns.get(group) === run;
     const all = store.get().dates;
-    const values: Record<string, (number | null)[]> = {};
-    for (const id of derived.metricIds) values[id] = all.map(() => null);
-    derived.sweeps[`${CUSTOM_ID}|${heightM}|geometric`] = { dates: all, validationStatus: "not_validated", values };
+    const tables = list.map((site) => {
+      const values: Record<string, (number | null)[]> = {};
+      for (const id of derived.metricIds) values[id] = all.map(() => null);
+      derived.sweeps[`${site.id}|${heightM}|geometric`] = { dates: all, validationStatus: "not_validated", values };
+      return values;
+    });
     // The selected date first, then the rest of the year.
     const queue = [...all].sort((a, b) => Number(b === store.get().date) - Number(a === store.get().date));
     const worker = async (): Promise<void> => {
-      for (let date = queue.shift(); date !== undefined && run === yearRun; date = queue.shift()) {
+      for (let date = queue.shift(); date !== undefined && live(); date = queue.shift()) {
         try {
-          const metrics = customMetrics(customSeries(reference, await refSeries(date, heightM), site.latDeg, site.lonDeg, heightM)).values;
-          if (run !== yearRun) return;
+          const ref = await refSeries(date, heightM);
+          if (!live()) return;
           const i = all.indexOf(date);
-          for (const id of derived.metricIds) values[id][i] = metrics[id] ?? null;
+          list.forEach((site, k) => {
+            const metrics = customMetrics(customSeries(reference, ref, site.latDeg, site.lonDeg, heightM)).values;
+            for (const id of derived.metricIds) tables[k][id][i] = metrics[id] ?? null;
+          });
           store.set({ customTick: store.get().customTick + 1 });
         } catch (err) {
           console.error(err);
@@ -198,6 +228,7 @@ async function boot(): Promise<void> {
     };
     for (let k = 0; k < 4; k++) void worker();
   };
+  const fillCustomYear = (site: Site, heightM: number): void => fillYear("free", [site], heightM);
 
   /** Data of the selected site, as a promise: the flight waits for it. */
   let siteData: Promise<{ horizon: HorizonProfile | null }> | null = null;
@@ -206,10 +237,15 @@ async function boot(): Promise<void> {
   const loadActive = (site: Site, date: string, heightM: number): Promise<{ horizon: HorizonProfile | null }> => {
     loadAbort.abort();
     loadAbort = new AbortController();
-    const load = site.status === "custom" ? loadCustom(site, date, heightM) : loadSiteData(site, date, heightM, loadAbort.signal);
+    const load = site.computed ? loadCustom(site, date, heightM) : loadSiteData(site, date, heightM, loadAbort.signal);
     const signal = loadAbort.signal;
     return load.then((d) => {
       if (signal.aborted) throw new DOMException("Superseded", "AbortError");
+      if (pendingTimeMs !== null) {
+        // A date and time was asked: place the cursor on it now that its 30 days are here.
+        store.set({ index: indexAt(d.series, pendingTimeMs), playing: false });
+        pendingTimeMs = null;
+      }
       store.set({ series: d.series, scenario: d.scenario, horizon: d.horizon, lightSiteId: site.id });
       return { horizon: d.horizon };
     });
@@ -221,6 +257,8 @@ async function boot(): Promise<void> {
   };
 
   let dateTimer = 0;
+  let pendingTimeMs: number | null = null;
+  const startMs = (date: string): number => Date.UTC(Number(date.slice(0, 4)), Number(date.slice(4, 6)) - 1, Number(date.slice(6, 8)));
   const actions: Actions = {
     /** Zoom on the site and open its sheet at once. The flight is a separate, explicit step. */
     selectSite(id) {
@@ -253,6 +291,8 @@ async function boot(): Promise<void> {
       if (parseScenarioId(s.scenario.scenarioId)?.date !== s.date) return;
       // No Sun at the site at the chosen time: no landing (the caption offers the next sunrise instead).
       if (!visibilityAt(s.scenario, "sun.anyDisk", sampleSeries(s.series, s.index).tMs).visible) return;
+      // The site does not meet the user's mission criteria for this date: no landing either.
+      if (verdictAt(derived, site, s.heightM, s.date, s.criteria).status === "nogo") return;
       director.startFlight(site, siteData, reducedMotion.matches);
     },
     hover: (id) => {
@@ -280,6 +320,7 @@ async function boot(): Promise<void> {
       store.set({ heightM });
       const free = state.sites.find((x) => x.status === "custom");
       if (free) fillCustomYear(free, heightM);
+      fillYear("extra", EXTRA_SITES, heightM);
       const data = loadActive(site, state.date, heightM);
       if (site.id === state.siteId) siteData = data;
       data.catch(reportError);
@@ -294,7 +335,25 @@ async function boot(): Promise<void> {
       }
       store.set({ mode });
     },
-    setCompare: (compareOpen) => store.set({ compareOpen }),
+    setCompare: (compareOpen, tab) => store.set(tab ? { compareOpen, compareTab: tab } : { compareOpen }),
+    setCriteria(patch) {
+      const criteria = { ...store.get().criteria, ...patch };
+      try {
+        window.localStorage.setItem("touchdown.criteria", JSON.stringify(criteria));
+      } catch {
+        // Ignored: the thresholds then last for this visit only.
+      }
+      store.set({ criteria });
+    },
+    goToTime(tMs) {
+      const s = store.get();
+      // The weekly start that contains this time: the latest one that begins before it.
+      const date = [...s.dates].reverse().find((d) => startMs(d) <= tMs);
+      if (!date || tMs > startMs(date) + 30 * 86_400_000) return showToast(T.outOfRange);
+      if (date === s.date && s.series) return actions.jumpTo(tMs);
+      pendingTimeMs = tMs;
+      actions.setDate(date);
+    },
     startTour: () => tour.start(),
     jumpTo(tMs) {
       const { series } = store.get();
@@ -327,7 +386,7 @@ async function boot(): Promise<void> {
   hud.append(
     h("div", { class: "rail rail-left" }, createGuide(store, actions), createSitePanel(store, actions, derived)),
     h("div", { class: "rail rail-right" }, createTimeBar(store, actions), createSiteList(store, actions, derived)),
-    createCaption(store, actions),
+    createCaption(store, actions, derived),
     h("p", { class: "footer", text: T.footer }),
     tour.el,
     createCompare(store, actions, derived),
@@ -379,6 +438,9 @@ async function boot(): Promise<void> {
     horizon: first.horizon,
     lightSiteId: reference.id,
   });
+
+  // The added sites get their year in the background, once the first view is on screen.
+  fillYear("extra", EXTRA_SITES, store.get().heightM);
 
   // --- Input. ---
   canvas.addEventListener(

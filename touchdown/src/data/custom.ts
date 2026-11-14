@@ -175,7 +175,7 @@ export function customMetrics(series: Series): { windows: Record<WindowKey, Visi
 }
 
 /** A scenario object with the shape of the dataset files, so every panel can show a free point. */
-export function customScenario(series: Series, date: string, heightM: number): Scenario {
+export function customScenario(series: Series, date: string, heightM: number, siteId = CUSTOM_ID): Scenario {
   const { windows, values } = customMetrics(series);
   const metrics: Metric[] = Object.entries(values).map(([metricId, value]) => ({
     metricId,
@@ -184,8 +184,8 @@ export function customScenario(series: Series, date: string, heightM: number): S
     quality: "sampled",
   }));
   return {
-    scenarioId: `${CUSTOM_ID}_${date}_30d_h${heightM}m_geometric_0b5e7fed`,
-    siteId: CUSTOM_ID,
+    scenarioId: `${siteId}_${date}_30d_h${heightM}m_geometric_0b5e7fed`,
+    siteId,
     modelLevel: "geometric (browser)",
     validationStatus: "not_validated",
     coverageStatus: "covered",
@@ -213,5 +213,6 @@ export function customSite(latDeg: number, lonDeg: number): Site {
     terrainProduct: null,
     verification: "custom",
     scenarioIds: [],
+    computed: true,
   };
 }

@@ -44,6 +44,36 @@ The main job of the tool is to **compare sites and dates** for two things: **lig
 5. **Land here**: the illustrative flight starts only when the site is lit at the chosen time. If not, the button becomes **Go to sunrise**, or the caption says that no sunrise is published in these 30 days.
 6. **On the ground:** the Sun and the Earth are where the dataset says. **Back to the sheet** returns to the zoomed view.
 
+### Mission criteria and verdict
+
+The user sets three thresholds (sliders, kept in the browser): minimum lighting, minimum communication, longest night accepted. A site and a date then get **Landing possible** or **No landing**, with the threshold that fails and its value.
+
+- The thresholds are the user's. The starting values (lighting 40 %, communication 50 %, no limit on the night) are a team default, shown as an assumption (`src/data/mission.ts`, data.md R2 and §10.1).
+- The verdict is shown on the site sheet, as a dot in the ranking, as a column in the compare sheet and as a green / red calendar over the year. A missing value gives "unknown", never a pass.
+- **No landing** blocks the flight. The sheet then gives the next date when the site meets the criteria, and a link to the other options.
+- A verdict only compares published 30-day values with the thresholds. It is not a mission validation.
+
+### Launch delay
+
+Third tab of the compare sheet, for the case the challenge describes: the launch slips. Give the planned site, the planned date and the delay in weeks. The tool answers:
+
+1. Does the same site still meet the criteria on the new date? If not, on which date does it again?
+2. Which other sites are ready soonest from the new date on, soonest first?
+
+Dates move in steps of one week (the weekly starts of the dataset), each analysed over 30 days. "Soonest" means among the explored sites and dates, by the user's criteria.
+
+### Landing date and time
+
+The time panel takes any UTC date and time between 1 Dec 2026 and 23 Dec 2027. The app loads the weekly start that contains it and puts the cursor on that time.
+
+### What the Sun is for, and why it changes
+
+Every site sheet explains what sunlight gives a lander (electricity, heat, light) and why conditions change (the 29.5-day lunar day, the lunar seasons of about 346 days, the swing of the Earth in the sky). When the site is lit, a line gives the light a flat panel catches: the sine of the Sun's height. This is geometry only: no panel size, no watts and no temperature is computed.
+
+### Sites added to the catalogue
+
+`src/data/targets.ts` adds four sourced sites the dataset does not have: IM-2 Athena (CLPS, Mons Mouton), a studied site inside the Mons Mouton Artemis III candidate region, Chang'e 6 (far side) and SLIM. Their values are geometric estimates made in the browser, like a free point, and are marked "≈" everywhere. The other Artemis III candidate regions are not listed: no reliable coordinates were found for them, and none is guessed.
+
 ### Free point: any lunar coordinates
 
 Click anywhere on the Moon, or type a latitude and a longitude under the ranking. The free point opens like any site: lighting and communication now, the 30 days, the 52 weekly starts of the year, a row in the ranking and in the compare sheet, and the landing.
