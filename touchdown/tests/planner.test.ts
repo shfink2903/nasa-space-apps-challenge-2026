@@ -14,6 +14,8 @@ import {
   type Site,
 } from "../src/data/dataset";
 import { CRITERIA, criterionById, rankSites, sitesIn, SOUTH_REGION_MAX_LAT_DEG } from "../src/data/ranking";
+import { formatShareDays } from "../src/ui/format";
+import { formatCriterion } from "../src/ui/sitelist";
 
 const DATA = resolve(__dirname, "../../data/processed/v1");
 const read = <T>(path: string): T => JSON.parse(readFileSync(resolve(DATA, path), "utf8")) as T;
@@ -134,5 +136,24 @@ describe("region filter", () => {
     const rows = rankSites(south, derived, DATE, 2, criterionById("overlap"));
     expect(rows).toHaveLength(5);
     expect(rows[0].rank).toBe(1);
+  });
+});
+
+describe("display modes", () => {
+  it("says a share in days for everyone, and keeps 0 and 30 for exact values only", () => {
+    expect(formatShareDays(0)).toContain("0");
+    expect(formatShareDays(1)).toContain("30");
+    expect(formatShareDays(0.443)).toMatch(/^13\b/);
+    expect(formatShareDays(0.02)).toContain("< 1");
+    expect(formatShareDays(0.99)).toContain("> 29");
+  });
+
+  it("keeps the exact value for scientists and never shows a missing value as zero", () => {
+    const sun = criterionById("sun");
+    const night = criterionById("night");
+    expect(formatCriterion(sun, 0.4431, "expert")).toMatch(/44[.,]3/);
+    expect(formatCriterion(night, 401.3, "expert")).toMatch(/401[.,]3/);
+    expect(formatCriterion(sun, null, "simple")).toBe("—");
+    expect(formatCriterion(sun, null, "expert")).toBe("—");
   });
 });

@@ -28,7 +28,7 @@ import { OrbitScene } from "./scene/orbitScene";
 import { Stage } from "./scene/renderer";
 import { createHullEnvironment } from "./scene/sky";
 import { SurfaceScene } from "./scene/surfaceScene";
-import { createStore, type Actions } from "./state";
+import { createStore, type Actions, type Mode } from "./state";
 import { createCaption } from "./ui/caption";
 import { createCompare } from "./ui/compare";
 import { h } from "./ui/dom";
@@ -50,6 +50,18 @@ const veil = $("veil");
 const loader = $("loader");
 const toast = $("toast");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+/** Display level: plain words by default, the scientist view on request (?mode=expert or the switch). */
+function readMode(): Mode {
+  const asked = new URLSearchParams(window.location.search).get("mode");
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem("touchdown.mode");
+  } catch {
+    // Storage can be blocked: the default display is used.
+  }
+  return (asked ?? stored) === "expert" ? "expert" : "simple";
+}
 
 document.documentElement.lang = LANG;
 document.title = T.pageTitle;
@@ -89,6 +101,7 @@ function loadTexture(manager: THREE.LoadingManager, url: string, srgb: boolean):
 async function boot(): Promise<void> {
   const stage = new Stage(canvas);
   const store = createStore({
+    mode: readMode(),
     sites: [],
     dates: [],
     date: "",
@@ -211,6 +224,14 @@ async function boot(): Promise<void> {
     },
     setRankBy: (rankBy) => store.set({ rankBy }),
     setRegion: (region) => store.set({ region }),
+    setMode(mode) {
+      try {
+        window.localStorage.setItem("touchdown.mode", mode);
+      } catch {
+        // Ignored: the choice then lasts for this visit only.
+      }
+      store.set({ mode });
+    },
     setCompare: (compareOpen) => store.set({ compareOpen }),
     jumpTo(tMs) {
       const { series } = store.get();
@@ -240,7 +261,7 @@ async function boot(): Promise<void> {
   // --- Interface. ---
   const pins = new Map<string, HTMLButtonElement>();
   hud.append(
-    h("div", { class: "rail rail-left" }, createGuide(store), createSitePanel(store, actions, derived)),
+    h("div", { class: "rail rail-left" }, createGuide(store, actions), createSitePanel(store, actions, derived)),
     h("div", { class: "rail rail-right" }, createTimeBar(store, actions), createSiteList(store, actions, derived)),
     createCaption(store, actions),
     h("p", { class: "footer", text: T.footer }),
@@ -276,8 +297,10 @@ async function boot(): Promise<void> {
     }
     if (s.hoverId !== p.hoverId) for (const [id, pin] of pins) pin.classList.toggle("is-hover", id === s.hoverId);
     if (s.phase !== p.phase) document.body.dataset.phase = s.phase;
+    if (s.mode !== p.mode) document.body.dataset.mode = s.mode;
   });
   document.body.dataset.phase = "cruise";
+  document.body.dataset.mode = store.get().mode;
 
   store.set({
     sites,

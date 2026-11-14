@@ -2,7 +2,11 @@ import type { HorizonProfile, Scenario, Series, Site } from "./data/dataset";
 import type { Region } from "./data/ranking";
 import type { Phase } from "./flight/timeline";
 
+/** "simple": plain words for everyone. "expert": angles, UTC times, model level and limits. */
+export type Mode = "simple" | "expert";
+
 export interface AppState {
+  mode: Mode;
   sites: Site[];
   dates: string[];
   /** Analysis start date, YYYYMMDD. */
@@ -66,6 +70,7 @@ export interface Actions {
   setHeight(heightM: number): void;
   setRankBy(id: string): void;
   setRegion(region: Region): void;
+  setMode(mode: Mode): void;
   setCompare(open: boolean): void;
   /** Moves the time cursor to a UTC time inside the loaded 30 days. */
   jumpTo(tMs: number): void;

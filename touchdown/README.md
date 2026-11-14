@@ -44,6 +44,19 @@ The main job of the tool is to **compare sites and dates** for two things: **lig
 5. **Land here**: the illustrative flight starts only when the site is lit at the chosen time. If not, the button becomes **Go to sunrise**, or the caption says that no sunrise is published in these 30 days.
 6. **On the ground:** the Sun and the Earth are where the dataset says. **Back to the sheet** returns to the zoomed view.
 
+### Two displays
+
+The switch at the top left changes how the same data is said. Nothing else changes: same sites, same dates, same values.
+
+| | **Everyone** (default) | **Scientist** |
+|---|---|---|
+| Shares of the 30 days | Days: "13 of 30 days" | Percent with one decimal, for both disc conventions (`anyDisk`, `fullDisk`) |
+| Durations | "16.7 d" | Exact hours: "401.3 h" |
+| Site sheet | Status, time left, one line that says why it matters, "Did you know?" facts | Adds elevation, azimuth, disc state, UTC time of the next rise or set, the sky map, terrain grid, observer height, model level, validation status, scenario id and published limits |
+| Compare sheet | Three bars | Adds longest night, longest blackout, maximum Sun and Earth heights, model level, the dataset metric id under each title and the non-dominated mark |
+
+The "Did you know?" facts are general knowledge about the Moon (length of the lunar day, low Sun at the poles, Earth nearly fixed in the near-side sky). They are not dataset values. The choice is kept in the browser; `?mode=expert` forces the scientist display.
+
 "Lit" and "link possible" are the published visibility states of the Sun and the Earth above the terrain. They are not a power budget or a radio link budget.
 
 Keys: `Space` play/pause, `←` `→` one hour, `Esc` back. With "reduce motion" on, the flight is skipped. The interface is in French or English (`FR` / `EN` button, or `?lang=en`).

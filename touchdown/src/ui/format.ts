@@ -45,6 +45,21 @@ export function formatDuration(ms: number): string {
   return T.durDay(n1.format(minutes / 1440));
 }
 export const formatHours = (hours: number): string => formatDuration(hours * 3600000);
+/** Exact hours with one decimal, for the scientist display. */
+export const formatHoursExact = (hours: number): string => T.hoursUnit(n1.format(hours));
+
+/**
+ * A share of the 30 analysed days said in days: "13 j sur 30".
+ * 0 and 30 are kept for exact values only; near them the text says "< 1" or "> 29".
+ */
+export function formatShareDays(fraction: number): string {
+  const days = fraction * 30;
+  if (fraction <= 0) return T.daysOf30("0");
+  if (fraction >= 1) return T.daysOf30("30");
+  if (days < 1) return T.daysOf30("< 1");
+  if (days > 29) return T.daysOf30("> 29");
+  return T.daysOf30(String(Math.round(days)));
+}
 
 const dayShort = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
 const monthShort = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", month: "short" });

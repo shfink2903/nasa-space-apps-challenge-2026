@@ -2,8 +2,8 @@ import { sweepFor, type Derived } from "../data/dataset";
 import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow } from "../data/ranking";
 import type { Actions, AppState, Store } from "../state";
 import { h, icon } from "./dom";
-import { formatDeg, formatHours, formatMonth, formatPercent, formatPercent0, formatShortDate, formatStartDate, siteLabel } from "./format";
-import { createRegionSwitch } from "./sitelist";
+import { formatDeg, formatMonth, formatPercent0, formatShortDate, formatStartDate, siteLabel } from "./format";
+import { createRegionSwitch, formatCriterion } from "./sitelist";
 import { T } from "./strings";
 
 const RGB: Record<string, string> = { overlap: "232,236,244", sun: "255,186,96", earth: "157,188,255" };
@@ -11,7 +11,7 @@ const FRACTIONS = ["sun", "earth", "overlap"].map(criterionById);
 const PLAY_MS = 650;
 
 interface Column {
-  /** A criterion id (sortable) or "maxSun" / "model". */
+  /** A criterion id (sortable), or "maxSun" / "maxEarth" / "model". */
   id: string;
   criterion: Criterion | null;
   title: string;
@@ -22,9 +22,12 @@ interface Column {
 
 const column = (id: string, detail: boolean): Column => {
   const criterion = CRITERIA.find((c) => c.id === id) ?? null;
-  const title = criterion ? T.criteriaShort[id] : id === "maxSun" ? T.maxSun : T.colModel;
+  const title = criterion ? T.criteriaShort[id] : id === "maxSun" ? T.colMaxSun : id === "maxEarth" ? T.colMaxEarth : T.colModel;
   return { id, criterion, title, hint: T.colHints[id] ?? "", detail };
 };
+/** Dataset metric behind each column, shown to scientists under the title. */
+const METRIC_OF: Record<string, string> = { maxSun: "sun.maxElevDeg", maxEarth: "earth.maxElevDeg" };
+const metricOf = (c: Column): string | null => c.criterion?.metricId ?? METRIC_OF[c.id] ?? null;
 const COLUMNS: Column[] = [
   column("sun", false),
   column("earth", false),
@@ -32,6 +35,7 @@ const COLUMNS: Column[] = [
   column("night", true),
   column("blackout", true),
   column("maxSun", true),
+  column("maxEarth", true),
   column("model", true),
 ];
 
@@ -51,6 +55,8 @@ interface RowView {
  */
 export function createCompare(store: Store, actions: Actions, derived: Derived): HTMLElement {
   let tab: "date" | "year" = "date";
+  /** The scientist display starts detailed. Everyone always gets the three simple bars. */
+  let detailed = true;
   let precise = false;
   let calendarMetric = "sun";
   let timer = 0;
@@ -86,7 +92,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   const simpleBtn = h("button", { class: "seg", type: "button", text: T.simple });
   const preciseBtn = h("button", { class: "seg", type: "button", text: T.precise });
   const sortOption = h("label", { class: "cmp-option", for: "cmp-sort" }, h("span", { text: T.sortedBy }), sortSelect);
-  const precisionOption = h("div", { class: "cmp-option" }, h("span", { text: T.precision }), h("div", { class: "segmented" }, simpleBtn, preciseBtn));
+  const precisionOption = h("div", { class: "cmp-option only-expert" }, h("span", { text: T.precision }), h("div", { class: "segmented" }, simpleBtn, preciseBtn));
   const options = h(
     "div",
     { class: "cmp-options" },
@@ -135,11 +141,10 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
 
   const text = (c: Column, r: RankRow): string => {
     if (c.id === "model") return T.modelShort[r.model];
-    const value = r.values[c.criterion ? c.criterion.metricId : "sun.maxElevDeg"] ?? null;
+    const value = r.values[metricOf(c)!] ?? null;
     if (value === null) return "—";
     if (!c.criterion) return formatDeg(value);
-    if (c.criterion.kind === "hours") return formatHours(value);
-    return precise ? formatPercent(value) : formatPercent0(value);
+    return formatCriterion(c.criterion, value, store.get().mode);
   };
 
   /** Builds the table once per precision level; `updateTable` then only changes values, so the bars animate. */
@@ -154,7 +159,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       h("th", { scope: "col", class: "name", text: T.colSite }),
       ...columns.map((c) => {
         const label = h("span", { class: "col-title", text: c.title });
-        const hint = h("small", { text: c.hint });
+        const id = metricOf(c);
+        const hint = h("small", null, c.hint, id && h("code", { class: "only-expert", text: id }));
         const kind = c.detail ? "is-detail" : "";
         if (!c.criterion) return h("th", { scope: "col", "data-col": c.id, class: kind, title: c.hint }, label, hint);
         const button = h("button", { type: "button" }, label, hint);
@@ -166,7 +172,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     for (const site of sitesIn(s.sites, s.region)) {
       const label = siteLabel(site);
       const rank = h("td", { class: "rank" });
-      const mark = h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: "◆", hidden: true });
+      const mark = h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆", hidden: true });
       const cells = new Map<string, { value: HTMLElement; fill: HTMLElement | null }>();
       const tds = columns.map((c) => {
         const value = h("b");
@@ -265,6 +271,9 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     backdrop.hidden = !s.compareOpen;
     if (!s.compareOpen || s.sites.length === 0) return;
     const active = criterionById(s.rankBy);
+    const wasPrecise = precise;
+    precise = s.mode === "expert" && detailed;
+    if (precise !== wasPrecise) rebuild = true;
     const shown = sitesIn(s.sites, s.region);
     const rows = rankSites(shown, derived, s.date, s.heightM, active);
     const i = s.dates.indexOf(s.date);
@@ -293,9 +302,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     note.replaceChildren(
       tab === "date" ? `${T.clickToSort} ` : `${T.calendarNote} `,
       `${T.rankNote(shown.length)} ${s.region === "south" ? `${T.regionHint} ` : ""}`,
-      h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: "◆" }),
-      ` ${T.nonDominated}. `,
-      precise && tab === "date" ? T.compareNote : "",
+      h("span", { class: "only-expert" }, h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: "◆" }), ` ${T.nonDominatedHelp} ${T.compareNote}`),
     );
   }
 
@@ -337,11 +344,11 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   });
   sortSelect.addEventListener("change", () => actions.setRankBy(sortSelect.value));
   simpleBtn.addEventListener("click", () => {
-    precise = false;
+    detailed = false;
     render(true);
   });
   preciseBtn.addEventListener("click", () => {
-    precise = true;
+    detailed = true;
     render(true);
   });
   tabDate.addEventListener("click", () => {
@@ -363,8 +370,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       if (!s.compareOpen) stop();
       render(true);
       if (s.compareOpen) slider.focus();
-    } else if (s.compareOpen && (s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.siteId !== p.siteId || s.region !== p.region)) {
-      render(tab === "year" || s.heightM !== p.heightM || s.region !== p.region);
+    } else if (s.compareOpen && (s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.siteId !== p.siteId || s.region !== p.region || s.mode !== p.mode)) {
+      render(tab === "year" || s.heightM !== p.heightM || s.region !== p.region || s.mode !== p.mode);
     }
   });
   return backdrop;

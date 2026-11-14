@@ -1,14 +1,18 @@
 import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow, type Region } from "../data/ranking";
 import type { Derived } from "../data/dataset";
-import type { Actions, Store } from "../state";
+import type { Actions, Mode, Store } from "../state";
 import { h, icon } from "./dom";
-import { formatHours, formatPercent0, formatShortDate, siteLabel } from "./format";
+import { formatHours, formatHoursExact, formatPercent, formatShareDays, formatShortDate, siteLabel } from "./format";
 import { T } from "./strings";
 
-/** A published metric as short text, by kind. A missing value stays "—", never zero. */
-export function formatCriterion(criterion: Criterion, value: number | null): string {
+/**
+ * A published metric as short text. Everyone: days out of 30 and plain durations.
+ * Scientist: percent with one decimal and exact hours. A missing value stays "—", never zero.
+ */
+export function formatCriterion(criterion: Criterion, value: number | null, mode: Mode): string {
   if (value === null) return "—";
-  return criterion.kind === "fraction" ? formatPercent0(value) : formatHours(value);
+  if (criterion.kind === "fraction") return mode === "expert" ? formatPercent(value) : formatShareDays(value);
+  return mode === "expert" ? formatHoursExact(value) : formatHours(value);
 }
 
 /** Two-way switch: south pole sites only, or every site. Shared by the ranking and the compare sheet. */
@@ -61,10 +65,10 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
       h(
         "span",
         { class: "site-text" },
-        h("b", null, label.title, study && h("em", { class: "tag tag-ice", text: T.studyTag }), r.nonDominated && h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: "◆" })),
+        h("b", null, label.title, study && h("em", { class: "tag tag-ice", text: T.studyTag }), r.nonDominated && h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆" })),
         h("small", { text: label.place || site.name }),
       ),
-      h("span", { class: "site-value", text: formatCriterion(criterion, r.value) }),
+      h("span", { class: "site-value", text: formatCriterion(criterion, r.value, store.get().mode) }),
     );
     button.addEventListener("click", () => actions.selectSite(site.id));
     button.addEventListener("pointerenter", () => actions.hover(site.id));
@@ -88,7 +92,7 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
     h("label", { class: "field-label", for: "rank-by" }, T.rankBy, date),
     select,
     body,
-    h("p", { class: "note rank-legend" }, h("em", { class: "tag tag-amber", text: "◆" }), ` ${T.nonDominated}`),
+    h("p", { class: "note rank-legend only-expert" }, h("em", { class: "tag tag-amber", text: "◆" }), ` ${T.nonDominated}`),
     note,
   );
 
@@ -103,7 +107,7 @@ export function createSiteList(store: Store, actions: Actions, derived: Derived)
   };
 
   store.subscribe((s, p) => {
-    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.region !== p.region) {
+    if (s.sites !== p.sites || s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.region !== p.region || s.mode !== p.mode) {
       const criterion = criterionById(s.rankBy);
       select.value = criterion.id;
       date.textContent = s.date ? `${formatShortDate(s.date)} · ${s.heightM} m` : "";

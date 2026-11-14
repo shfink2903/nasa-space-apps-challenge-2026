@@ -1,9 +1,23 @@
-import type { Store } from "../state";
+import type { Actions, Mode, Store } from "../state";
 import { h, icon } from "./dom";
 import { LANG, switchLang, T } from "./strings";
 
 /** Top-left: three steps. The current step follows the flight phase. */
-export function createGuide(store: Store): HTMLElement {
+export function createGuide(store: Store, actions: Actions): HTMLElement {
+  const modeButton = (mode: Mode, label: string): HTMLButtonElement => {
+    const b = h("button", { class: "seg", type: "button", text: label, title: T.modeHint });
+    b.addEventListener("click", () => actions.setMode(mode));
+    return b;
+  };
+  const simple = modeButton("simple", T.modeSimple);
+  const expert = modeButton("expert", T.modeExpert);
+  const modes = h("div", { class: "segmented segmented-wide mode-switch", role: "group", "aria-label": T.modeLabel }, simple, expert);
+  const paintMode = (): void => {
+    const { mode } = store.get();
+    simple.classList.toggle("is-on", mode === "simple");
+    expert.classList.toggle("is-on", mode === "expert");
+  };
+  paintMode();
   const steps = T.guideSteps.map((step, i) =>
     h(
       "li",
@@ -25,6 +39,7 @@ export function createGuide(store: Store): HTMLElement {
       h("div", { class: "brand" }, h("span", { class: "brand-mark", "aria-hidden": "true" }), h("div", null, h("b", { text: T.brand }), h("small", { text: T.tagline }))),
       h("div", { class: "guide-tools" }, lang, toggle),
     ),
+    modes,
     h("h2", { class: "panel-title" }, icon("nav"), T.guideTitle),
     body,
   );
@@ -41,6 +56,7 @@ export function createGuide(store: Store): HTMLElement {
     steps.forEach((el, i) => el.classList.toggle("is-current", i === current));
   };
   store.subscribe((s, p) => {
+    if (s.mode !== p.mode) paintMode();
     if (s.phase === p.phase) return;
     render();
     // The site sheet needs the room: fold the guide when a site opens.

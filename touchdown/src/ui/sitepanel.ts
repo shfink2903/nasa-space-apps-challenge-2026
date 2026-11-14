@@ -18,6 +18,9 @@ import {
   formatDuration,
   formatElevation,
   formatHours,
+  formatHoursExact,
+  formatShareDays,
+  formatStamp,
   formatMonth,
   formatPercent,
   formatPercent0,
@@ -31,6 +34,7 @@ const SUN_RGB = "255,186,96";
 const EARTH_RGB = "157,188,255";
 const HEIGHTS = [2, 10];
 
+const diskText = (state: DiskState): string => (state === null ? T.state.unknown : T.state[state]);
 const sunStatus = (state: DiskState): string => (state === null ? T.sunStatus.unknown : T.sunStatus[state]);
 const earthStatus = (state: DiskState): string => (state === null ? T.earthStatus.unknown : T.earthStatus[state]);
 const shade = (rgb: string, fraction: number | null): string =>
@@ -73,6 +77,10 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   const card = (kind: "sun" | "earth", title: string, rgb: string) => {
     const status = h("b", { class: "status-text" });
     const next = h("span", { class: "status-next" });
+    // Scientist display: angles, disc state and the exact UTC time of the next event.
+    const exact = h("span", { class: "status-exact only-expert" });
+    const event = h("span", { class: "status-exact only-expert" });
+    const why = h("p", { class: "status-why only-simple", text: kind === "sun" ? T.whySun : T.whyEarth });
     const share = h("span");
     const fill = h("i");
     fill.style.background = `rgb(${rgb})`;
@@ -80,10 +88,10 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
       "div",
       { class: `status status-${kind}` },
       h("span", { class: `cond-icon cond-${kind}` }, icon(kind)),
-      h("div", { class: "status-main" }, h("small", { class: "status-kicker", text: title }), status, next),
-      h("div", { class: "status-share" }, h("div", { class: "meter-track" }, fill), h("small", null, share, ` ${T.on30}`)),
+      h("div", { class: "status-main" }, h("small", { class: "status-kicker", text: title }), status, next, exact, event),
+      h("div", { class: "status-share" }, h("div", { class: "meter-track" }, fill), h("small", null, share), why),
     );
-    return { el, status, next, share, fill };
+    return { el, status, next, exact, event, share, fill };
   };
   const sun = card("sun", T.power, SUN_RGB);
   const earth = card("earth", T.comms, EARTH_RGB);
@@ -103,6 +111,13 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   const blackout = line(T.longestBlackout);
   const maxSun = line(T.maxSun);
   const maxEarth = line(T.maxEarth);
+  const meanSun = line(T.meanSun);
+  const traceScenario = line(T.scenarioLabel);
+  const traceModel = line(T.modelLevel);
+  const traceValidation = line(T.validation);
+  const traceCoverage = line(T.coverage);
+  const factList = h("ul", { class: "facts" });
+  const facts = h("div", { class: "block only-simple" }, h("h3", { class: "block-title", text: T.factsTitle }), factList);
   const insightList = h("ul", { class: "insights" });
   const compare = h("button", { class: "button button-wide", type: "button" }, icon("table"), T.compareThis);
   compare.addEventListener("click", () => actions.setCompare(true));
@@ -129,6 +144,40 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   const model = h("p", { class: "cond-model" });
   const limits = h("ul", { class: "limits" });
 
+  // Everything precise lives here. Closed for everyone, open and first-class for scientists.
+  const more = h(
+    "details",
+    { class: "more only-expert" },
+    h("summary", { text: T.moreTitle }),
+    h("h3", { class: "block-title", text: T.now }),
+    sunHeight.row,
+    earthHeight.row,
+    h("p", { class: "note", text: T.elevation }),
+    h("h3", { class: "block-title", text: T.skyTitle }),
+    sky.el,
+    skyNote,
+    h("h3", { class: "block-title", text: T.over30 }),
+    night.row,
+    blackout.row,
+    maxSun.row,
+    maxEarth.row,
+    meanSun.row,
+    sensBlock,
+    h("h3", { class: "block-title", text: T.height }),
+    h("div", { class: "segmented" }, ...heightButtons),
+    h("p", { class: "note", text: T.heightNote }),
+    model,
+    h("p", { class: "note", text: T.notModeled }),
+    h("details", { class: "limits-box" }, h("summary", { text: T.limitsTitle }), h("p", { class: "note", text: T.limitsNote }), limits),
+  );
+  more.append(
+    h("h3", { class: "block-title", text: T.traceTitle }),
+    traceScenario.row,
+    traceModel.row,
+    traceValidation.row,
+    traceCoverage.row,
+  );
+
   const panel = h(
     "section",
     { class: "panel conditions", "aria-label": T.sheetTitle, hidden: true },
@@ -141,32 +190,10 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
       earth.el,
       both,
       insightList,
+      facts,
       yearBlock,
       compare,
-      h(
-        "details",
-        { class: "more" },
-        h("summary", { text: T.moreTitle }),
-        h("h3", { class: "block-title", text: T.now }),
-        sunHeight.row,
-        earthHeight.row,
-        h("p", { class: "note", text: T.elevation }),
-        h("h3", { class: "block-title", text: T.skyTitle }),
-        sky.el,
-        skyNote,
-        h("h3", { class: "block-title", text: T.over30 }),
-        night.row,
-        blackout.row,
-        maxSun.row,
-        maxEarth.row,
-        sensBlock,
-        h("h3", { class: "block-title", text: T.height }),
-        h("div", { class: "segmented" }, ...heightButtons),
-        h("p", { class: "note", text: T.heightNote }),
-        model,
-        h("p", { class: "note", text: T.notModeled }),
-        h("details", { class: "limits-box" }, h("summary", { text: T.limitsTitle }), h("p", { class: "note", text: T.limitsNote }), limits),
-      ),
+      more,
     ),
   );
 
@@ -251,18 +278,36 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     const lola = parseScenarioId(scenario.scenarioId)?.model === "lola";
     skyNote.textContent = lola && s.horizon ? T.skyNote : T.skyNoteFlat;
 
+    const expert = s.mode === "expert";
+    // Everyone: days out of 30. Scientist: percent with one decimal, for both disc conventions.
     const share = (id: string, fill: HTMLElement): string => {
       const v = metric(scenario, id);
       fill.style.width = `${(v ?? 0) * 100}%`;
-      return percent(v);
+      return v === null ? "—" : expert ? percent(v) : formatShareDays(v);
     };
-    sun.share.textContent = T.litShare(share("sun.anyDisk.fraction", sun.fill));
-    earth.share.textContent = T.linkShare(share("earth.anyDisk.fraction", earth.fill));
+    const sunAny = share("sun.anyDisk.fraction", sun.fill);
+    const earthAny = share("earth.anyDisk.fraction", earth.fill);
+    sun.share.textContent = expert ? T.expertShares(sunAny, percent(metric(scenario, "sun.fullDisk.fraction"))) : T.litShare(sunAny);
+    earth.share.textContent = expert ? T.expertShares(earthAny, percent(metric(scenario, "earth.fullDisk.fraction"))) : T.linkShare(earthAny);
     bothValue.textContent = share("overlap.sunAny_earthAny.fraction", bothFill);
     const hours = (id: string): string => {
       const v = metric(scenario, id);
-      return v === null ? "—" : formatHours(v);
+      return v === null ? "—" : expert ? `${formatHoursExact(v)} (${formatHours(v)})` : formatHours(v);
     };
+
+    // Plain facts for everyone, picked by where the site is. General knowledge, not dataset values.
+    const polar = site.latDeg <= -80;
+    const earthShare = metric(scenario, "earth.anyDisk.fraction");
+    factList.replaceChildren(
+      ...[T.facts.day, polar ? T.facts.pole : null, polar ? T.facts.poleEarth : earthShare === 1 ? T.facts.nearSide : null]
+        .filter((text): text is string => text !== null)
+        .map((text) => h("li", { text })),
+    );
+    more.open = expert;
+    traceScenario.value.textContent = scenario.scenarioId;
+    traceModel.value.textContent = scenario.modelLevel;
+    traceValidation.value.textContent = scenario.validationStatus;
+    traceCoverage.value.textContent = scenario.coverageStatus;
     const degrees = (id: string): string => {
       const v = metric(scenario, id);
       return v === null ? "—" : formatDeg(v);
@@ -271,6 +316,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     blackout.value.textContent = hours("earth.anyDisk.longestGapH");
     maxSun.value.textContent = degrees("sun.maxElevDeg");
     maxEarth.value.textContent = degrees("earth.maxElevDeg");
+    meanSun.value.textContent = degrees("sun.meanElevWhenAnyDiskDeg");
     insightList.replaceChildren(...insights(scenario).map((text) => h("li", { text })));
 
     renderYear(site, s);
@@ -293,6 +339,11 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     earth.el.classList.toggle("is-off", !earthNow.visible);
     sunHeight.value.textContent = formatElevation(sample.sunElDeg);
     earthHeight.value.textContent = formatElevation(sample.earthElDeg);
+    sun.exact.textContent = `${T.expertNow(formatElevation(sample.sunElDeg), formatDeg(sample.sunAzDeg))} · ${diskText(sample.sunState)}`;
+    earth.exact.textContent = `${T.expertNow(formatElevation(sample.earthElDeg), formatDeg(sample.earthAzDeg))} · ${diskText(sample.earthState)}`;
+    const at = (v: Visibility, set: string, rise: string): string => (v.changeMs === null ? "" : `${v.visible ? set : rise} : ${formatStamp(new Date(v.changeMs).toISOString())}`);
+    sun.event.textContent = at(sunNow, T.eventLabels.sunSet, T.eventLabels.sunRise);
+    earth.event.textContent = at(earthNow, T.eventLabels.earthSet, T.eventLabels.earthRise);
     sky.setNow(sample);
   }
 
@@ -304,7 +355,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     panel.hidden = !show;
     panel.classList.toggle("is-loading", show && !ready);
     if (!show || !ready || !site || !s.scenario) return;
-    const still = wasHidden || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
+    const still = wasHidden || s.mode !== p.mode || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
     if (still) renderStill(site, s, s.scenario);
     if (still || s.index !== p.index) renderNow(s, s.scenario);
   });
