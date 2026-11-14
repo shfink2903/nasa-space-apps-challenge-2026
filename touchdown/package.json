@@ -1,0 +1,30 @@
+{
+  "name": "touchdown",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cinematic Starship lunar landing view driven by the True Larpers lunar dataset",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "node scripts/check-build-browser.mjs",
+    "prepare:assets": "node scripts/prepare-assets.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
