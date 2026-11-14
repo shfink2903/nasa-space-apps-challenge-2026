@@ -5,7 +5,8 @@
  */
 import { length, normalize, scale, slerp, type Vec3 } from "../data/astro";
 
-export type Phase = "cruise" | "transfer" | "descent" | "final" | "surface";
+/** "focus" is the orbit view zoomed on the selected site, before any flight. */
+export type Phase = "cruise" | "focus" | "transfer" | "descent" | "final" | "surface";
 
 export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 export const mix = (a: number, b: number, t: number): number => a + (b - a) * t;

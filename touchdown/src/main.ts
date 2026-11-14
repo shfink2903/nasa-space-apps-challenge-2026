@@ -6,12 +6,15 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import {
   availableDates,
+  indexAt,
+  loadDerived,
   loadHorizon,
   loadScenario,
   loadSeries,
   loadSites,
   pickScenarioId,
   sampleSeries,
+  visibilityAt,
   type HorizonProfile,
   type Scenario,
   type Series,
@@ -24,12 +27,13 @@ import { createHullEnvironment } from "./scene/sky";
 import { SurfaceScene } from "./scene/surfaceScene";
 import { createStore, type Actions } from "./state";
 import { createCaption } from "./ui/caption";
-import { createConditions } from "./ui/conditions";
+import { createCompare } from "./ui/compare";
 import { h } from "./ui/dom";
 import { siteLabel } from "./ui/format";
 import { createGuide } from "./ui/guide";
 import { createSiteList } from "./ui/sitelist";
-import { T } from "./ui/strings";
+import { createSitePanel } from "./ui/sitepanel";
+import { LANG, T } from "./ui/strings";
 import { createTimeBar } from "./ui/timebar";
 
 const REFERENCE_SITE = "apollo11";
@@ -44,10 +48,16 @@ const loader = $("loader");
 const toast = $("toast");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+document.documentElement.lang = LANG;
+document.title = T.pageTitle;
+$("loader-text").textContent = T.loading;
+
+let toastTimer = 0;
 function showToast(message: string): void {
   toast.textContent = message;
   toast.hidden = false;
-  window.setTimeout(() => (toast.hidden = true), 6000);
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toast.hidden = true), 6000);
 }
 
 interface SiteData {
@@ -56,8 +66,8 @@ interface SiteData {
   horizon: HorizonProfile | null;
 }
 
-async function loadSiteData(site: Site, date: string, signal: AbortSignal): Promise<SiteData> {
-  const id = pickScenarioId(site, date);
+async function loadSiteData(site: Site, date: string, heightM: number, signal: AbortSignal): Promise<SiteData> {
+  const id = pickScenarioId(site, date, heightM);
   if (!id) throw new Error(`No scenario for ${site.id} on ${date}`);
   const scenario = await loadScenario(id, signal);
   const [series, horizon] = await Promise.all([loadSeries(scenario, signal), loadHorizon(scenario, signal)]);
@@ -80,6 +90,9 @@ async function boot(): Promise<void> {
     dates: [],
     date: "",
     siteId: null,
+    heightM: 2,
+    rankBy: "overlap",
+    compareOpen: false,
     hoverId: null,
     index: 0,
     playing: false,
@@ -87,15 +100,16 @@ async function boot(): Promise<void> {
     phase: "cruise",
     series: null,
     scenario: null,
+    horizon: null,
     lightSiteId: null,
   });
 
-  // --- Data: catalogue first, then the series that lights the first view. ---
-  const sites = await loadSites();
+  // --- Data: catalogue and compact index first, then the series that lights the first view. ---
+  const [sites, derived] = await Promise.all([loadSites(), loadDerived()]);
   const reference = sites.find((s) => s.id === REFERENCE_SITE) ?? sites[0];
   const dates = availableDates(reference);
   let loadAbort = new AbortController();
-  const first = await loadSiteData(reference, dates[0], loadAbort.signal);
+  const first = await loadSiteData(reference, dates[0], 2, loadAbort.signal);
 
   // --- Assets. ---
   const fill = $("loader-fill");
@@ -120,26 +134,46 @@ async function boot(): Promise<void> {
   // --- Actions. ---
   const siteById = (id: string | null): Site | undefined => store.get().sites.find((s) => s.id === id);
 
+  /** Data of the selected site, as a promise: the flight waits for it. */
+  let siteData: Promise<{ horizon: HorizonProfile | null }> | null = null;
+
+  /** Loads the series of a site for the current date and height, and makes it the active one. */
+  const loadActive = (site: Site, date: string, heightM: number): Promise<{ horizon: HorizonProfile | null }> => {
+    loadAbort.abort();
+    loadAbort = new AbortController();
+    return loadSiteData(site, date, heightM, loadAbort.signal).then((d) => {
+      store.set({ series: d.series, scenario: d.scenario, horizon: d.horizon, lightSiteId: site.id });
+      return { horizon: d.horizon };
+    });
+  };
+  const reportError = (err: Error): void => {
+    if (err.name === "AbortError") return;
+    console.error(err);
+    showToast(T.siteError);
+  };
+
   const actions: Actions = {
+    /** Zoom on the site and open its sheet at once. The flight is a separate, explicit step. */
     selectSite(id) {
       const site = siteById(id);
       const state = store.get();
       if (!site || (state.siteId === id && state.phase !== "cruise")) return;
-      loadAbort.abort();
-      loadAbort = new AbortController();
-      const signal = loadAbort.signal;
       store.set({ siteId: id, hoverId: null });
-      const data = loadSiteData(site, state.date, signal).then((d) => {
-        store.set({ series: d.series, scenario: d.scenario, lightSiteId: id });
-        return { horizon: d.horizon };
-      });
-      director.startFlight(site, data, reducedMotion.matches);
+      const data = loadActive(site, state.date, state.heightM);
+      siteData = data;
+      director.focus(site);
       data.catch((err: Error) => {
-        if (err.name === "AbortError") return;
-        console.error(err);
-        showToast(T.siteError);
-        actions.back();
+        reportError(err);
+        if (err.name !== "AbortError" && store.get().siteId === id) actions.back();
       });
+    },
+    land() {
+      const s = store.get();
+      const site = siteById(s.siteId);
+      if (!site || s.phase !== "focus" || !siteData || !s.scenario || !s.series || s.lightSiteId !== site.id) return;
+      // No Sun at the site at the chosen time: no landing (the caption offers the next sunrise instead).
+      if (!visibilityAt(s.scenario, "sun.anyDisk", sampleSeries(s.series, s.index).tMs).visible) return;
+      director.startFlight(site, siteData, reducedMotion.matches);
     },
     hover: (id) => {
       if (store.get().hoverId !== id) store.set({ hoverId: id });
@@ -148,15 +182,25 @@ async function boot(): Promise<void> {
       const state = store.get();
       const site = siteById(state.lightSiteId);
       if (!site || date === state.date) return;
-      loadAbort.abort();
-      loadAbort = new AbortController();
       store.set({ date });
-      loadSiteData(site, date, loadAbort.signal).then(
-        (d) => store.set({ series: d.series, scenario: d.scenario }),
-        (err: Error) => {
-          if (err.name !== "AbortError") showToast(T.siteError);
-        },
-      );
+      const data = loadActive(site, date, state.heightM);
+      if (site.id === state.siteId) siteData = data;
+      data.catch(reportError);
+    },
+    setHeight(heightM) {
+      const state = store.get();
+      const site = siteById(state.lightSiteId);
+      if (!site || heightM === state.heightM) return;
+      store.set({ heightM });
+      const data = loadActive(site, state.date, heightM);
+      if (site.id === state.siteId) siteData = data;
+      data.catch(reportError);
+    },
+    setRankBy: (rankBy) => store.set({ rankBy }),
+    setCompare: (compareOpen) => store.set({ compareOpen }),
+    jumpTo(tMs) {
+      const { series } = store.get();
+      if (series) store.set({ index: indexAt(series, tMs), playing: false });
     },
     setIndex: (index) => store.set({ index }),
     togglePlay() {
@@ -166,7 +210,14 @@ async function boot(): Promise<void> {
     },
     setSpeed: (speedH) => store.set({ speedH }),
     skip: () => director.skip(),
+    /** From the flight or the ground: back to the site sheet. From the sheet: back to the overview. */
     back() {
+      const s = store.get();
+      const site = siteById(s.siteId);
+      if (s.phase !== "focus" && s.phase !== "cruise" && site) {
+        director.focus(site);
+        return;
+      }
       director.back();
       store.set({ siteId: null });
     },
@@ -175,10 +226,11 @@ async function boot(): Promise<void> {
   // --- Interface. ---
   const pins = new Map<string, HTMLButtonElement>();
   hud.append(
-    h("div", { class: "rail rail-left" }, createGuide(store), createConditions(store)),
-    h("div", { class: "rail rail-right" }, createTimeBar(store, actions), createSiteList(store, actions)),
+    h("div", { class: "rail rail-left" }, createGuide(store), createSitePanel(store, actions, derived)),
+    h("div", { class: "rail rail-right" }, createTimeBar(store, actions), createSiteList(store, actions, derived)),
     createCaption(store, actions),
     h("p", { class: "footer", text: T.footer }),
+    createCompare(store, actions, derived),
   );
   for (const site of sites) {
     const pin = h(
@@ -204,6 +256,7 @@ async function boot(): Promise<void> {
     date: dates[0],
     series: first.series,
     scenario: first.scenario,
+    horizon: first.horizon,
     lightSiteId: reference.id,
   });
 
@@ -232,6 +285,8 @@ async function boot(): Promise<void> {
     if (event.key === " " && tag !== "BUTTON") {
       event.preventDefault();
       actions.togglePlay();
+    } else if (event.key === "Escape" && s.compareOpen) {
+      actions.setCompare(false);
     } else if (event.key === "Escape" && s.phase !== "cruise") {
       actions.back();
     } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && s.series) {
@@ -271,12 +326,13 @@ async function boot(): Promise<void> {
     if (!s.series || !lightSite) return;
     director.update(dt, timeS, sampleSeries(s.series, s.index), lightSite, realDt);
 
-    const showPins = s.phase === "cruise";
+    const showPins = s.phase === "cruise" || s.phase === "focus";
     pinLayer.classList.toggle("is-hidden", !showPins);
     if (showPins) {
       for (const p of orbit.projectPins(s.sites, canvas.clientWidth, canvas.clientHeight)) {
         const pin = pins.get(p.id)!;
         pin.classList.toggle("is-off", !p.visible);
+        pin.classList.toggle("is-selected", p.id === s.siteId);
         if (p.visible) pin.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`;
       }
     }

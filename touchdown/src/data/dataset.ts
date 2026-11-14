@@ -18,6 +18,8 @@ export interface Site {
   latDeg: number;
   lonDeg: number;
   terrainProduct: string | null;
+  /** "single_source", "unverified" or "team_defined", as published. */
+  verification: string;
   scenarioIds: string[];
 }
 
@@ -49,13 +51,27 @@ export interface Metric {
   quality: string;
 }
 
+/** Exact visibility interval [startUtc, endUtc), from the 60 s grid refined to 1 s. */
+export interface VisibilityWindow {
+  startUtc: string;
+  endUtc: string;
+  truncatedStart: boolean;
+  truncatedEnd: boolean;
+}
+
+export type WindowKey = "sun.anyDisk" | "sun.fullDisk" | "earth.anyDisk" | "earth.fullDisk";
+
 export interface Scenario {
   scenarioId: string;
   siteId: string;
   modelLevel: string;
+  validationStatus: string;
+  coverageStatus: string;
   profileId: string | null;
   events: ScenarioEvent[];
+  windows: Record<WindowKey, VisibilityWindow[]>;
   metrics: Metric[];
+  limits: string[];
   seriesRef: { path: string; encoding: string };
 }
 
@@ -91,18 +107,23 @@ export function availableDates(site: Site): string[] {
 }
 
 /**
- * Picks the published scenario for a site and a start date, at 2 m observer height.
- * The terrain-aware model ("lola") is used when the dataset has it, else "geometric".
+ * Picks the published scenario for a site, a start date and an observer height.
+ * Without `model`, the terrain-aware model ("lola") is used when the dataset has it, else "geometric".
  */
-export function pickScenarioId(site: Site, date: string, heightM = 2): string | null {
+export function pickScenarioId(site: Site, date: string, heightM = 2, model?: ScenarioKey["model"]): string | null {
   let geometric: string | null = null;
   for (const id of site.scenarioIds) {
     const key = parseScenarioId(id);
     if (!key || key.date !== date || key.heightM !== heightM) continue;
-    if (key.model === "lola") return id;
-    geometric = id;
+    if (model ? key.model === model : key.model === "lola") return id;
+    if (!model) geometric = id;
   }
   return geometric;
+}
+
+/** Model level the interface shows for a site: terrain-aware when published, else geometric. */
+export function bestModel(site: Site): ScenarioKey["model"] {
+  return site.scenarioIds.some((id) => parseScenarioId(id)?.model === "lola") ? "lola" : "geometric";
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -195,4 +216,85 @@ export function nextSunEvent(scenario: Scenario, tMs: number): ScenarioEvent | n
 
 export function metric(scenario: Scenario, id: string): number | null {
   return scenario.metrics.find((m) => m.metricId === id)?.value ?? null;
+}
+
+export interface Visibility {
+  visible: boolean;
+  /** Time of the next change: the set when visible, the rise when not. Null when the window publishes none. */
+  changeMs: number | null;
+}
+
+/**
+ * Is a body above the terrain at a time, and when does that change?
+ * Read from the published exact windows, never from the display samples.
+ */
+export function visibilityAt(scenario: Scenario, key: WindowKey, tMs: number): Visibility {
+  for (const w of scenario.windows[key] ?? []) {
+    const start = Date.parse(w.startUtc);
+    const end = Date.parse(w.endUtc);
+    // A window cut by the end of the analysis stops 1 ms before the last display sample.
+    if (tMs >= start && (tMs < end || (w.truncatedEnd && tMs <= end + 1000))) {
+      return { visible: true, changeMs: w.truncatedEnd ? null : end };
+    }
+    if (start > tMs) return { visible: false, changeMs: start };
+  }
+  return { visible: false, changeMs: null };
+}
+
+/** Fractional index of the display series for a time, clamped to the series. */
+export function indexAt(series: Series, tMs: number): number {
+  const x = (tMs - Date.parse(series.t0Utc)) / (series.stepS * 1000);
+  return Math.min(series.n - 1, Math.max(0, x));
+}
+
+// ---------- Compact index of published sweeps, comparisons and sensitivity grids ----------
+
+export interface SweepEntry {
+  dates: string[];
+  validationStatus: string;
+  values: Record<string, (number | null)[]>;
+}
+
+export interface ComparisonEntry {
+  comparisonId: string;
+  exploredCount: number;
+  criteria: { metricId: string; direction: "max" | "min" }[];
+  nonDominated: string[];
+}
+
+export interface SensitivityEntry {
+  date: string;
+  modelLevel: string;
+  validationStatus: string;
+  spacingKm: number;
+  size: [number, number];
+  limits: string[];
+  ranges: { metricId: string; min: number | null; max: number | null; knownCount: number; totalCount: number }[];
+  cells: { northKm: number; eastKm: number; sun: number | null; earth: number | null }[];
+}
+
+/** Built by scripts/build-derived.mjs. Values are copied from the dataset, never computed. */
+export interface Derived {
+  datasetVersion: string;
+  metricIds: string[];
+  sweeps: Record<string, SweepEntry>;
+  comparisons: Record<string, ComparisonEntry>;
+  sensitivity: Record<string, SensitivityEntry>;
+}
+
+export async function loadDerived(signal?: AbortSignal): Promise<Derived> {
+  const res = await fetch("/derived/v1.json", { signal });
+  if (!res.ok) throw new Error(`derived/v1.json: HTTP ${res.status}`);
+  return (await res.json()) as Derived;
+}
+
+export function sweepFor(derived: Derived, site: Site, heightM: number, model = bestModel(site)): SweepEntry | null {
+  return derived.sweeps[`${site.id}|${heightM}|${model}`] ?? null;
+}
+
+/** Published 30-day metric of a site for one start date. Null when the dataset has no value. */
+export function sweepValue(derived: Derived, site: Site, heightM: number, date: string, metricId: string): number | null {
+  const sweep = sweepFor(derived, site, heightM);
+  const i = sweep ? sweep.dates.indexOf(date) : -1;
+  return i < 0 ? null : (sweep!.values[metricId]?.[i] ?? null);
 }

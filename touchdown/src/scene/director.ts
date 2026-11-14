@@ -53,6 +53,31 @@ export class Director {
     if (this.phase === "cruise") this.progress = clamp01(this.progress + delta);
   }
 
+  /** Zooms the orbit view on a site. No flight: the ship stays beside the camera. */
+  focus(site: Site): void {
+    this.flight++;
+    this.skipAsked = false;
+    this.data = null;
+    if (this.phase === "cruise" || this.phase === "focus") {
+      this.site = site;
+      this.orbit.beginFocus(site, false);
+      this.setPhase("focus");
+      return;
+    }
+    this.fade = {
+      t: 0,
+      done: false,
+      atPeak: () => {
+        this.surface.leave();
+        this.stage.show(this.orbit.scene, this.orbit.camera, this.orbit.shipScene);
+        this.site = site;
+        this.orbit.beginFocus(site, true);
+        this.setPhase("focus");
+        return true;
+      },
+    };
+  }
+
   /** Starts the flight to a site. `data` resolves when the site's series is the active one. */
   startFlight(site: Site, data: Promise<SurfaceData>, instant: boolean): void {
     const flight = ++this.flight;
@@ -86,6 +111,12 @@ export class Director {
     this.flight++;
     this.skipAsked = false;
     if (this.phase === "cruise") return;
+    if (this.phase === "focus") {
+      this.orbit.startBlend();
+      this.site = null;
+      this.setPhase("cruise");
+      return;
+    }
     this.fade = {
       t: 0,
       done: false,
@@ -122,7 +153,8 @@ export class Director {
       };
     }
 
-    const inOrbit = this.phase === "cruise" || this.phase === "transfer" || this.phase === "descent";
+    const inOrbit = this.phase === "cruise" || this.phase === "focus" || this.phase === "transfer" || this.phase === "descent";
+    this.orbit.advanceBlend(dt);
     if (inOrbit) {
       this.orbit.setSky(
         azElToMoonFixed(sample.sunAzDeg, sample.sunElDeg, lightSite.latDeg, lightSite.lonDeg),
@@ -137,6 +169,9 @@ export class Director {
       case "cruise":
         this.progress = clamp01(this.progress + dt / APPROACH_SECONDS);
         this.orbit.setCruise(this.progress, timeS);
+        break;
+      case "focus":
+        this.orbit.setFocus(timeS);
         break;
       case "transfer": {
         this.t += dt;

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "prepare:assets": "node scripts/prepare-assets.mjs"
+    "prepare:assets": "node scripts/prepare-assets.mjs",
+    "prepare:derived": "node scripts/build-derived.mjs"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

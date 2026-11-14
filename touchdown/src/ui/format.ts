@@ -1,13 +1,13 @@
 import type { Site } from "../data/dataset";
-import { T } from "./strings";
+import { LOCALE, T } from "./strings";
 
-const num = (digits: number) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const num = (digits: number) => new Intl.NumberFormat(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const n1 = num(1);
 const n2 = num(2);
-const clock = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" });
-const day = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
-const dayLong = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" });
-const stamp = new Intl.DateTimeFormat("fr-FR", {
+const clock = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", hour: "2-digit", minute: "2-digit" });
+const day = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric" });
+const dayLong = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" });
+const stamp = new Intl.DateTimeFormat(LOCALE, {
   timeZone: "UTC",
   day: "numeric",
   month: "short",
@@ -32,6 +32,26 @@ export function formatElevation(deg: number): string {
 }
 
 export const formatPercent = (fraction: number): string => `${n1.format(fraction * 100)} %`;
+const n0 = num(0);
+/** Short percentage without decimals, for dense tables. */
+export const formatPercent0 = (fraction: number): string => `${n0.format(fraction * 100)} %`;
+export const formatDeg = (deg: number): string => `${n1.format(deg)}°`;
+
+/** A duration in plain words: "42 min", "19 h 50", "16,7 j". */
+export function formatDuration(ms: number): string {
+  const minutes = Math.max(0, Math.round(ms / 60000));
+  if (minutes < 60) return T.durMin(minutes);
+  if (minutes < 48 * 60) return T.durHour(Math.floor(minutes / 60), String(minutes % 60).padStart(2, "0"));
+  return T.durDay(n1.format(minutes / 1440));
+}
+export const formatHours = (hours: number): string => formatDuration(hours * 3600000);
+
+const dayShort = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
+const monthShort = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", month: "short" });
+const dateMs = (date: string): number => Date.UTC(Number(date.slice(0, 4)), Number(date.slice(4, 6)) - 1, Number(date.slice(6, 8)));
+/** YYYYMMDD to a short date, e.g. "1 déc. 2026". */
+export const formatShortDate = (date: string): string => dayShort.format(dateMs(date));
+export const formatMonth = (date: string): string => monthShort.format(dateMs(date));
 
 export function formatCoords(site: Site): string {
   const lat = `${n2.format(Math.abs(site.latDeg))}° ${site.latDeg >= 0 ? T.north : T.south}`;
