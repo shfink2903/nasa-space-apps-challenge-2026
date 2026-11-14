@@ -4,6 +4,7 @@ Team **True Larpers** | Local event: **Paris** | Hackathon: **14-15 November 202
 
 Event site: https://www.spaceappschallenge.org/2026/
 Challenge page: https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/
+Read CHALLENGE.md for any informations about the challenge itself. 
 
 ## Our challenge
 
