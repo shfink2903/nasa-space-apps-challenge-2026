@@ -1,32 +1,36 @@
 import type { Derived, Site } from "../data/dataset";
 import { EARTH, shiftDate, soonestOptions, SUN, valuesAt, verdictAt, type Verdict } from "../data/mission";
-import { criterionById, sitesIn } from "../data/ranking";
+import { sitesIn } from "../data/ranking";
 import type { Actions, AppState, Store } from "../state";
+import { monthGroups } from "./bits";
 import { h, icon } from "./dom";
-import { formatShortDate, formatStartDate, siteLabel } from "./format";
-import { formatCriterion } from "./sitelist";
+import { dateMs, formatDayMonth, formatDays, formatShortDate, formatStartDate, siteLabel } from "./format";
 import { T } from "./strings";
 import { failureLines, verdictPill } from "./verdict";
 
 const MAX_DELAY_WEEKS = 26;
 
 /**
- * "Launch delay": the planner's question in the challenge. A site and a date
- * were chosen; the launch slips by some weeks. Does the site still meet the
- * mission criteria on the new date? If not, when does it again, and which
- * other sites are ready soonest? Every answer is read from the published
- * weekly values; the thresholds are the user's.
+ * "Delay": the planner's question in the challenge. A site and a date were
+ * chosen; the launch slips by some weeks. Does the site still meet the mission
+ * criteria on the new date? If not, when does it again, and which other sites
+ * are possible soonest? Every answer is read from the published weekly values;
+ * the thresholds are the user's.
  */
 export function createPlanner(store: Store, actions: Actions, derived: Derived): { el: HTMLElement; render(): void; reset(): void } {
   let siteId: string | null = null;
   let planned: string | null = null;
   let delay = 4;
 
-  const siteSelect = h("select", { class: "select", "aria-label": T.planSite });
-  const dateSelect = h("select", { class: "select", "aria-label": T.planDate });
+  const siteSelect = h("select", { class: "select select-big", "aria-label": T.planSite });
+  const dateSelect = h("select", { class: "select select-big", "aria-label": T.planDate });
+  const datePrev = h("button", { class: "button button-icon", type: "button", "aria-label": T.datePrev, title: T.datePrev }, icon("left"));
+  const dateNext = h("button", { class: "button button-icon", type: "button", "aria-label": T.dateNext, title: T.dateNext }, icon("right"));
   const delayRange = h("input", { class: "cmp-slider", type: "range", min: 0, max: MAX_DELAY_WEEKS, step: 1, "aria-label": T.planDelay });
   const delayText = h("b", { class: "plan-delay-text" });
+  const delayDate = h("small", { class: "plan-delay-date" });
   const cards = h("div", { class: "plan-cards" });
+  const othersTitle = h("h3", { class: "year-title", text: T.planOthers });
   const others = h("div", { class: "plan-list" });
   const el = h(
     "div",
@@ -35,20 +39,23 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
       "div",
       { class: "plan-inputs" },
       h("label", { class: "plan-field" }, h("span", { text: T.planSite }), siteSelect),
-      h("label", { class: "plan-field" }, h("span", { text: T.planDate }), dateSelect),
-      h("label", { class: "plan-field plan-field-wide" }, h("span", null, T.planDelay, delayText), delayRange),
+      h("div", { class: "plan-field" }, h("span", { text: T.planDate }), h("div", { class: "plan-date" }, datePrev, dateSelect, dateNext)),
+      h("label", { class: "plan-field" }, h("span", null, T.planDelay), h("div", { class: "plan-delay" }, delayText, delayDate), delayRange),
     ),
     cards,
-    h("h3", { class: "block-title", text: T.planOthers }),
+    othersTitle,
     others,
-    h("p", { class: "note", text: T.planNote }),
   );
 
-  const share = (v: number | null, s: AppState): string => formatCriterion(criterionById("sun"), v, s.mode);
   const open = (id: string, date: string): void => {
     actions.setDate(date);
     actions.selectSite(id);
     actions.setCompare(false);
+  };
+  const days = (v: number | null | undefined): string => (v === null || v === undefined ? "—" : formatDays(v));
+  const period = (date: string): string => {
+    const t0 = dateMs(date);
+    return T.periodOf(formatDayMonth(t0), formatDayMonth(t0 + 29 * 86_400_000));
   };
 
   function card(title: string, site: Site, date: string, s: AppState, verdict: Verdict, extra: (HTMLElement | null)[] = []): HTMLElement {
@@ -57,10 +64,12 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
       "article",
       { class: `plan-card is-${verdict.status}` },
       h("small", { class: "kicker", text: title }),
-      h("b", { class: "plan-card-title", text: `${siteLabel(site).title} · ${formatStartDate(date)}` }),
+      h("b", { class: "plan-card-title", text: `${siteLabel(site).title}, ${formatStartDate(date)}` }),
       verdictPill(verdict),
-      h("p", { class: "plan-values", text: `${T.criteriaShort.sun} ${share(values[SUN] ?? null, s)} · ${T.criteriaShort.earth} ${share(values[EARTH] ?? null, s)}` }),
-      ...failureLines(verdict, values, s.criteria, s.mode).map((text) => h("p", { class: "plan-fail", text })),
+      h("p", { class: "plan-values", text: T.sunValue(days(values[SUN])) }),
+      h("p", { class: "plan-values", text: T.earthValue(days(values[EARTH])) }),
+      ...failureLines(verdict, values, s.criteria).map((text) => h("p", { class: "plan-fail", text })),
+      h("p", { class: "note", text: period(date) }),
       ...extra,
     );
   }
@@ -75,18 +84,25 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
     siteId = selected.id;
     planned = planned && s.dates.includes(planned) ? planned : s.date;
 
-    siteSelect.replaceChildren(...list.map((x) => h("option", { value: x.id, text: siteLabel(x).title })));
+    siteSelect.replaceChildren(...list.map((x) => h("option", { value: x.id, text: x.status === "custom" ? `${siteLabel(x).title} (${T.estimateShort})` : siteLabel(x).title })));
     siteSelect.value = selected.id;
-    dateSelect.replaceChildren(...s.dates.map((d) => h("option", { value: d, text: formatStartDate(d) })));
+    dateSelect.replaceChildren(
+      ...monthGroups(s.dates).map((g) => h("optgroup", { label: formatStartDate(g.dates[0]).replace(/^\d+\s/, "") }, ...g.dates.map((d) => h("option", { value: d, text: formatShortDate(d) })))),
+    );
     dateSelect.value = planned;
+    const at = s.dates.indexOf(planned);
+    datePrev.disabled = at <= 0;
+    dateNext.disabled = at >= s.dates.length - 1;
     delayRange.value = String(delay);
     delayRange.style.setProperty("--p", `${(delay / MAX_DELAY_WEEKS) * 100}%`);
 
     const after = shiftDate(s.dates, planned, delay);
-    delayText.textContent = ` ${T.weeks(delay)}${after ? ` → ${formatShortDate(after)}` : ""}`;
+    delayText.textContent = T.weeks(delay);
+    delayDate.textContent = after && delay > 0 ? T.planNewDate(formatShortDate(after)) : "";
     const before = card(T.planBefore, selected, planned, s, verdictAt(derived, selected, s.heightM, planned, s.criteria));
     if (!after) {
       cards.replaceChildren(before, h("article", { class: "plan-card is-unknown" }, h("small", { class: "kicker", text: T.planAfter }), h("p", { text: T.planBeyond })));
+      othersTitle.hidden = true;
       others.replaceChildren();
       return;
     }
@@ -97,12 +113,12 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
     const extra: (HTMLElement | null)[] = [];
     if (verdict.status === "nogo") {
       if (same) {
-        const go = h("button", { class: "button button-small", type: "button" }, icon("right"), T.planOpen);
+        const go = h("button", { class: "button button-primary", type: "button", text: T.planOpen });
         go.addEventListener("click", () => open(selected.id, same.date));
         extra.push(h("p", { class: "plan-next", text: T.nextGo(formatShortDate(same.date), same.waitWeeks) }), go);
       } else extra.push(h("p", { class: "plan-next", text: T.nextGoNone }));
     } else if (verdict.status === "go") {
-      const go = h("button", { class: "button button-small", type: "button" }, icon("right"), T.planOpen);
+      const go = h("button", { class: "button button-primary", type: "button", text: T.planOpen });
       go.addEventListener("click", () => open(selected.id, after));
       extra.push(go);
     }
@@ -114,14 +130,16 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
         const row = h(
           "button",
           { class: "plan-row", type: "button" },
-          h("b", null, siteLabel(o.site).title, o.site.computed && h("em", { class: "tag tag-warn", title: T.customWarning, text: "≈" })),
-          h("span", { class: `plan-wait ${o.waitWeeks === 0 ? "is-now" : ""}`, text: o.waitWeeks === 0 ? T.planReady : `${formatShortDate(o.date)} · ${T.planWait(o.waitWeeks)}` }),
-          h("span", { class: "plan-values", text: `${T.criteriaShort.sun} ${share(o.values[SUN] ?? null, s)} · ${T.criteriaShort.earth} ${share(o.values[EARTH] ?? null, s)}` }),
-          h("span", { class: "site-go" }, icon("arrow")),
+          h("b", null, siteLabel(o.site).title, o.site.computed && h("em", { class: "tag tag-warn", title: T.customWarning, text: T.estimateShort })),
+          h("span", { class: `plan-wait ${o.waitWeeks === 0 ? "is-now" : ""}`, text: o.waitWeeks === 0 ? T.planReady : T.planWait(formatShortDate(o.date), o.waitWeeks) }),
+          h("span", { class: "plan-values", text: T.sunValue(days(o.values[SUN])) }),
+          h("span", { class: "plan-values", text: T.earthValue(days(o.values[EARTH])) }),
+          h("span", { class: "plan-open", text: T.planOpen }),
         );
         row.addEventListener("click", () => open(o.site.id, o.date));
         return row;
       });
+    othersTitle.hidden = false;
     others.replaceChildren(...(rows.length > 0 ? rows : [h("p", { class: "note", text: T.planOthersNone })]));
   }
 
@@ -133,6 +151,15 @@ export function createPlanner(store: Store, actions: Actions, derived: Derived):
     planned = dateSelect.value;
     render();
   });
+  const stepDate = (delta: number): void => {
+    const { dates } = store.get();
+    const next = dates[dates.indexOf(planned ?? "") + delta];
+    if (!next) return;
+    planned = next;
+    render();
+  };
+  datePrev.addEventListener("click", () => stepDate(-1));
+  dateNext.addEventListener("click", () => stepDate(1));
   delayRange.addEventListener("input", () => {
     delay = Number(delayRange.value);
     render();

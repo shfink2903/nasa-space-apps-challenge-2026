@@ -32,13 +32,12 @@ import { OrbitScene } from "./scene/orbitScene";
 import { Stage } from "./scene/renderer";
 import { createHullEnvironment } from "./scene/sky";
 import { SurfaceScene } from "./scene/surfaceScene";
-import { createStore, type Actions, type Mode } from "./state";
+import { createStore, type Actions } from "./state";
 import { createCaption } from "./ui/caption";
 import { createCompare } from "./ui/compare";
 import { h } from "./ui/dom";
-import { formatPercent0, siteLabel } from "./ui/format";
+import { formatDaysShort, siteLabel } from "./ui/format";
 import { createTopBar } from "./ui/topbar";
-import { createSiteList } from "./ui/sitelist";
 import { createSitePanel } from "./ui/sitepanel";
 import { LANG, T } from "./ui/strings";
 import { createTimeBar } from "./ui/timebar";
@@ -55,18 +54,6 @@ const veil = $("veil");
 const loader = $("loader");
 const toast = $("toast");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-/** Display level: plain words by default, the scientist view on request (?mode=expert or the switch). */
-function readMode(): Mode {
-  const asked = new URLSearchParams(window.location.search).get("mode");
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem("touchdown.mode");
-  } catch {
-    // Storage can be blocked: the default display is used.
-  }
-  return (asked ?? stored) === "expert" ? "expert" : "simple";
-}
 
 /** The user's thresholds are kept between visits. Anything unreadable falls back to the team default. */
 function readCriteria(): Criteria {
@@ -119,7 +106,6 @@ function loadTexture(manager: THREE.LoadingManager, url: string, srgb: boolean):
 async function boot(): Promise<void> {
   const stage = new Stage(canvas);
   const store = createStore({
-    mode: readMode(),
     criteria: readCriteria(),
     compareTab: "date",
     sites: [],
@@ -130,6 +116,7 @@ async function boot(): Promise<void> {
     rankBy: "overlap",
     region: "south",
     compareOpen: false,
+    touring: false,
     customTick: 0,
     hoverId: null,
     index: 0,
@@ -275,13 +262,26 @@ async function boot(): Promise<void> {
       });
     },
     selectPoint(latDeg, lonDeg) {
+      actions.addPoint(latDeg, lonDeg);
+      actions.selectSite(CUSTOM_ID);
+    },
+    addPoint(latDeg, lonDeg) {
       const site = customSite(latDeg, lonDeg);
       site.name = T.customName;
       const state = store.get();
-      // A new place for the free point: forget the old one, then open it like any site.
-      store.set({ sites: [...state.sites.filter((x) => x.status !== "custom"), site], siteId: state.siteId === CUSTOM_ID ? null : state.siteId });
+      // A new place for the free point: forget the old one. Its year is computed in the background.
+      const wasOpen = state.siteId === CUSTOM_ID;
+      store.set({ sites: [...state.sites.filter((x) => x.status !== "custom"), site], siteId: wasOpen ? null : state.siteId });
       fillCustomYear(site, state.heightM);
-      actions.selectSite(CUSTOM_ID);
+      if (wasOpen) actions.selectSite(CUSTOM_ID);
+    },
+    home() {
+      tour.stop();
+      store.set({ compareOpen: false });
+    },
+    overview() {
+      director.back();
+      store.set({ siteId: null });
     },
     land() {
       const s = store.get();
@@ -327,15 +327,10 @@ async function boot(): Promise<void> {
     },
     setRankBy: (rankBy) => store.set({ rankBy }),
     setRegion: (region) => store.set({ region }),
-    setMode(mode) {
-      try {
-        window.localStorage.setItem("touchdown.mode", mode);
-      } catch {
-        // Ignored: the choice then lasts for this visit only.
-      }
-      store.set({ mode });
+    setCompare(compareOpen, tab) {
+      if (compareOpen) tour.stop();
+      store.set(tab ? { compareOpen, compareTab: tab } : { compareOpen });
     },
-    setCompare: (compareOpen, tab) => store.set(tab ? { compareOpen, compareTab: tab } : { compareOpen }),
     setCriteria(patch) {
       const criteria = { ...store.get().criteria, ...patch };
       try {
@@ -354,7 +349,10 @@ async function boot(): Promise<void> {
       pendingTimeMs = tMs;
       actions.setDate(date);
     },
-    startTour: () => tour.start(),
+    startTour() {
+      store.set({ compareOpen: false });
+      tour.start();
+    },
     jumpTo(tMs) {
       const { series } = store.get();
       if (series) store.set({ index: indexAt(series, tMs), playing: false });
@@ -382,11 +380,10 @@ async function boot(): Promise<void> {
 
   // --- Interface. ---
   const pins = new Map<string, HTMLButtonElement>();
-  const tour = createTour(store, actions);
+  const tour = createTour(store, actions, derived);
   hud.append(
     createTopBar(store, actions),
     h("div", { class: "rail rail-left" }, createSitePanel(store, actions, derived)),
-    h("div", { class: "rail rail-right" }, createSiteList(store, actions, derived)),
     createCaption(store, actions),
     createTimeBar(store, actions),
     tour.el,
@@ -399,7 +396,9 @@ async function boot(): Promise<void> {
       { class: `pin ${kind}`, type: "button", tabindex: -1 },
       h("span", { class: "pin-label" }, siteLabel(site).title, h("small", { "data-stats": site.id })),
     );
-    pin.addEventListener("click", () => actions.selectSite(site.id));
+    pin.addEventListener("click", () => {
+      if (!store.get().touring) actions.selectSite(site.id);
+    });
     pin.addEventListener("pointerenter", () => actions.hover(site.id));
     pin.addEventListener("pointerleave", () => actions.hover(null));
     pins.set(site.id, pin);
@@ -409,10 +408,10 @@ async function boot(): Promise<void> {
   store.subscribe((s, p) => {
     if (s.sites !== p.sites && s.sites.some((x) => x.status === "custom") && !pins.has(CUSTOM_ID)) addPin(s.sites.find((x) => x.status === "custom")!);
     if (s.date !== p.date || s.heightM !== p.heightM || s.sites !== p.sites || s.customTick !== p.customTick) {
-      // Hover text of each point: its two 30-day shares for the chosen date.
+      // Hover text of each point: days of Sun and of Earth in view, out of the 30 studied.
       const share = (site: Site, id: string): string => {
         const v = sweepValue(derived, site, s.heightM, s.date, id);
-        return v === null ? "—" : formatPercent0(v);
+        return v === null ? "—" : formatDaysShort(v);
       };
       for (const site of s.sites) {
         const el = pins.get(site.id)?.querySelector<HTMLElement>("[data-stats]");
@@ -425,10 +424,10 @@ async function boot(): Promise<void> {
     }
     if (s.hoverId !== p.hoverId) for (const [id, pin] of pins) pin.classList.toggle("is-hover", id === s.hoverId);
     if (s.phase !== p.phase) document.body.dataset.phase = s.phase;
-    if (s.mode !== p.mode) document.body.dataset.mode = s.mode;
+    if (s.touring !== p.touring) document.body.classList.toggle("is-touring", s.touring);
+    if (s.compareOpen !== p.compareOpen) document.body.classList.toggle("is-page", s.compareOpen);
   });
   document.body.dataset.phase = "cruise";
-  document.body.dataset.mode = store.get().mode;
 
   store.set({
     sites,
@@ -465,7 +464,7 @@ async function boot(): Promise<void> {
     const start = down;
     down = null;
     const phase = store.get().phase;
-    if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5 || (phase !== "cruise" && phase !== "focus")) return;
+    if (!start || store.get().touring || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5 || (phase !== "cruise" && phase !== "focus")) return;
     const rect = canvas.getBoundingClientRect();
     const hit = orbit.pick(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
     if (hit) actions.selectPoint(hit.latDeg, hit.lonDeg);
@@ -482,8 +481,8 @@ async function boot(): Promise<void> {
     if (event.key === " " && tag !== "BUTTON") {
       event.preventDefault();
       actions.togglePlay();
-    } else if (event.key === "Escape" && s.compareOpen) {
-      actions.setCompare(false);
+    } else if (event.key === "Escape" && (s.compareOpen || s.touring)) {
+      actions.home();
     } else if (event.key === "Escape" && s.phase !== "cruise") {
       actions.back();
     } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && s.series) {

@@ -2,52 +2,60 @@ import { sampleSeries, visibilityAt, type Derived } from "../data/dataset";
 import { verdictAt } from "../data/mission";
 import type { Actions, AppState, Store } from "../state";
 import { h, icon } from "./dom";
-import { formatDuration, siteLabel } from "./format";
+import { formatDuration, formatMoment, siteLabel } from "./format";
 import { T } from "./strings";
 
 const ORDER = ["transfer", "descent", "final", "surface"] as const;
 
 export interface LandingChoice {
-  /** What the site sheet offers: land, jump to sunrise, look at other options, or nothing. */
+  /** What the site sheet offers: land, jump to sunrise, look at other sites, or nothing. */
   kind: "land" | "sunrise" | "options" | "none";
+  /** One answer, never two: possible, night at this time, not possible, or still computing. */
+  tone: "go" | "wait" | "nogo" | "unknown";
+  title: string;
   text: string;
   riseMs: number | null;
 }
 
 /**
- * Can the ship land on the selected site now? No when the user's criteria are
- * not met for this date, and no when the Sun is not up at the chosen time.
+ * Can the ship land on the selected site, on this date and at this time?
+ * No when the user's criteria are not met for the period. Not now when the
+ * criteria are met but the Sun is down at the chosen time. One answer only.
  */
-export function landingChoice(s: AppState, derived: Derived): LandingChoice {
+export function landingChoice(s: AppState, derived: Derived): LandingChoice | null {
   const site = s.sites.find((x) => x.id === s.siteId);
-  if (!site || !s.scenario || !s.series || s.lightSiteId !== s.siteId) return { kind: "none", text: "", riseMs: null };
-  if (verdictAt(derived, site, s.heightM, s.date, s.criteria).status === "nogo") return { kind: "options", text: T.focusNoGo, riseMs: null };
+  if (!site || !s.scenario || !s.series || s.lightSiteId !== s.siteId) return null;
+  const verdict = verdictAt(derived, site, s.heightM, s.date, s.criteria).status;
+  if (verdict === "nogo") return { kind: "options", tone: "nogo", title: T.nogo, text: "", riseMs: null };
+  if (verdict === "unknown") return { kind: "none", tone: "unknown", title: T.unknownVerdict, text: T.unknownText, riseMs: null };
   const tMs = sampleSeries(s.series, s.index).tMs;
   const sun = visibilityAt(s.scenario, "sun.anyDisk", tMs);
-  if (sun.visible) return { kind: "land", text: T.focusSunUp(sun.changeMs === null ? null : formatDuration(sun.changeMs - tMs)), riseMs: null };
-  if (sun.changeMs !== null) return { kind: "sunrise", text: T.focusSunDown, riseMs: sun.changeMs };
-  return { kind: "none", text: `${T.focusSunDown} ${T.focusNoRise}`, riseMs: null };
+  if (sun.visible) return { kind: "land", tone: "go", title: T.go, text: T.goText(sun.changeMs === null ? null : formatDuration(sun.changeMs - tMs)), riseMs: null };
+  if (sun.changeMs !== null) return { kind: "sunrise", tone: "wait", title: T.wait, text: T.waitText(formatMoment(sun.changeMs)), riseMs: sun.changeMs };
+  return { kind: "none", tone: "wait", title: T.wait, text: T.waitNoRise, riseMs: null };
 }
 
 /**
- * Centre of the screen. On the overview: the question the tool answers and its
- * two entries. During the flight and on the ground: the steps, Skip and Back.
- * With a site open the sheet says everything, so this stays out of the way.
+ * Home: what the tool is for and its two entries. During the flight and on the
+ * ground: the steps, Skip and Back. With a site open the sheet says everything,
+ * so this stays out of the way.
  */
 export function createCaption(store: Store, actions: Actions): HTMLElement {
   const kicker = h("small", { class: "kicker" });
   const title = h("h1", { class: "caption-title" });
   const text = h("p", { class: "caption-text" });
+  const south = h("p", { class: "caption-south", text: T.heroSouth });
   const steps = T.steps.map((label) => h("li", { text: label }));
   const stepper = h("ol", { class: "stepper" }, ...steps);
-  const compare = h("button", { class: "button button-primary button-big", type: "button" }, icon("table"), T.compare);
-  const tour = h("button", { class: "button button-big", type: "button" }, icon("play"), T.tourStart);
-  const hint = h("span", { class: "caption-hint", text: T.heroHint });
+  const evaluate = h("button", { class: "button button-primary button-big", type: "button", text: T.navEvaluate });
+  const explore = h("button", { class: "button button-big", type: "button", text: T.navExplore });
+  const hint = h("p", { class: "caption-hint", text: T.heroHint });
   const skip = h("button", { class: "button", type: "button" }, icon("skip"), T.skip);
   const back = h("button", { class: "button", type: "button" }, icon("back"), T.back);
-  const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, stepper, h("div", { class: "caption-actions" }, compare, tour, hint, skip, back));
-  compare.addEventListener("click", () => actions.setCompare(true, "date"));
-  tour.addEventListener("click", () => actions.startTour());
+  const credits = h("small", { class: "credits", text: T.credits });
+  const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, south, stepper, h("div", { class: "caption-actions" }, evaluate, explore, skip, back), hint, credits);
+  evaluate.addEventListener("click", () => actions.setCompare(true, "date"));
+  explore.addEventListener("click", () => actions.startTour());
   skip.addEventListener("click", () => actions.skip());
   back.addEventListener("click", () => actions.back());
 
@@ -56,23 +64,22 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
     const site = s.sites.find((x) => x.id === s.siteId);
     const cruise = s.phase === "cruise" || !site;
     const flying = !cruise && s.phase !== "focus";
-    el.hidden = !cruise && !flying;
-    el.dataset.phase = s.phase;
+    el.hidden = s.touring || (!cruise && !flying);
     kicker.textContent = cruise ? T.heroKicker : T.phaseKicker[s.phase];
-    title.textContent = cruise ? T.cruiseTitle : siteLabel(site).title;
-    text.textContent = cruise ? T.cruiseText : s.phase === "surface" ? T.surfaceText : T.flightText;
+    title.textContent = cruise ? T.heroTitle : siteLabel(site).title;
+    text.textContent = cruise ? T.heroText : s.phase === "surface" ? T.surfaceText : T.flightText;
     stepper.hidden = !flying;
     const at = ORDER.indexOf(s.phase as (typeof ORDER)[number]);
     steps.forEach((step, i) => {
       step.classList.toggle("is-done", i < at);
       step.classList.toggle("is-current", i === at);
     });
-    compare.hidden = tour.hidden = hint.hidden = !cruise;
+    evaluate.hidden = explore.hidden = hint.hidden = south.hidden = credits.hidden = !cruise;
     skip.hidden = !(s.phase === "transfer" || s.phase === "descent" || s.phase === "final");
     back.hidden = !flying;
   };
   store.subscribe((s, p) => {
-    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites) render();
+    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites || s.touring !== p.touring) render();
   });
   render();
   return el;

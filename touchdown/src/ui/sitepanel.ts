@@ -1,50 +1,41 @@
-import {
-  metric,
-  parseScenarioId,
-  sampleSeries,
-  sweepFor,
-  visibilityAt,
-  type Derived,
-  type DiskState,
-  type Scenario,
-  type Site,
-  type Visibility,
-} from "../data/dataset";
+import { metric, parseScenarioId, sampleSeries, visibilityAt, type Derived, type DiskState, type Scenario, type Site, type Visibility } from "../data/dataset";
+import { EARTH, nextGoDate, SUN, valuesAt, verdictAt } from "../data/mission";
 import type { Actions, AppState, Store } from "../state";
+import { monthGroups } from "./bits";
+import { landingChoice } from "./caption";
 import { h, icon } from "./dom";
 import {
+  dateMs,
   formatCoords,
+  formatDayMonth,
+  formatDays,
   formatDeg,
   formatDuration,
   formatElevation,
   formatHours,
   formatHoursExact,
-  formatShareDays,
-  formatStamp,
-  formatMonth,
   formatPercent,
   formatPercent0,
   formatShortDate,
+  formatStamp,
   siteLabel,
 } from "./format";
-import { nextGoDate, valuesAt, verdictAt } from "../data/mission";
-import { landingChoice } from "./caption";
 import { createSkyChart } from "./skychart";
-import { failureLines, verdictPill } from "./verdict";
 import { T } from "./strings";
+import { createCriteria, failureLines } from "./verdict";
 
 const SUN_RGB = "255,186,96";
 const EARTH_RGB = "157,188,255";
 const HEIGHTS = [2, 10];
+const WEEK_MS = 7 * 86_400_000;
 
 const diskText = (state: DiskState): string => (state === null ? T.state.unknown : T.state[state]);
 const sunStatus = (state: DiskState): string => (state === null ? T.sunStatus.unknown : T.sunStatus[state]);
 const earthStatus = (state: DiskState): string => (state === null ? T.earthStatus.unknown : T.earthStatus[state]);
-const shade = (rgb: string, fraction: number | null): string =>
-  fraction === null ? "rgba(255,255,255,0.05)" : `rgba(${rgb},${(0.1 + 0.9 * fraction).toFixed(3)})`;
+const shade = (rgb: string, fraction: number | null): string => (fraction === null ? "rgba(255,255,255,0.05)" : `rgba(${rgb},${(0.1 + 0.9 * fraction).toFixed(3)})`);
 const percent = (v: number | null): string => (v === null ? "—" : formatPercent(v));
 
-/** "Night in 19 h 50", "Link back in 16,7 j", or the plain fact when the window has no change. */
+/** "Night in 19 h 50", "Earth back in 16,7 days", or the plain fact when nothing changes in the period. */
 function countdown(v: Visibility, tMs: number, body: "sun" | "earth"): string {
   const sun = body === "sun";
   if (v.changeMs === null) return v.visible ? (sun ? T.sunUpAll : T.earthUpAll) : sun ? T.sunDownAll : T.earthDownAll;
@@ -53,57 +44,114 @@ function countdown(v: Visibility, tMs: number, body: "sun" | "earth"): string {
   return sun ? T.sunRisesIn(left) : T.earthRisesIn(left);
 }
 
-/** Sentences that restate exact published values (0 or 1). No threshold is chosen here. */
-function insights(scenario: Scenario): string[] {
-  const sun = metric(scenario, "sun.anyDisk.fraction");
-  const earth = metric(scenario, "earth.anyDisk.fraction");
-  const overlap = metric(scenario, "overlap.sunAny_earthAny.fraction");
-  const out: string[] = [];
-  if (sun === 0) out.push(T.insights.noSun);
-  if (earth === 0) out.push(T.insights.noEarth);
-  if (earth === 1) out.push(T.insights.alwaysEarth);
-  if (overlap === 0 && sun !== 0 && earth !== 0 && sun !== null && earth !== null) out.push(T.insights.noOverlap);
-  return out;
-}
-
 /**
- * Left rail: everything published about the selected site. Sun (power) and
- * Earth (communication) now, the sky map, the 30-day metrics, the year and the
- * 1 km sensitivity. Shown as soon as a site is selected, before any flight.
+ * Left side: one sheet for the selected site, read from top to bottom.
+ * The landing date, one answer (possible or not), the Sun and the Earth in
+ * days, the year, the user's criteria, three points to understand, and the
+ * scientific details folded at the end.
  */
 export function createSitePanel(store: Store, actions: Actions, derived: Derived): HTMLElement {
   const name = h("b", { class: "cond-site" });
   const place = h("small", { class: "cond-coords" });
   const tags = h("div", { class: "tags" });
+  const close = h("button", { class: "panel-toggle", type: "button", "aria-label": T.closeSheet, title: T.closeSheet }, icon("close"));
+  const estimate = h("p", { class: "warn-box", text: T.estimateNote, hidden: true });
+  close.addEventListener("click", () => actions.back());
 
-  /** One big card per question: is the site lit, can it talk to Earth. No angle here. */
-  const card = (kind: "sun" | "earth", title: string, rgb: string) => {
+  // --- Landing date and time: any date of the year studied. ---
+  const dateInput = h("input", { class: "input date-input", id: "landing-date", type: "date" });
+  const hourSelect = h(
+    "select",
+    { class: "select hour-select", "aria-label": T.hourLabel, title: T.hourLabel },
+    ...Array.from({ length: 24 }, (_, i) => h("option", { value: i, text: T.hourOption(String(i).padStart(2, "0")) })),
+  );
+  const weekPrev = h("button", { class: "button button-icon", type: "button", "aria-label": T.weekPrev, title: T.weekPrev }, icon("left"));
+  const weekNext = h("button", { class: "button button-icon", type: "button", "aria-label": T.weekNext, title: T.weekNext }, icon("right"));
+  const period = h("p", { class: "note" });
+  const dateBlock = h(
+    "div",
+    { class: "sheet-date" },
+    h("label", { class: "card-title", for: "landing-date", text: T.dateTitle }),
+    h("div", { class: "date-row" }, weekPrev, dateInput, hourSelect, weekNext),
+    period,
+  );
+  let nowMs = 0;
+  const goTo = (): void => {
+    const t = Date.parse(`${dateInput.value}T${hourSelect.value.padStart(2, "0")}:00:00Z`);
+    if (Number.isFinite(t)) actions.goToTime(t);
+  };
+  dateInput.addEventListener("change", goTo);
+  hourSelect.addEventListener("change", goTo);
+  weekPrev.addEventListener("click", () => actions.goToTime(nowMs - WEEK_MS));
+  weekNext.addEventListener("click", () => actions.goToTime(nowMs + WEEK_MS));
+
+  // --- One answer: possible, night at this time, or not possible. Then the one useful action. ---
+  const verdictTitle = h("b", { class: "verdict-title" });
+  const verdictText = h("p", { class: "verdict-text" });
+  const reasons = h("div", { class: "verdict-reasons" });
+  const land = h("button", { class: "button button-primary", type: "button", text: T.land });
+  const sunrise = h("button", { class: "button button-primary", type: "button", text: T.toSunrise });
+  const goDate = h("button", { class: "button button-primary", type: "button", text: T.goToDate });
+  const options = h("button", { class: "button", type: "button", text: T.seeOptions });
+  const verdictBox = h("div", { class: "verdict-box" }, verdictTitle, verdictText, reasons, h("div", { class: "verdict-actions" }, land, sunrise, goDate, options));
+  let riseMs: number | null = null;
+  let nextDate: string | null = null;
+  land.addEventListener("click", () => actions.land());
+  sunrise.addEventListener("click", () => {
+    // One display step after the rise, so the Sun is already above the terrain.
+    if (riseMs !== null) actions.jumpTo(riseMs + 600_000);
+  });
+  goDate.addEventListener("click", () => {
+    if (nextDate) actions.setDate(nextDate);
+  });
+  options.addEventListener("click", () => actions.setCompare(true, "date"));
+
+  // --- The Sun and the Earth: now, and in days out of the 30 studied. ---
+  const card = (kind: "sun" | "earth", title: string, daysLabel: string, rgb: string) => {
     const status = h("b", { class: "status-text" });
     const next = h("span", { class: "status-next" });
-    // Scientist display: angles, disc state and the exact UTC time of the next event.
-    const exact = h("span", { class: "status-exact only-expert" });
-    const event = h("span", { class: "status-exact only-expert" });
-    const why = h("p", { class: "status-why only-simple", text: kind === "sun" ? T.whySun : T.whyEarth });
-    const share = h("span");
+    const days = h("b", { class: "status-days" });
     const fill = h("i");
     fill.style.background = `rgb(${rgb})`;
     const el = h(
       "div",
       { class: `status status-${kind}` },
       h("span", { class: `cond-icon cond-${kind}` }, icon(kind)),
-      h("div", { class: "status-main" }, h("small", { class: "status-kicker", text: title }), status, next, exact, event),
-      h("div", { class: "status-share" }, h("div", { class: "meter-track" }, fill), h("small", null, share), why),
+      h("div", { class: "status-main" }, h("small", { class: "status-kicker", text: title }), status, next),
+      h("div", { class: "status-share" }, h("p", null, days, " ", daysLabel), h("div", { class: "meter-track" }, fill)),
     );
-    return { el, status, next, exact, event, share, fill };
+    return { el, status, next, days, fill };
   };
-  const panelLine = h("p", { class: "status-why" });
-  const sun = card("sun", T.power, SUN_RGB);
-  sun.el.append(panelLine);
-  const earth = card("earth", T.comms, EARTH_RGB);
-  const bothFill = h("i");
-  const bothValue = h("b");
-  const both = h("div", { class: "meter" }, h("span", { text: T.bothShare }), bothValue, h("div", { class: "meter-track" }, bothFill));
+  const sun = card("sun", T.sunCard, T.sunDays, SUN_RGB);
+  const earth = card("earth", T.earthCard, T.earthDays, EARTH_RGB);
 
+  // --- The year: one cell per weekly landing date. ---
+  const yearGrid = h("div", { class: "year-grid" });
+  const yearBlock = h(
+    "div",
+    { class: "block" },
+    h("h3", { class: "card-title", text: T.yearTitle }),
+    h("p", { class: "note", text: T.yearLead }),
+    yearGrid,
+    h("div", { class: "cal-legend" }, h("i", { class: "cal-key is-go" }), T.legendGo, h("i", { class: "cal-key is-nogo" }), T.legendNo),
+  );
+  yearGrid.addEventListener("click", (event) => {
+    const date = (event.target as HTMLElement).closest<HTMLElement>("[data-date]")?.dataset.date;
+    if (date) actions.setDate(date);
+  });
+
+  const learn = h(
+    "div",
+    { class: "block" },
+    h("h3", { class: "card-title", text: T.learnTitle }),
+    h(
+      "ul",
+      { class: "learn" },
+      ...T.learn.map((item, i) => h("li", null, h("span", { class: `cond-icon cond-${["sun", "earth", "date"][i]}` }, icon(["sun", "earth", "clock"][i])), h("div", null, h("b", { text: item.title }), h("p", { text: item.text })))),
+    ),
+  );
+
+  // --- Scientific details: folded, complete. ---
   const sky = createSkyChart();
   const skyNote = h("p", { class: "note" });
   const line = (label: string) => {
@@ -111,7 +159,17 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     return { row: h("div", { class: "cond-line" }, h("span", { text: label }), value), value };
   };
   const sunHeight = line(T.sunHeight);
+  const sunDisk = line(T.sunDisk);
+  const sunEvent = line(T.nextSun);
+  const panel = line(T.panelFactor);
   const earthHeight = line(T.earthHeight);
+  const earthDisk = line(T.earthDisk);
+  const earthEvent = line(T.nextEarth);
+  const sunAny = line(T.sunAny);
+  const sunFull = line(T.sunFull);
+  const earthAny = line(T.earthAny);
+  const earthFull = line(T.earthFull);
+  const both = line(T.bothShare);
   const night = line(T.longestNight);
   const blackout = line(T.longestBlackout);
   const maxSun = line(T.maxSun);
@@ -121,37 +179,8 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   const traceModel = line(T.modelLevel);
   const traceValidation = line(T.validation);
   const traceCoverage = line(T.coverage);
-  const customNote = h("p", { class: "warn-box", text: T.customWarning, hidden: true });
-  // Go / no-go for this site and this date, by the user's criteria, with a way out when it is no.
-  const verdictBox = h("div", { class: "verdict-box" });
-  const uses = h(
-    "div",
-    { class: "block" },
-    h("h3", { class: "block-title", text: T.solarTitle }),
-    h("ul", { class: "facts" }, ...T.solarUses.map((text) => h("li", { text }))),
-    h("h3", { class: "block-title", text: T.whyChanges }),
-    h("ul", { class: "facts" }, h("li", { text: T.whyDay }), h("li", { text: T.whySeason }), h("li", { text: T.whyEarthMoves })),
-  );
-  const factList = h("ul", { class: "facts" });
-  const facts = h("div", { class: "block only-simple" }, h("h3", { class: "block-title", text: T.factsTitle }), factList);
-  const insightList = h("ul", { class: "insights" });
-  const compare = h("button", { class: "button button-wide", type: "button" }, icon("table"), T.compareThis);
-  compare.addEventListener("click", () => actions.setCompare(true));
-
-  const yearMonths = h("div", { class: "year-months", "aria-hidden": "true" });
-  const yearGrid = h("div", { class: "year-grid" });
-  const yearBlock = h(
-    "div",
-    { class: "block" },
-    h("h3", { class: "block-title", text: T.yearTitle }),
-    yearMonths,
-    yearGrid,
-    h("p", { class: "note", text: T.yearNote }),
-  );
-
   const sensBody = h("div", { class: "sens-body" });
-  const sensBlock = h("div", { class: "block sens-block", hidden: true }, h("h3", { class: "block-title", text: T.sensTitle }), sensBody);
-
+  const sensBlock = h("div", { hidden: true }, h("h3", { class: "block-title", text: T.sensTitle }), sensBody);
   const heightButtons = HEIGHTS.map((m) => {
     const b = h("button", { class: "seg", type: "button", text: `${m} m` });
     b.addEventListener("click", () => actions.setHeight(m));
@@ -159,30 +188,37 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   });
   const model = h("p", { class: "cond-model" });
   const limits = h("ul", { class: "limits" });
-
-  // Everything precise lives here. Closed for everyone, open and first-class for scientists.
   const more = h(
     "details",
-    { class: "more", open: true },
+    { class: "more" },
     h("summary", { text: T.moreTitle }),
+    h("figure", { class: "sky-fig" }, sky.el, h("figcaption", null, skyNote)),
     h("h3", { class: "block-title", text: T.now }),
     sunHeight.row,
+    sunDisk.row,
+    sunEvent.row,
+    panel.row,
     earthHeight.row,
-    h("p", { class: "note", text: T.elevation }),
+    earthDisk.row,
+    earthEvent.row,
     h("h3", { class: "block-title", text: T.over30 }),
+    sunAny.row,
+    sunFull.row,
+    earthAny.row,
+    earthFull.row,
+    both.row,
     night.row,
     blackout.row,
     maxSun.row,
     maxEarth.row,
     meanSun.row,
+    sensBlock,
     h("h3", { class: "block-title", text: T.height }),
     h("div", { class: "segmented" }, ...heightButtons),
     h("p", { class: "note", text: T.heightNote }),
     model,
     h("p", { class: "note", text: T.notModeled }),
     h("details", { class: "limits-box" }, h("summary", { text: T.limitsTitle }), h("p", { class: "note", text: T.limitsNote }), limits),
-  );
-  more.append(
     h("h3", { class: "block-title", text: T.traceTitle }),
     traceScenario.row,
     traceModel.row,
@@ -190,99 +226,34 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     traceCoverage.row,
   );
 
-  // Head of the sheet: what the site is, the verdict, and the one action that makes sense now.
-  const verdictSlot = h("span");
-  const actionText = h("p", { class: "sheet-action-text" });
-  const land = h("button", { class: "button button-primary", type: "button" }, icon("nav"), T.land);
-  const sunrise = h("button", { class: "button button-primary", type: "button" }, icon("sun"), T.toSunrise);
-  const options = h("button", { class: "button button-primary", type: "button" }, icon("table"), T.seeOptions);
-  const close = h("button", { class: "panel-toggle", type: "button", "aria-label": T.closeSheet, title: T.closeSheet }, icon("close"));
-  let riseMs: number | null = null;
-  land.addEventListener("click", () => actions.land());
-  sunrise.addEventListener("click", () => {
-    // One display step after the rise, so the Sun is already above the terrain.
-    if (riseMs !== null) actions.jumpTo(riseMs + 600_000);
-  });
-  options.addEventListener("click", () => actions.setCompare(true, "delay"));
-  close.addEventListener("click", () => actions.back());
-
-  // Four short tabs instead of one long scroll.
-  type Tab = "summary" | "year" | "learn" | "detail";
-  let tab: Tab = "summary";
-  const panes: Record<Tab, HTMLElement> = {
-    summary: h(
-      "div",
-      { class: "pane" },
-      customNote,
-      verdictBox,
-      sun.el,
-      earth.el,
-      both,
-      h("figure", { class: "sky-fig" }, sky.el, h("figcaption", { class: "note" }, h("span", { class: "only-simple", text: T.skyCaption }), h("span", { class: "only-expert" }, skyNote))),
-      insightList,
-    ),
-    year: h("div", { class: "pane" }, yearBlock, sensBlock, compare),
-    learn: h("div", { class: "pane" }, uses, facts),
-    detail: h("div", { class: "pane" }, more),
-  };
-  const tabButtons = (Object.keys(panes) as Tab[]).map((id) => {
-    const label = { summary: T.tabSummary, year: T.tabYear, learn: T.tabLearn, detail: T.tabDetail }[id];
-    const b = h("button", { class: `seg ${id === "detail" ? "only-expert" : ""}`, type: "button", text: label });
-    b.addEventListener("click", () => showTab(id));
-    return { id, b };
-  });
-  function showTab(next: Tab): void {
-    tab = next;
-    for (const { id, b } of tabButtons) {
-      b.classList.toggle("is-on", id === tab);
-      panes[id].hidden = id !== tab;
-    }
-  }
-  showTab("summary");
-
-  const panel = h(
+  const sheet = h(
     "section",
     { class: "panel conditions", "aria-label": T.sheetTitle, hidden: true },
     h("header", { class: "sheet-head" }, h("div", { class: "cond-head" }, name, place, tags), close),
-    h("div", { class: "sheet-action" }, h("div", { class: "sheet-action-row" }, verdictSlot, land, sunrise, options), actionText),
-    h("div", { class: "segmented segmented-wide sheet-tabs" }, ...tabButtons.map((t) => t.b)),
-    h("div", { class: "sheet-scroll" }, ...Object.values(panes)),
+    h("div", { class: "sheet-scroll" }, estimate, dateBlock, verdictBox, sun.el, earth.el, yearBlock, h("div", { class: "block" }, createCriteria(store, actions)), learn, more),
   );
 
-  yearGrid.addEventListener("click", (event) => {
-    const date = (event.target as HTMLElement).closest<HTMLElement>("[data-date]")?.dataset.date;
-    if (date) actions.setDate(date);
-  });
-
   function renderYear(site: Site, s: AppState): void {
-    const sweep = sweepFor(derived, site, s.heightM);
-    yearBlock.hidden = sweep === null;
-    if (!sweep) return;
-    const suns = sweep.values["sun.anyDisk.fraction"] ?? [];
-    const earths = sweep.values["earth.anyDisk.fraction"] ?? [];
-    let lastMonth = "";
-    yearMonths.replaceChildren(
-      ...sweep.dates.map((date) => {
-        const month = date.slice(0, 6);
-        const first = month !== lastMonth;
-        lastMonth = month;
-        return h("span", { text: first ? formatMonth(date).slice(0, 1).toUpperCase() : "" });
-      }),
-    );
     yearGrid.replaceChildren(
-      ...sweep.dates.map((date, i) => {
-        const top = h("i");
-        const bottom = h("i");
-        top.style.background = shade(SUN_RGB, suns[i] ?? null);
-        bottom.style.background = shade(EARTH_RGB, earths[i] ?? null);
-        const label = T.yearCell(formatShortDate(date), percent(suns[i] ?? null), percent(earths[i] ?? null));
-        return h(
-          "button",
-          { class: `year-cell ${date === s.date ? "is-current" : ""}`, type: "button", "data-date": date, title: label, "aria-label": label },
-          top,
-          bottom,
-        );
-      }),
+      ...monthGroups(s.dates).map((g) =>
+        h(
+          "div",
+          { class: "year-month" },
+          h("small", { text: g.label }),
+          h(
+            "div",
+            { class: "year-cells" },
+            ...g.dates.map((date) => {
+              const values = valuesAt(derived, site, s.heightM, date);
+              const status = verdictAt(derived, site, s.heightM, date, s.criteria).status;
+              const days = (v: number | null | undefined): string => (v === null || v === undefined ? "—" : formatDays(v));
+              const verdict = status === "go" ? T.go : status === "nogo" ? T.nogo : T.unknownVerdict;
+              const label = T.cellTitle(formatShortDate(date), days(values[SUN]), days(values[EARTH]), verdict);
+              return h("button", { class: `cal-cell is-${status} ${date === s.date ? "is-picked" : ""}`, type: "button", "data-date": date, title: label, "aria-label": label });
+            }),
+          ),
+        ),
+      ),
     );
   }
 
@@ -297,7 +268,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
         .map((c) => {
           const cell = h("i", {
             class: c.northKm === 0 && c.eastKm === 0 ? "is-center" : "",
-            title: `${c.northKm >= 0 ? "+" : ""}${c.northKm} km N, ${c.eastKm >= 0 ? "+" : ""}${c.eastKm} km E · ${percent(c[key])}`,
+            title: `${c.northKm >= 0 ? "+" : ""}${c.northKm} km N, ${c.eastKm >= 0 ? "+" : ""}${c.eastKm} km E, ${percent(c[key])}`,
           });
           cell.style.background = shade(rgb, c[key]);
           return cell;
@@ -306,8 +277,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
       box.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
       box.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
       const range = entry.ranges.find((r) => r.metricId === `${key}.anyDisk.fraction`);
-      const text =
-        range && range.min !== null && range.max !== null ? T.sensRange(label, formatPercent0(range.min), formatPercent0(range.max)) : label;
+      const text = range && range.min !== null && range.max !== null ? T.sensRange(label, formatPercent0(range.min), formatPercent0(range.max)) : label;
       return h("figure", { class: "sens-fig" }, box, h("figcaption", { text }));
     };
     sensBody.replaceChildren(
@@ -320,93 +290,84 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   function renderStill(site: Site, s: AppState, scenario: Scenario): void {
     const label = siteLabel(site);
     name.textContent = label.title;
-    place.textContent = label.place ? `${label.place} · ${formatCoords(site)}` : formatCoords(site);
+    place.textContent = label.place ? `${label.place}, ${formatCoords(site)}` : formatCoords(site);
     const custom = site.computed === true;
-    customNote.hidden = !custom;
-    const statusText =
-      site.status === "custom" ? T.statusCustom : site.status === "study_point" ? T.statusStudy : site.status === "announced" ? T.statusAnnounced : T.statusHistorical;
-    tags.replaceChildren(
-      h("span", { class: "tag", text: statusText }),
-      custom
-        ? h("span", { class: "tag tag-warn", text: T.customTag })
-        : h("span", { class: `tag ${site.verification === "unverified" ? "tag-warn" : ""}`, text: T.verification[site.verification] ?? site.verification }),
-    );
+    estimate.hidden = !custom;
+    const statusText = site.status === "custom" ? T.statusCustom : site.status === "study_point" ? T.statusStudy : site.status === "announced" ? T.statusAnnounced : T.statusHistorical;
+    tags.replaceChildren(h("span", { class: "tag", text: statusText }));
+    if (custom) tags.append(h("span", { class: "tag tag-warn", text: T.estimateTag }));
 
+    // The period studied: 30 days from the weekly date that contains the chosen moment.
+    const t0 = dateMs(s.date);
+    period.textContent = T.periodOf(formatDayMonth(t0), formatDayMonth(t0 + 29 * 86_400_000));
+    if (s.dates.length > 0) {
+      dateInput.min = new Date(dateMs(s.dates[0])).toISOString().slice(0, 10);
+      dateInput.max = new Date(dateMs(s.dates[s.dates.length - 1]) + 29 * 86_400_000).toISOString().slice(0, 10);
+    }
+
+    const share = (id: string, target: { days: HTMLElement; fill: HTMLElement }): void => {
+      const v = metric(scenario, id);
+      target.fill.style.width = `${(v ?? 0) * 100}%`;
+      target.days.textContent = v === null ? "—" : formatDays(v);
+    };
+    share(SUN, sun);
+    share(EARTH, earth);
+
+    // Why the answer is no, and the way out: the next date when this site is possible again.
+    const verdict = verdictAt(derived, site, s.heightM, s.date, s.criteria);
+    nextDate = null;
+    const lines = failureLines(verdict, valuesAt(derived, site, s.heightM, s.date), s.criteria).map((text) => h("p", { text }));
+    if (verdict.status === "nogo") {
+      nextDate = nextGoDate(derived, site, s.heightM, s.date, s.criteria);
+      lines.push(h("p", { class: "verdict-next", text: nextDate ? T.nextGo(formatShortDate(nextDate), s.dates.indexOf(nextDate) - s.dates.indexOf(s.date)) : T.nextGoNone }));
+    }
+    reasons.replaceChildren(...lines);
+    reasons.hidden = lines.length === 0;
+
+    renderYear(site, s);
+
+    // Scientific details.
     sky.setData(s.series, s.horizon, site.latDeg < 0);
     const lola = parseScenarioId(scenario.scenarioId)?.model === "lola";
     skyNote.textContent = lola && s.horizon ? T.skyNote : T.skyNoteFlat;
-
-    const expert = s.mode === "expert";
-    // Everyone: days out of 30. Scientist: percent with one decimal, for both disc conventions.
-    const share = (id: string, fill: HTMLElement): string => {
-      const v = metric(scenario, id);
-      fill.style.width = `${(v ?? 0) * 100}%`;
-      return v === null ? "—" : expert ? percent(v) : formatShareDays(v);
-    };
-    const sunAny = share("sun.anyDisk.fraction", sun.fill);
-    const earthAny = share("earth.anyDisk.fraction", earth.fill);
-    sun.share.textContent = expert ? T.expertShares(sunAny, percent(metric(scenario, "sun.fullDisk.fraction"))) : T.litShare(sunAny);
-    earth.share.textContent = expert ? T.expertShares(earthAny, percent(metric(scenario, "earth.fullDisk.fraction"))) : T.linkShare(earthAny);
-    bothValue.textContent = share("overlap.sunAny_earthAny.fraction", bothFill);
     const hours = (id: string): string => {
       const v = metric(scenario, id);
-      return v === null ? "—" : expert ? `${formatHoursExact(v)} (${formatHours(v)})` : formatHours(v);
+      return v === null ? "—" : `${formatHoursExact(v)} (${formatHours(v)})`;
     };
-
-    // Plain facts for everyone, picked by where the site is. General knowledge, not dataset values.
-    const polar = site.latDeg <= -80;
-    const earthShare = metric(scenario, "earth.anyDisk.fraction");
-    factList.replaceChildren(
-      ...[T.facts.day, polar ? T.facts.pole : null, polar ? T.facts.poleEarth : earthShare === 1 ? T.facts.nearSide : null]
-        .filter((text): text is string => text !== null)
-        .map((text) => h("li", { text })),
-    );
-    // The precision tab is for scientists: leaving that display brings back the summary.
-    if (!expert && tab === "detail") showTab("summary");
-
-    const verdict = verdictAt(derived, site, s.heightM, s.date, s.criteria);
-    const lines = failureLines(verdict, valuesAt(derived, site, s.heightM, s.date), s.criteria, s.mode).map((text) => h("p", { class: "plan-fail", text }));
-    const exits: HTMLElement[] = [];
-    if (verdict.status === "nogo") {
-      const next = nextGoDate(derived, site, s.heightM, s.date, s.criteria);
-      if (next) {
-        const go = h("button", { class: "button button-small", type: "button" }, icon("right"), T.goToDate);
-        go.addEventListener("click", () => actions.setDate(next));
-        const weeks = s.dates.indexOf(next) - s.dates.indexOf(s.date);
-        exits.push(h("p", { class: "plan-next", text: T.nextGo(formatShortDate(next), weeks) }), go);
-      } else exits.push(h("p", { class: "plan-next", text: T.nextGoNone }));
-    }
-    verdictSlot.replaceChildren(verdictPill(verdict));
-    // The reasons and the ways out are only needed when the answer is not a plain yes.
-    verdictBox.hidden = verdict.status === "go";
-    verdictBox.className = `verdict-box is-${verdict.status}`;
-    verdictBox.replaceChildren(...lines, ...exits, h("p", { class: "note", text: T.verdictNote }));
-    traceScenario.value.textContent = scenario.scenarioId;
-    traceModel.value.textContent = scenario.modelLevel;
-    traceValidation.value.textContent = scenario.validationStatus;
-    traceCoverage.value.textContent = scenario.coverageStatus;
     const degrees = (id: string): string => {
       const v = metric(scenario, id);
       return v === null ? "—" : formatDeg(v);
     };
+    sunAny.value.textContent = percent(metric(scenario, "sun.anyDisk.fraction"));
+    sunFull.value.textContent = percent(metric(scenario, "sun.fullDisk.fraction"));
+    earthAny.value.textContent = percent(metric(scenario, "earth.anyDisk.fraction"));
+    earthFull.value.textContent = percent(metric(scenario, "earth.fullDisk.fraction"));
+    both.value.textContent = percent(metric(scenario, "overlap.sunAny_earthAny.fraction"));
     night.value.textContent = hours("sun.anyDisk.longestGapH");
     blackout.value.textContent = hours("earth.anyDisk.longestGapH");
     maxSun.value.textContent = degrees("sun.maxElevDeg");
     maxEarth.value.textContent = degrees("earth.maxElevDeg");
     meanSun.value.textContent = degrees("sun.meanElevWhenAnyDiskDeg");
-    insightList.replaceChildren(...insights(scenario).map((text) => h("li", { text })));
-
-    renderYear(site, s);
     renderSensitivity(site, s);
     heightButtons.forEach((b, i) => b.classList.toggle("is-on", HEIGHTS[i] === s.heightM));
     model.textContent = custom ? T.modelCustom : lola ? T.modelLola : T.modelGeometric;
     limits.replaceChildren(...scenario.limits.map((text) => h("li", { text })));
-    if (site.source) limits.append(h("li", { text: `Position: ${site.source.title} — ${site.source.url}` }));
+    if (site.source) limits.append(h("li", { text: `Position: ${site.source.title}, ${site.source.url}` }));
+    if (!custom && site.verification !== "verified" && T.verification[site.verification]) limits.append(h("li", { text: T.verification[site.verification] }));
+    traceScenario.value.textContent = scenario.scenarioId;
+    traceModel.value.textContent = scenario.modelLevel;
+    traceValidation.value.textContent = scenario.validationStatus;
+    traceCoverage.value.textContent = scenario.coverageStatus;
   }
 
   function renderNow(s: AppState, scenario: Scenario): void {
     if (!s.series) return;
     const sample = sampleSeries(s.series, s.index);
+    nowMs = sample.tMs;
+    const iso = new Date(sample.tMs).toISOString();
+    if (document.activeElement !== dateInput && dateInput.value !== iso.slice(0, 10)) dateInput.value = iso.slice(0, 10);
+    if (document.activeElement !== hourSelect) hourSelect.value = String(Number(iso.slice(11, 13)));
+
     const sunNow = visibilityAt(scenario, "sun.anyDisk", sample.tMs);
     const earthNow = visibilityAt(scenario, "earth.anyDisk", sample.tMs);
     sun.status.textContent = sunStatus(sample.sunState);
@@ -415,41 +376,56 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     earth.status.textContent = earthStatus(sample.earthState);
     earth.next.textContent = countdown(earthNow, sample.tMs, "earth");
     earth.el.classList.toggle("is-off", !earthNow.visible);
-    sunHeight.value.textContent = formatElevation(sample.sunElDeg);
-    earthHeight.value.textContent = formatElevation(sample.earthElDeg);
-    sun.exact.textContent = `${T.expertNow(formatElevation(sample.sunElDeg), formatDeg(sample.sunAzDeg))} · ${diskText(sample.sunState)}`;
-    earth.exact.textContent = `${T.expertNow(formatElevation(sample.earthElDeg), formatDeg(sample.earthAzDeg))} · ${diskText(sample.earthState)}`;
-    const at = (v: Visibility, set: string, rise: string): string => (v.changeMs === null ? "" : `${v.visible ? set : rise} : ${formatStamp(new Date(v.changeMs).toISOString())}`);
-    sun.event.textContent = at(sunNow, T.eventLabels.sunSet, T.eventLabels.sunRise);
-    // Light caught by a flat panel: the sine of the Sun's height. Geometry only, no panel size or power.
-    const flat = Math.max(0, Math.sin((sample.sunElDeg * Math.PI) / 180));
-    panelLine.hidden = !sunNow.visible;
-    panelLine.textContent =
-      s.mode === "expert" ? T.panelExpert(flat.toFixed(2)) : flat < 0.5 ? T.panelFlat(formatPercent0(flat)) : T.panelHigh(formatPercent0(flat));
-    earth.event.textContent = at(earthNow, T.eventLabels.earthSet, T.eventLabels.earthRise);
-    sky.setNow(sample);
 
-    // One action at a time, and only before the flight.
-    const choice = s.phase === "focus" ? landingChoice(s, derived) : { kind: "none" as const, text: "", riseMs: null };
-    land.hidden = choice.kind !== "land";
-    sunrise.hidden = choice.kind !== "sunrise";
-    options.hidden = choice.kind !== "options";
-    riseMs = choice.riseMs;
-    actionText.textContent = choice.text;
-    actionText.hidden = choice.text === "";
+    // One answer and one action, and only before the flight.
+    const choice = landingChoice(s, derived);
+    const idle = s.phase === "focus";
+    verdictBox.hidden = choice === null;
+    if (choice) {
+      verdictBox.className = `verdict-box is-${choice.tone}`;
+      verdictTitle.textContent = choice.title;
+      verdictText.textContent = choice.text;
+      verdictText.hidden = choice.text === "";
+      riseMs = choice.riseMs;
+      land.hidden = !idle || choice.kind !== "land";
+      sunrise.hidden = !idle || choice.kind !== "sunrise";
+      goDate.hidden = !idle || choice.kind !== "options" || nextDate === null;
+      options.hidden = !idle || choice.kind !== "options";
+    }
+
+    // Scientific details.
+    sunHeight.value.textContent = `${formatElevation(sample.sunElDeg)}, ${formatDeg(sample.sunAzDeg)}`;
+    earthHeight.value.textContent = `${formatElevation(sample.earthElDeg)}, ${formatDeg(sample.earthAzDeg)}`;
+    sunDisk.value.textContent = diskText(sample.sunState);
+    earthDisk.value.textContent = diskText(sample.earthState);
+    const at = (v: Visibility): string => (v.changeMs === null ? T.noEvent : formatStamp(new Date(v.changeMs).toISOString()));
+    sunEvent.value.textContent = at(sunNow);
+    earthEvent.value.textContent = at(earthNow);
+    // Light caught by a flat panel: the sine of the Sun's height. Geometry only, no panel size or power.
+    panel.value.textContent = formatPercent0(sunNow.visible ? Math.max(0, Math.sin((sample.sunElDeg * Math.PI) / 180)) : 0);
+    sky.setNow(sample);
   }
 
   store.subscribe((s, p) => {
     const site = s.sites.find((x) => x.id === s.siteId);
     const ready = site !== undefined && s.lightSiteId === s.siteId && s.series !== null && s.scenario !== null;
-    const show = s.phase !== "cruise" && site !== undefined;
-    const wasHidden = panel.hidden;
-    panel.hidden = !show;
-    panel.classList.toggle("is-loading", show && !ready);
+    const show = s.phase !== "cruise" && site !== undefined && !s.touring;
+    const wasHidden = sheet.hidden;
+    sheet.hidden = !show;
+    sheet.classList.toggle("is-loading", show && !ready);
     if (!show || !ready || !site || !s.scenario) return;
-    const still = wasHidden || s.mode !== p.mode || s.criteria !== p.criteria || s.date !== p.date || s.customTick !== p.customTick || s.scenario !== p.scenario || s.series !== p.series || s.horizon !== p.horizon || s.heightM !== p.heightM || s.lightSiteId !== p.lightSiteId;
+    const still =
+      wasHidden ||
+      s.criteria !== p.criteria ||
+      s.date !== p.date ||
+      s.customTick !== p.customTick ||
+      s.scenario !== p.scenario ||
+      s.series !== p.series ||
+      s.horizon !== p.horizon ||
+      s.heightM !== p.heightM ||
+      s.lightSiteId !== p.lightSiteId;
     if (still) renderStill(site, s, s.scenario);
     if (still || s.index !== p.index || s.phase !== p.phase) renderNow(s, s.scenario);
   });
-  return panel;
+  return sheet;
 }

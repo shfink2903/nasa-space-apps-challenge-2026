@@ -1,8 +1,8 @@
 import { sampleSeries, type Series } from "../data/dataset";
 import type { Actions, Store } from "../state";
 import { h, icon } from "./dom";
-import { formatClock, formatDay, formatShortDate, formatStartDate, siteLabel } from "./format";
-import { LOCALE, T } from "./strings";
+import { formatClock, formatDayMonth, siteLabel } from "./format";
+import { T } from "./strings";
 
 const SUN_RGB = "255,186,96";
 const EARTH_RGB = "157,188,255";
@@ -16,116 +16,85 @@ function drawTrack(canvas: HTMLCanvasElement, series: Series | null): void {
   canvas.height = hgt;
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, w, hgt);
-  ctx.fillStyle = "rgba(255,255,255,0.06)";
-  ctx.fillRect(0, 0, w, hgt);
   if (!series) return;
-  const gap = Math.max(1, Math.round(2 * ratio));
+  const gap = Math.max(2, Math.round(6 * ratio));
   const band = Math.floor((hgt - gap) / 2);
-  ctx.clearRect(0, band, w, gap);
   for (let x = 0; x < w; x++) {
     const i = Math.round((x / (w - 1 || 1)) * (series.n - 1));
     for (const [state, rgb, y] of [
       [series.sunState[i], SUN_RGB, 0],
       [series.earthState[i], EARTH_RGB, band + gap],
     ] as const) {
-      ctx.fillStyle =
-        state === 2 ? `rgba(${rgb},0.95)` : state === 1 ? `rgba(${rgb},0.45)` : state === 0 ? "rgba(96,112,150,0.22)" : "rgba(255,255,255,0.12)";
+      ctx.fillStyle = state === 2 ? `rgb(${rgb})` : state === 1 ? `rgba(${rgb},0.5)` : "rgba(255,255,255,0.08)";
       ctx.fillRect(x, y, 1, band);
     }
   }
-  ctx.fillStyle = "rgba(5,7,12,0.55)";
-  for (let d = 5; d < 30; d += 5) ctx.fillRect(Math.round((d / 30) * w), 0, Math.max(1, ratio), hgt);
 }
 
-/** Top-right: clock, start date, 30-day scrubber, play and speed. */
+/**
+ * Bottom bar, shown with a site: the 30 studied days as two bands (Sun
+ * visible, Earth visible) and one cursor. Play moves the cursor.
+ */
 export function createTimeBar(store: Store, actions: Actions): HTMLElement {
-  const clock = h("span", { class: "clock-time", text: "--:--" });
-  const date = h("span", { class: "clock-date", text: "" });
-  const offset = h("span", { class: "scrub-now", text: `${T.dayLetter} + 0` });
-  const select = h("select", { class: "select", id: "start-date", "aria-label": T.startDate });
-  // Any date and time inside the data: the app finds the weekly start that contains it.
-  const when = h("input", { class: "select when", id: "landing-time", type: "datetime-local", min: "2026-12-01T00:00", max: "2027-12-23T00:00" });
-  const period = h("p", { class: "note" });
-  when.addEventListener("change", () => {
-    const t = Date.parse(`${when.value}Z`);
-    if (Number.isFinite(t)) actions.goToTime(t);
-  });
+  const title = h("b", { class: "dock-title" });
+  const day = h("b", { class: "dock-day" });
+  const moment = h("span", { class: "dock-moment" });
+  const from = h("span");
+  const to = h("span");
   const track = h("canvas", { class: "scrub-track", "aria-hidden": "true" });
   const range = h("input", { class: "scrub-range", type: "range", min: 0, max: 4320, step: 1, value: 0, "aria-label": T.timeTitle });
   const playLabel = h("span", { text: T.play });
-  const play = h("button", { class: "button", type: "button" }, icon("play"), playLabel);
-  const speed = h(
-    "select",
-    { class: "select select-small", "aria-label": T.speed },
-    ...T.speeds.map((s) => h("option", { value: s.value, text: s.label })),
-  );
-  const lightOf = h("span", { class: "legend-site", text: "" });
+  const play = h("button", { class: "button button-primary dock-play", type: "button" }, icon("play"), playLabel);
 
-  // Bottom dock, full width: play, the landing date and time, then the 30 days as two bands.
-  play.classList.add("button-primary", "dock-play");
   const panel = h(
     "section",
     { class: "panel time dock", "aria-label": T.timeTitle },
-    h("div", { class: "dock-controls" }, play, speed),
+    h("div", { class: "dock-side" }, play, h("div", { class: "dock-now" }, day, moment)),
     h(
       "div",
-      { class: "dock-when" },
-      h("div", { class: "clock" }, clock, date, h("span", { class: "badge", text: "UTC" })),
-      h("label", { class: "field-label", for: "landing-time", text: T.landingTime }),
-      when,
-      h("div", { class: "only-expert dock-start" }, h("label", { class: "field-label", for: "start-date" }, T.startDate), select),
-    ),
-    h(
-      "div",
-      { class: "dock-track" },
-      h("div", { class: "legend" }, h("i", { class: "dot dot-day" }), T.legendSun, h("i", { class: "dot dot-earth" }), T.legendEarth, lightOf),
-      h("div", { class: "scrub" }, track, range),
-      h("div", { class: "scrub-scale" }, h("span", { text: `${T.dayLetter} + 0` }), offset, h("span", { text: `${T.dayLetter} + 30` })),
-      h("div", { class: "dock-foot" }, period, h("small", { class: "credits", text: T.credits })),
+      { class: "dock-main" },
+      title,
+      h(
+        "div",
+        { class: "dock-bands" },
+        h("div", { class: "band-labels", "aria-hidden": "true" }, h("span", { class: "band-sun", text: T.bandSun }), h("span", { class: "band-earth", text: T.bandEarth })),
+        h("div", { class: "scrub" }, track, range),
+      ),
+      h("div", { class: "dock-scale" }, h("span"), h("div", null, from, to)),
     ),
   );
 
-  select.addEventListener("change", () => actions.setDate(select.value));
   range.addEventListener("input", () => actions.setIndex(Number(range.value)));
   play.addEventListener("click", () => actions.togglePlay());
-  speed.addEventListener("change", () => actions.setSpeed(Number(speed.value)));
   new ResizeObserver(() => drawTrack(track, store.get().series)).observe(track);
 
-  const fraction = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   store.subscribe((s, p) => {
-    if (s.dates !== p.dates) {
-      select.replaceChildren(...s.dates.map((d) => h("option", { value: d, text: formatStartDate(d) })));
-    }
-    if (s.date !== p.date || s.dates !== p.dates) select.value = s.date;
+    if (s.phase !== p.phase || s.touring !== p.touring) panel.hidden = s.phase === "cruise" || s.touring;
     if (s.series !== p.series) {
+      drawTrack(track, s.series);
       if (s.series) {
         const t0 = Date.parse(s.series.t0Utc);
-        const day = (ms: number): string => formatShortDate(new Date(ms).toISOString().slice(0, 10).replaceAll("-", ""));
-        period.textContent = T.windowOf(day(t0), day(t0 + (s.series.n - 1) * s.series.stepS * 1000));
+        range.max = String(s.series.n - 1);
+        from.textContent = `${T.dayN(1)}, ${formatDayMonth(t0)}`;
+        to.textContent = `${T.dayN(30)}, ${formatDayMonth(t0 + 29 * 86_400_000)}`;
       }
-      drawTrack(track, s.series);
-      if (s.series) range.max = String(s.series.n - 1);
     }
     if (s.lightSiteId !== p.lightSiteId || s.sites !== p.sites) {
       const site = s.sites.find((x) => x.id === s.lightSiteId);
-      lightOf.textContent = site ? T.lightOf(siteLabel(site).title) : "";
+      title.textContent = site ? T.dockTitle(siteLabel(site).title) : T.timeTitle;
     }
     if ((s.index !== p.index || s.series !== p.series) && s.series) {
       const sample = sampleSeries(s.series, s.index);
-      clock.textContent = formatClock(sample.tMs);
-      const stamp = new Date(sample.tMs).toISOString().slice(0, 16);
-      if (document.activeElement !== when && when.value !== stamp) when.value = stamp;
-      date.textContent = formatDay(sample.tMs);
-      offset.textContent = `${T.dayLetter} + ${fraction.format((s.index * s.series.stepS) / 86400)}`;
+      day.textContent = T.dayN(Math.min(30, Math.floor((s.index * s.series.stepS) / 86400) + 1));
+      moment.textContent = `${formatDayMonth(sample.tMs)}, ${formatClock(sample.tMs)} UTC`;
       if (document.activeElement !== range) range.value = String(Math.round(s.index));
       range.style.setProperty("--p", `${(s.index / (s.series.n - 1)) * 100}%`);
     }
     if (s.playing !== p.playing) {
       play.replaceChildren(icon(s.playing ? "pause" : "play"), playLabel);
       playLabel.textContent = s.playing ? T.pause : T.play;
-      play.classList.toggle("is-on", s.playing);
     }
-    if (s.speedH !== p.speedH) speed.value = String(s.speedH);
   });
+  panel.hidden = true;
   return panel;
 }

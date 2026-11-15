@@ -3,13 +3,9 @@ import type { Criteria } from "./data/mission";
 import type { Region } from "./data/ranking";
 import type { Phase } from "./flight/timeline";
 
-/** "simple": plain words for everyone. "expert": angles, UTC times, model level and limits. */
-export type Mode = "simple" | "expert";
-
 export type CompareTab = "date" | "year" | "delay";
 
 export interface AppState {
-  mode: Mode;
   /** The user's mission thresholds. They decide the go / no-go answer. */
   criteria: Criteria;
   compareTab: CompareTab;
@@ -25,7 +21,10 @@ export interface AppState {
   rankBy: string;
   /** Sites shown in the ranking and the comparison: the south pole (default) or every site. */
   region: Region;
+  /** The "Evaluate the sites" page is open (it covers the Moon). */
   compareOpen: boolean;
+  /** The "Explore the mission" tour is running. */
+  touring: boolean;
   /** Goes up each time a value of the free point is computed, so the panels redraw. */
   customTick: number;
   hoverId: string | null;
@@ -73,6 +72,10 @@ export interface Actions {
   selectSite(id: string): void;
   /** Creates (or moves) the free point at these lunar coordinates and opens it. */
   selectPoint(latDeg: number, lonDeg: number): void;
+  /** Creates (or moves) the free point without leaving the current page: it joins the tables. */
+  addPoint(latDeg: number, lonDeg: number): void;
+  /** Back to the home view: the whole Moon, no page, no tour. */
+  home(): void;
   hover(id: string | null): void;
   /** Starts the illustrative flight to the selected site. Does nothing when the Sun is not visible there. */
   land(): void;
@@ -80,12 +83,13 @@ export interface Actions {
   setHeight(heightM: number): void;
   setRankBy(id: string): void;
   setRegion(region: Region): void;
-  setMode(mode: Mode): void;
   setCompare(open: boolean, tab?: CompareTab): void;
   setCriteria(patch: Partial<Criteria>): void;
   /** Moves to a UTC date and time: picks the weekly start that contains it, then the time inside it. */
   goToTime(tMs: number): void;
   startTour(): void;
+  /** From any view to the whole Moon, with no site selected. */
+  overview(): void;
   /** Moves the time cursor to a UTC time inside the loaded 30 days. */
   jumpTo(tMs: number): void;
   setIndex(index: number): void;

@@ -1,34 +1,28 @@
-import { sweepFor, type Derived } from "../data/dataset";
-import { verdictAt } from "../data/mission";
+import { sweepFor, type Derived, type Site } from "../data/dataset";
+import { EARTH, SUN, valuesAt, verdictAt } from "../data/mission";
 import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow } from "../data/ranking";
 import type { Actions, AppState, CompareTab, Store } from "../state";
+import { createCoordsForm, createRegionSwitch, formatCriterion, monthGroups } from "./bits";
 import { h, icon } from "./dom";
-import { formatDeg, formatMonth, formatPercent0, formatShortDate, formatStartDate, siteLabel } from "./format";
+import { dateMs, formatCoords, formatDayMonth, formatDays, formatDaysShort, formatDeg, formatMonth, formatPercent0, formatShortDate, formatStartDate, siteLabel } from "./format";
 import { createPlanner } from "./planner";
-import { createRegionSwitch, formatCriterion } from "./sitelist";
 import { T } from "./strings";
-import { createCriteria, verdictPill } from "./verdict";
+import { createCriteria, failureLines, verdictPill } from "./verdict";
 
 const RGB: Record<string, string> = { overlap: "232,236,244", sun: "255,186,96", earth: "157,188,255" };
-const FRACTIONS = ["sun", "earth", "overlap"].map(criterionById);
+const SORTS = ["overlap", "sun", "earth"];
 const PLAY_MS = 650;
 
 interface Column {
   /** A criterion id (sortable), or "maxSun" / "maxEarth" / "model". */
   id: string;
   criterion: Criterion | null;
-  title: string;
-  hint: string;
-  /** Only shown at the detailed precision level. */
+  /** Only shown with exact values. */
   detail: boolean;
 }
 
-const column = (id: string, detail: boolean): Column => {
-  const criterion = CRITERIA.find((c) => c.id === id) ?? null;
-  const title = criterion ? T.criteriaShort[id] : id === "maxSun" ? T.colMaxSun : id === "maxEarth" ? T.colMaxEarth : T.colModel;
-  return { id, criterion, title, hint: T.colHints[id] ?? "", detail };
-};
-/** Dataset metric behind each column, shown to scientists under the title. */
+const column = (id: string, detail: boolean): Column => ({ id, criterion: CRITERIA.find((c) => c.id === id) ?? null, detail });
+/** Dataset metric behind each column, shown under the title with exact values. */
 const METRIC_OF: Record<string, string> = { maxSun: "sun.maxElevDeg", maxEarth: "earth.maxElevDeg" };
 const metricOf = (c: Column): string | null => c.criterion?.metricId ?? METRIC_OF[c.id] ?? null;
 const COLUMNS: Column[] = [
@@ -51,29 +45,38 @@ interface RowView {
 }
 
 /**
- * Centre sheet, the main tool: every site side by side.
- * "By date": drag the start date (or play the year) and the bars and the
- * ranking move. "Over the year": one metric for every site and every week.
- * The precision switch adds the detailed columns. Values come from the
- * dataset index; nothing is computed here.
+ * "Evaluate the sites": the main page of the tool, full screen.
+ * The user's criteria and the sites studied stay on top. Then three views:
+ * the ranking on one landing date, the full year, and the launch delay.
+ * Values come from the dataset index; nothing is computed here.
  */
 export function createCompare(store: Store, actions: Actions, derived: Derived): HTMLElement {
   let tab: CompareTab = store.get().compareTab;
   const planner = createPlanner(store, actions, derived);
-  /** The scientist display starts detailed. Everyone always gets the three simple bars. */
-  let detailed = true;
-  let precise = false;
-  let calendarMetric = "verdict";
+  let exact = false;
   let timer = 0;
   let views = new Map<string, RowView>();
   let order = "";
+  /** The cell the user clicked in the full-year view. */
+  let picked: { siteId: string; date: string } | null = null;
 
-  const tabDate = h("button", { class: "seg", type: "button", text: T.tabTable });
-  const tabYear = h("button", { class: "seg", type: "button", text: T.tabCalendar });
+  const tabDate = h("button", { class: "seg", type: "button", text: T.tabDate });
+  const tabYear = h("button", { class: "seg", type: "button", text: T.tabYear });
   const tabDelay = h("button", { class: "seg", type: "button", text: T.tabDelay });
-  const close = h("button", { class: "panel-toggle", type: "button", "aria-label": T.closeLabel }, icon("close"));
+  const lead = h("p", { class: "page-lead" });
 
-  // --- Date control: the interactive part. ---
+  // --- The sites studied: region, and the user's own coordinates. ---
+  const yourPoint = h("p", { class: "note", hidden: true });
+  const sitesCard = h(
+    "section",
+    { class: "criteria sites-card" },
+    h("header", { class: "criteria-head" }, h("h3", { class: "card-title", text: T.sitesTitle }), createRegionSwitch(store, actions)),
+    h("p", { class: "criteria-lead", text: T.coordsTitle }),
+    createCoordsForm((lat, lon) => actions.addPoint(lat, lon)),
+    yourPoint,
+  );
+
+  // --- Date control. ---
   const dateText = h("b", { class: "cmp-date-text" });
   const dateWeek = h("small");
   const slider = h("input", { class: "cmp-slider", type: "range", min: 0, max: 51, step: 1, value: 0, "aria-label": T.dateLabel });
@@ -89,52 +92,36 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     h("div", { class: "cmp-date-row" }, prev, h("div", { class: "cmp-slider-box" }, slider, months), next),
   );
 
-  // --- Options: ranking criterion and precision. ---
-  const sortSelect = h(
-    "select",
-    { class: "select select-small", id: "cmp-sort", "aria-label": T.sortedBy },
-    ...CRITERIA.map((c) => h("option", { value: c.id, text: T.criteria[c.id] })),
-  );
-  const simpleBtn = h("button", { class: "seg", type: "button", text: T.simple });
-  const preciseBtn = h("button", { class: "seg", type: "button", text: T.precise });
-  const sortOption = h("label", { class: "cmp-option", for: "cmp-sort" }, h("span", { text: T.sortedBy }), sortSelect);
-  const precisionOption = h("div", { class: "cmp-option only-expert" }, h("span", { text: T.precision }), h("div", { class: "segmented" }, simpleBtn, preciseBtn));
+  // --- Ranking order, and exact values on request. ---
+  const sortButtons = SORTS.map((id) => {
+    const b = h("button", { class: "seg", type: "button", text: T.sort[id] });
+    b.addEventListener("click", () => actions.setRankBy(id));
+    return { id, b };
+  });
+  const exactBox = h("input", { type: "checkbox", id: "cmp-exact" });
   const options = h(
     "div",
     { class: "cmp-options" },
-    h("div", { class: "cmp-option" }, h("span", { text: T.regionLabel }), createRegionSwitch(store, actions)),
-    sortOption,
-    precisionOption,
+    h("div", { class: "cmp-option" }, h("span", { text: T.sortedBy }), h("div", { class: "segmented" }, ...sortButtons.map((x) => x.b))),
+    h("label", { class: "cmp-option cmp-check", for: "cmp-exact" }, exactBox, h("span", { text: T.exact })),
   );
 
-  // The thresholds behind every verdict: one line when closed, the three sliders when opened.
-  const critSummary = h("span");
-  const criteria = h(
-    "details",
-    { class: "crit-details" },
-    h("summary", null, critSummary, h("em", { text: T.critEdit })),
-    createCriteria(store, actions),
-  );
-  const sheetTitle = h("h2", { class: "sheet-title", text: T.compareTitle });
-  const sheetSub = h("p", { class: "sheet-sub", text: T.compareLead });
-  const body = h("div", { class: "sheet-body" });
-  const note = h("p", { class: "note" });
-  const sheet = h(
+  const body = h("div", { class: "page-body" });
+  const page = h(
     "section",
-    { class: "panel sheet", role: "dialog", "aria-modal": "true", "aria-label": T.compareTitle },
+    { class: "page", "aria-label": T.evalTitle, hidden: true },
     h(
-      "header",
-      { class: "panel-head" },
-      h("div", null, sheetTitle, sheetSub),
-      h("div", { class: "sheet-tools" }, h("div", { class: "segmented" }, tabDate, tabYear, tabDelay), close),
+      "div",
+      { class: "page-inner" },
+      h("header", { class: "page-head" }, h("h1", { class: "page-title", text: T.evalTitle }), h("div", { class: "segmented page-tabs", role: "tablist" }, tabDate, tabYear, tabDelay)),
+      lead,
+      h("div", { class: "setup" }, createCriteria(store, actions), sitesCard),
+      dateBar,
+      options,
+      body,
+      h("p", { class: "page-foot", text: T.pageFoot }),
     ),
-    criteria,
-    dateBar,
-    options,
-    body,
-    note,
   );
-  const backdrop = h("div", { class: "sheet-backdrop", hidden: true }, sheet);
 
   const stop = (): void => {
     window.clearInterval(timer);
@@ -156,43 +143,52 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     actions.setCompare(false);
   };
 
+  const siteName = (site: Site, nonDominated = false): HTMLElement =>
+    h(
+      "span",
+      { class: "site-name", title: site.name },
+      h("span", { class: "site-name-text", text: siteLabel(site).title }),
+      site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }),
+      site.computed === true && h("em", { class: "tag tag-warn", title: T.customWarning, text: T.estimateShort }),
+      nonDominated && h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: T.nonDominatedTag }),
+    );
+
   const text = (c: Column, r: RankRow): string => {
     if (c.id === "model") return T.modelShort[r.model];
     const value = r.values[metricOf(c)!] ?? null;
     if (value === null) return "—";
     if (!c.criterion) return formatDeg(value);
-    return formatCriterion(c.criterion, value, store.get().mode);
+    if (c.criterion.kind === "fraction" && !exact) return formatDaysShort(value);
+    return formatCriterion(c.criterion, value, exact);
   };
 
   /** Builds the table once per precision level; `updateTable` then only changes values, so the bars animate. */
   function buildTable(s: AppState): HTMLElement {
-    const columns = COLUMNS.filter((c) => precise || !c.detail);
+    const columns = COLUMNS.filter((c) => exact || !c.detail);
     views = new Map();
     order = "";
     const head = h(
       "tr",
       null,
-      h("th", { scope: "col", class: "rank", text: "#" }),
+      h("th", { scope: "col", class: "rank" }),
       h("th", { scope: "col", class: "name", text: T.colSite }),
-      h("th", { scope: "col", class: "verdict", title: T.verdictNote }, h("span", { class: "col-title", text: T.verdictCol }), h("small", { text: T.verdictHint })),
+      h("th", { scope: "col", class: "verdict" }, h("span", { class: "col-title", text: T.colVerdict }), h("small", { text: T.colVerdictHint })),
       ...columns.map((c) => {
-        const label = h("span", { class: "col-title", text: c.title });
+        const label = h("span", { class: "col-title", text: T.cols[c.id] });
         const id = metricOf(c);
-        const hint = h("small", null, c.hint, id && h("code", { class: "only-expert", text: id }));
-        const kind = c.detail ? "is-detail" : "";
-        if (!c.criterion) return h("th", { scope: "col", "data-col": c.id, class: kind, title: c.hint }, label, hint);
+        const share = c.criterion?.kind === "fraction";
+        const hint = h("small", null, share ? (exact ? T.colShare : T.colDays) : "", exact && id ? h("code", { text: id }) : null);
+        if (!c.criterion) return h("th", { scope: "col", "data-col": c.id }, label, hint);
         const button = h("button", { type: "button" }, label, hint);
         button.addEventListener("click", () => actions.setRankBy(c.id));
-        return h("th", { scope: "col", "data-col": c.id, class: `is-sortable ${kind}`, title: c.hint }, button);
+        return h("th", { scope: "col", "data-col": c.id, class: "is-sortable" }, button);
       }),
     );
     const tbody = h("tbody");
     for (const site of sitesIn(s.sites, s.region)) {
-      const label = siteLabel(site);
-      const free = site.computed === true;
       const rank = h("td", { class: "rank" });
       const verdict = h("td", { class: "verdict" });
-      const mark = h("em", { class: "tag tag-amber only-expert", title: T.nonDominatedHelp, text: "◆", hidden: true });
+      const mark = h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: T.nonDominatedTag, hidden: true });
       const cells = new Map<string, { value: HTMLElement; fill: HTMLElement | null }>();
       const tds = columns.map((c) => {
         const value = h("b");
@@ -202,14 +198,9 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         cells.set(c.id, { value, fill });
         return h("td", { "data-col": c.id, class: bar ? "has-bar" : "" }, fill && h("div", { class: "cmp-bar" }, fill), value);
       });
-      const tr = h(
-        "tr",
-        { tabindex: 0 },
-        rank,
-        h("th", { scope: "row", class: "name", title: site.name }, h("span", null, label.title, site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }), free && h("em", { class: "tag tag-warn", title: T.customWarning, text: "≈" }), mark)),
-        verdict,
-        ...tds,
-      );
+      const name = siteName(site);
+      name.append(mark);
+      const tr = h("tr", { tabindex: 0 }, rank, h("th", { scope: "row", class: "name", title: site.name }, name), verdict, ...tds);
       tr.addEventListener("click", () => open(site.id));
       tr.addEventListener("keydown", (event) => {
         if (event.key === "Enter") open(site.id);
@@ -217,20 +208,20 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       tbody.append(tr);
       views.set(site.id, { tr, rank, verdict, mark, cells });
     }
-    return h("table", { class: `compare-table ${precise ? "is-precise" : ""}` }, h("thead", null, head), tbody);
+    return h("div", null, h("table", { class: `compare-table ${exact ? "is-precise" : ""}` }, h("thead", null, head), tbody), h("p", { class: "note", text: T.rowHint }));
   }
 
   function updateTable(s: AppState, rows: RankRow[], active: Criterion): void {
     const table = body.querySelector("table");
     if (!table) return;
     const tbody = table.tBodies[0];
-    const columns = COLUMNS.filter((c) => precise || !c.detail);
+    const columns = COLUMNS.filter((c) => exact || !c.detail);
     rows.forEach((r) => {
       const view = views.get(r.site.id);
       if (!view) return;
-      view.rank.textContent = r.rank === null ? "–" : String(r.rank);
+      view.rank.textContent = r.rank === null ? "" : String(r.rank);
       view.verdict.replaceChildren(verdictPill(verdictAt(derived, r.site, s.heightM, s.date, s.criteria), true));
-      view.mark.hidden = !r.nonDominated;
+      view.mark.hidden = !(exact && r.nonDominated);
       view.tr.classList.toggle("is-selected", r.site.id === s.siteId);
       view.tr.classList.toggle("is-first", r.rank === 1);
       for (const c of columns) {
@@ -248,118 +239,149 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     for (const el of table.querySelectorAll<HTMLElement>("[data-col]")) el.classList.toggle("is-active", el.dataset.col === active.id);
   }
 
-  function calendar(s: AppState, rows: RankRow[]): HTMLElement {
-    const byVerdict = calendarMetric === "verdict";
-    const criterion = criterionById(byVerdict ? "sun" : calendarMetric);
-    const rgb = RGB[criterion.id];
-    const pick = h("div", { class: "segmented" });
-    for (const [id, label] of [["verdict", T.verdictCol], ...FRACTIONS.map((c) => [c.id, T.criteriaShort[c.id]])]) {
-      const b = h("button", { class: `seg ${id === calendarMetric ? "is-on" : ""}`, type: "button", text: label });
-      b.addEventListener("click", () => {
-        calendarMetric = id;
-        render(true);
-      });
-      pick.append(b);
-    }
-    let lastMonth = "";
-    const monthCells = s.dates.map((d) => {
-      const first = d.slice(0, 6) !== lastMonth;
-      lastMonth = d.slice(0, 6);
-      return h("span", { text: first ? formatMonth(d) : "" });
+  /** Full year: the solar energy possible at each site, then the dates when landing is possible. */
+  function yearView(s: AppState, shown: Site[]): HTMLElement {
+    // --- Solar energy: share of the year with the Sun visible (mean of the weekly dates). ---
+    const energy = shown
+      .map((site) => {
+        const values = sweepFor(derived, site, s.heightM)?.values[SUN] ?? [];
+        const known = values.filter((v): v is number => v !== null && v !== undefined);
+        const complete = known.length === s.dates.length && known.length > 0;
+        return { site, mean: complete ? known.reduce((a, b) => a + b, 0) / known.length : null };
+      })
+      .sort((a, b) => (b.mean ?? -1) - (a.mean ?? -1));
+    const energyRows = energy.map(({ site, mean }) => {
+      const fill = h("i");
+      fill.style.width = `${(mean ?? 0) * 100}%`;
+      return h(
+        "div",
+        { class: "energy-row" },
+        siteName(site),
+        h("div", { class: "energy-bar" }, fill),
+        h("b", { class: "energy-value", text: mean === null ? "—" : formatPercent0(mean) }),
+        h("small", { text: mean === null ? T.pending : T.energyPerMonth(formatDays(mean)) }),
+      );
     });
-    const grid = h("div", { class: "cal" }, h("span"), h("div", { class: "cal-row cal-months" }, ...monthCells));
+
+    // --- Calendar: one cell per weekly landing date, possible or not by the user's criteria. ---
+    const groups = monthGroups(s.dates);
+    const monthsRow = h("div", { class: "cal-months" }, ...groups.map((g) => {
+      const el = h("span", { text: formatMonth(g.dates[0]) });
+      el.style.flexGrow = String(g.dates.length);
+      return el;
+    }));
+    const rows = shown
+      .map((site) => {
+        const statuses = s.dates.map((d) => verdictAt(derived, site, s.heightM, d, s.criteria).status);
+        return { site, statuses, count: statuses.filter((x) => x === "go").length };
+      })
+      .sort((a, b) => b.count - a.count);
+    const grid = h("div", { class: "cal" }, h("span"), monthsRow, h("span"));
     for (const r of rows) {
-      const values = sweepFor(derived, r.site, s.heightM, r.model)?.values[criterion.metricId] ?? [];
-      const cells = s.dates.map((d, i) => {
-        const v = values[i] ?? null;
-        const status = byVerdict ? verdictAt(derived, r.site, s.heightM, d, s.criteria).status : null;
-        const what = status ? (status === "go" ? T.go : status === "nogo" ? T.nogo : T.unknownVerdict) : `${T.criteriaShort[criterion.id]} ${v === null ? "—" : formatPercent0(v)}`;
-        const label = `${siteLabel(r.site).title} · ${formatShortDate(d)} · ${what}`;
-        const cell = h("button", { class: `cal-cell ${d === s.date ? "is-current" : ""}`, type: "button", "data-site": r.site.id, "data-date": d, title: label, "aria-label": label });
-        cell.style.background = status
-          ? status === "go"
-            ? "rgba(126,224,161,0.9)"
-            : status === "nogo"
-              ? "rgba(255,154,138,0.22)"
-              : "rgba(255,255,255,0.05)"
-          : v === null
-            ? "rgba(255,255,255,0.05)"
-            : `rgba(${rgb},${(0.06 + 0.94 * v).toFixed(3)})`;
-        return cell;
-      });
-      grid.append(h("span", { class: `cal-name ${r.site.id === s.siteId ? "is-selected" : ""}`, text: siteLabel(r.site).title }), h("div", { class: "cal-row" }, ...cells));
+      let at = 0;
+      const row = h("div", { class: "cal-row" });
+      for (const g of groups) {
+        const group = h("div", { class: "cal-month" });
+        group.style.flexGrow = String(g.dates.length);
+        for (const d of g.dates) {
+          const status = r.statuses[at++];
+          const on = picked?.siteId === r.site.id && picked.date === d;
+          const label = `${siteLabel(r.site).title}, ${formatShortDate(d)}`;
+          group.append(h("button", { class: `cal-cell is-${status} ${on ? "is-picked" : ""}`, type: "button", "data-site": r.site.id, "data-date": d, title: label, "aria-label": label }));
+        }
+        row.append(group);
+      }
+      grid.append(siteName(r.site), row, h("small", { class: "cal-count", text: T.calCount(r.count, s.dates.length) }));
     }
     grid.addEventListener("click", (event) => {
       const cell = (event.target as HTMLElement).closest<HTMLElement>(".cal-cell");
-      if (cell?.dataset.site && cell.dataset.date) open(cell.dataset.site, cell.dataset.date);
+      if (!cell?.dataset.site || !cell.dataset.date) return;
+      picked = { siteId: cell.dataset.site, date: cell.dataset.date };
+      render(true);
     });
-    const scale = byVerdict
-      ? h("div", { class: "cal-scale" }, h("i", { class: "dot dot-go" }), T.go, h("i", { class: "dot dot-nogo" }), T.nogo)
-      : h("div", { class: "cal-scale" }, h("span", { text: "0 %" }), h("i", { class: "cal-ramp" }), h("span", { text: "100 %" }));
-    if (!byVerdict) (scale.children[1] as HTMLElement).style.background = `linear-gradient(to right, rgba(${rgb},0.06), rgb(${rgb}))`;
-    return h("div", null, h("div", { class: "cmp-options" }, h("div", { class: "cmp-option" }, h("span", { text: T.calendarMetric }), pick), scale), grid);
+
+    const detail = h("div", { class: "cal-detail" });
+    const site = picked ? shown.find((x) => x.id === picked!.siteId) : undefined;
+    if (picked && site) {
+      const { date } = picked;
+      const values = valuesAt(derived, site, s.heightM, date);
+      const verdict = verdictAt(derived, site, s.heightM, date, s.criteria);
+      const go = h("button", { class: "button button-primary", type: "button", text: T.calOpen });
+      go.addEventListener("click", () => open(site.id, date));
+      const days = (v: number | null | undefined): string => (v === null || v === undefined ? "—" : formatDays(v));
+      detail.append(
+        h("div", null, h("b", { class: "cal-detail-title", text: `${siteLabel(site).title}, ${formatStartDate(date)}` }), verdictPill(verdict)),
+        h("p", { text: T.sunValue(days(values[SUN])) }),
+        h("p", { text: T.earthValue(days(values[EARTH])) }),
+        ...failureLines(verdict, values, s.criteria).map((line) => h("p", { class: "plan-fail", text: line })),
+        go,
+      );
+    } else detail.hidden = true;
+
+    return h(
+      "div",
+      { class: "year" },
+      h(
+        "section",
+        { class: "year-block energy" },
+        h("h2", { class: "year-title", text: T.energyTitle }),
+        h("p", { class: "year-lead", text: T.energyLead }),
+        h("div", { class: "energy-list" }, ...energyRows),
+        h("p", { class: "note", text: T.energyNote }),
+      ),
+      h(
+        "section",
+        { class: "year-block" },
+        h("h2", { class: "year-title", text: T.calTitle }),
+        h("p", { class: "year-lead", text: T.calLead }),
+        h("div", { class: "cal-legend" }, h("i", { class: "cal-key is-go" }), T.legendGo, h("i", { class: "cal-key is-nogo" }), T.legendNo),
+        grid,
+        detail,
+      ),
+    );
   }
 
   /** `rebuild` recreates the body; without it only the values change. */
   function render(rebuild: boolean): void {
     const s = store.get();
-    backdrop.hidden = !s.compareOpen;
+    page.hidden = !s.compareOpen;
     if (!s.compareOpen || s.sites.length === 0) return;
     const active = criterionById(s.rankBy);
-    const wasPrecise = precise;
-    precise = s.mode === "expert" && detailed;
-    if (precise !== wasPrecise) rebuild = true;
     const shown = sitesIn(s.sites, s.region);
-    const rows = rankSites(shown, derived, s.date, s.heightM, active);
     const i = s.dates.indexOf(s.date);
 
     tabDate.classList.toggle("is-on", tab === "date");
     tabYear.classList.toggle("is-on", tab === "year");
     tabDelay.classList.toggle("is-on", tab === "delay");
-    sheetTitle.textContent = tab === "delay" ? T.delayTitle : T.compareTitle;
-    sheetSub.textContent = tab === "delay" ? T.delayLead : T.compareLead;
-    const share = criterionById("sun");
-    critSummary.textContent = T.critSummary(
-      formatCriterion(share, s.criteria.minSun, s.mode),
-      formatCriterion(share, s.criteria.minEarth, s.mode),
-      s.criteria.maxNightH === null ? T.critNoLimit : formatCriterion(criterionById("night"), s.criteria.maxNightH, s.mode),
-    );
-    options.hidden = tab === "delay";
-    simpleBtn.classList.toggle("is-on", !precise);
-    preciseBtn.classList.toggle("is-on", precise);
-    dateBar.hidden = tab !== "date";
-    sortOption.hidden = tab !== "date";
-    precisionOption.hidden = tab !== "date";
-    sortSelect.value = active.id;
+    lead.textContent = tab === "date" ? T.leadDate : tab === "year" ? T.leadYear : T.leadDelay;
+    lead.hidden = lead.textContent === "";
+    const custom = s.sites.find((x) => x.status === "custom");
+    yourPoint.hidden = !custom;
+    if (custom) yourPoint.textContent = T.yourPoint(formatCoords(custom));
+    dateBar.hidden = options.hidden = tab !== "date";
+    for (const { id, b } of sortButtons) b.classList.toggle("is-on", id === active.id);
+    exactBox.checked = exact;
     slider.max = String(Math.max(0, s.dates.length - 1));
     slider.value = String(Math.max(0, i));
     slider.style.setProperty("--p", `${(Math.max(0, i) / Math.max(1, s.dates.length - 1)) * 100}%`);
     dateText.textContent = formatStartDate(s.date);
-    dateWeek.textContent = `${T.dateOf(i + 1, s.dates.length)} · ${T.days30} · ${s.heightM} m`;
+    const t0 = dateMs(s.date);
+    dateWeek.textContent = T.dateOf(i + 1, s.dates.length, formatDayMonth(t0), formatDayMonth(t0 + 29 * 86_400_000));
     prev.disabled = i <= 0;
     next.disabled = i >= s.dates.length - 1;
 
     if (tab === "delay") {
       if (body.firstElementChild !== planner.el) body.replaceChildren(planner.el);
       planner.render();
-      note.replaceChildren(T.verdictNote);
-      return;
-    }
-    if (tab === "year") body.replaceChildren(calendar(s, rows));
+    } else if (tab === "year") body.replaceChildren(yearView(s, shown));
     else {
       if (rebuild || !body.querySelector("table")) body.replaceChildren(buildTable(s));
-      updateTable(s, rows, active);
+      updateTable(s, rankSites(shown, derived, s.date, s.heightM, active), active);
     }
-    note.replaceChildren(
-      tab === "date" ? `${T.clickToSort} ` : `${T.calendarNote} `,
-      `${T.rankNote(shown.length)} ${s.region === "south" ? `${T.regionHint} ` : ""}`,
-      h("span", { class: "only-expert" }, h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: "◆" }), ` ${T.nonDominatedHelp} ${T.compareNote}`),
-    );
   }
 
-  let lastMonth = "";
   const fillMonths = (dates: string[]): void => {
-    lastMonth = "";
+    let lastMonth = "";
     months.replaceChildren(
       ...dates.map((d) => {
         const first = d.slice(0, 6) !== lastMonth;
@@ -393,38 +415,32 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       if (!step(1)) stop();
     }, PLAY_MS);
   });
-  sortSelect.addEventListener("change", () => actions.setRankBy(sortSelect.value));
-  simpleBtn.addEventListener("click", () => {
-    detailed = false;
-    render(true);
-  });
-  preciseBtn.addEventListener("click", () => {
-    detailed = true;
+  exactBox.addEventListener("change", () => {
+    exact = exactBox.checked;
     render(true);
   });
   tabDate.addEventListener("click", () => actions.setCompare(true, "date"));
   tabYear.addEventListener("click", () => actions.setCompare(true, "year"));
   tabDelay.addEventListener("click", () => actions.setCompare(true, "delay"));
-  close.addEventListener("click", () => actions.setCompare(false));
-  backdrop.addEventListener("click", (event) => {
-    if (event.target === backdrop) actions.setCompare(false);
-  });
   store.subscribe((s, p) => {
     if (s.dates !== p.dates) fillMonths(s.dates);
-    if (s.compareOpen && s.compareOpen === p.compareOpen && (s.sites !== p.sites || s.customTick !== p.customTick)) render(s.sites !== p.sites || tab === "year");
     if (s.compareTab !== p.compareTab) {
       stop();
       tab = s.compareTab;
-      if (s.compareOpen === p.compareOpen && s.compareOpen) render(true);
+      if (s.compareOpen && p.compareOpen) render(true);
     }
     if (s.compareOpen !== p.compareOpen) {
       if (!s.compareOpen) stop();
-      else planner.reset();
+      else {
+        planner.reset();
+        page.scrollTop = 0;
+      }
       render(true);
-      if (s.compareOpen) slider.focus();
-    } else if (s.compareOpen && (s.date !== p.date || s.heightM !== p.heightM || s.rankBy !== p.rankBy || s.siteId !== p.siteId || s.region !== p.region || s.mode !== p.mode || s.criteria !== p.criteria)) {
-      render(tab === "year" || s.heightM !== p.heightM || s.region !== p.region || s.mode !== p.mode);
+    } else if (s.compareOpen) {
+      const layout = s.sites !== p.sites || s.heightM !== p.heightM || s.region !== p.region;
+      const values = s.date !== p.date || s.rankBy !== p.rankBy || s.siteId !== p.siteId || s.criteria !== p.criteria || s.customTick !== p.customTick;
+      if (layout || values) render(layout);
     }
   });
-  return backdrop;
+  return page;
 }
