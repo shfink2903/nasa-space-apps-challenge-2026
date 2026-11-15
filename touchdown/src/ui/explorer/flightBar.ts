@@ -34,7 +34,7 @@ export function createFlightBar(ui: Ui): HTMLElement {
   );
 
   ui.watch(
-    (s) => [s.phase, s.focusId, s.autoFlight, s.sites],
+    (s) => [s.phase, s.focusId, s.autoFlight, s.sites, s.sceneStatus],
     (s) => {
       const flying = s.phase !== "cruise" && s.phase !== "focus";
       bar.dataset.phase = s.phase;
@@ -53,6 +53,15 @@ export function createFlightBar(ui: Ui): HTMLElement {
       overview.hidden = s.phase !== "focus";
       autoLabel.hidden = flying;
       auto.checked = s.autoFlight;
+      if (s.sceneStatus !== "ready") {
+        text.textContent = s.sceneStatus === "loading" ? t.sceneLoading : t.sceneUnavailable;
+        text.hidden = false;
+        stepper.hidden = true;
+        skip.hidden = true;
+        back.hidden = true;
+        overview.hidden = true;
+        autoLabel.hidden = true;
+      }
     },
   );
   return bar;

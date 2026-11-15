@@ -16,6 +16,7 @@ import {
   type Series,
   type Sweep,
 } from "./dataset";
+import { assertComparisonResponse, type ComparisonRequest, type ComparisonResult } from "../planner/comparison";
 
 /** Everything the views need for one scenario. */
 export interface Bundle {
@@ -55,6 +56,21 @@ export class Resources {
   /** True when the download of this scenario failed. */
   bundleFailed(scenarioId: string): boolean {
     return this.cache.get(`bundle:${scenarioId}`)?.failed === true;
+  }
+
+  /** Requests are keyed by the complete selection, priority and constraints. */
+  comparison(request: ComparisonRequest): ComparisonResult | undefined {
+    return this.get(`comparison:${JSON.stringify(request)}`, async () => {
+      const response = await fetch("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw new Error(`Comparison API unavailable (${response.status})`);
+      const result: unknown = await response.json();
+      assertComparisonResponse(result, request);
+      return result;
+    });
+  }
+
+  comparisonFailed(request: ComparisonRequest): boolean {
+    return this.cache.get(`comparison:${JSON.stringify(request)}`)?.failed === true;
   }
 
   private get<T>(key: string, load: () => Promise<T>): T | undefined {

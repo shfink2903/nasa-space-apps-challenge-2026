@@ -29,6 +29,8 @@ export type SiteMetrics = {
   comparable: boolean;
   /** Which edges of the period cut the longest dark gap. Gaps cut in different ways are not compared. */
   darkGapCut: string;
+  /** Preserve quality and truncation metadata; numeric values alone are insufficient. */
+  published: Partial<Record<MetricKey, Metric>>;
 } & Record<MetricKey, number | null>;
 
 /** The criteria of the dataset comparisons (comparisons/*.json, method.criteria). */
@@ -41,8 +43,12 @@ export const PARETO_CRITERIA: { key: MetricKey; sign: 1 | -1 }[] = [
 
 export function readMetrics(siteId: string, scenarioId: string, metrics: Metric[]): SiteMetrics {
   const find = (key: MetricKey): Metric | undefined => metrics.find((m) => m.metricId === METRIC_IDS[key]);
-  const out = { siteId, scenarioId } as SiteMetrics;
-  for (const key of Object.keys(METRIC_IDS) as MetricKey[]) out[key] = find(key)?.value ?? null;
+  const out = { siteId, scenarioId, published: {} } as SiteMetrics;
+  for (const key of Object.keys(METRIC_IDS) as MetricKey[]) {
+    const metric = find(key);
+    out[key] = metric?.value ?? null;
+    if (metric) out.published[key] = metric;
+  }
   out.comparable = PARETO_CRITERIA.every(({ key }) => {
     const m = find(key);
     return m !== undefined && m.value !== null && m.quality !== "unknown" && m.quality !== "partial";
@@ -50,6 +56,11 @@ export function readMetrics(siteId: string, scenarioId: string, metrics: Metric[
   const gap = find("sunGapH");
   out.darkGapCut = [gap?.truncatedStart, gap?.truncatedEnd, gap?.truncatedByMissingData].map((f) => (f ? "1" : "0")).join("");
   return out;
+}
+
+export function isLowerBound(metrics: SiteMetrics, key: "sunGapH" | "earthGapH"): boolean {
+  const m = metrics.published[key];
+  return Boolean(m && (m.truncatedStart || m.truncatedEnd || m.truncatedByMissingData));
 }
 
 /** True for metrics where a smaller value is better (dark or silent gaps). */

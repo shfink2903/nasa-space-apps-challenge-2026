@@ -3,12 +3,12 @@ import { createElevationChart } from "../../charts/elevationChart";
 import { createSensitivityGrid } from "../../charts/sensitivityGrid";
 import { COLORS, type Ramp } from "../../charts/theme";
 import { createWindowStrips } from "../../charts/windowStrips";
-import { parseScenarioId, sampleSeries, type Site } from "../../data/dataset";
+import { parseScenarioId, type Site } from "../../data/dataset";
 import { groupOf, scopeSites } from "../../planner/catalog";
-import { nextEvent } from "../../planner/clock";
-import { readMetrics, type MetricKey, type SiteMetrics } from "../../planner/metrics";
-import { checkRequirements, CRITERION_METRIC, verdict, type Criterion, type RequirementKey } from "../../planner/ranking";
-import { bundleFor, focusSite, modelFor, rankedOrder, rankingFor, siteById } from "../../planner/select";
+import { nextEvent, sampleScenario } from "../../planner/clock";
+import { isLowerBound, readMetrics, type MetricKey, type SiteMetrics } from "../../planner/metrics";
+import { CRITERION_METRIC, type Criterion, type RequirementKey } from "../../planner/ranking";
+import { bundleFor, focusSite, modelFor, rankedOrder, rankingFor, selectedComparisonFor, siteById } from "../../planner/select";
 import type { AppState } from "../../state";
 import type { Ui } from "../context";
 import { h, icon } from "../dom";
@@ -90,6 +90,7 @@ function toolbar(ui: Ui): HTMLElement {
 
 function rankingTable(ui: Ui): HTMLElement {
   const { t, fmt, actions, resources } = ui;
+  const evaluationStatus = h("p", { class: "note", role: "status", "data-testid": "catalogue-comparison-status" });
   const tbody = h("tbody");
   const head = (label: string, key?: MetricKey) => h("th", { scope: "col", "data-key": key ?? "" }, label);
   const table = h(
@@ -122,9 +123,11 @@ function rankingTable(ui: Ui): HTMLElement {
   };
 
   ui.watch(
-    (s) => [s.sites, s.scope, s.criterion, s.date, s.heightM, s.requirements, s.focusId, s.compareIds, s.dataVersion],
+    (s) => [s.sites, s.scope, s.criterion, s.date, s.heightM, s.requirements, s.focusId, s.comparisons, s.dataVersion],
     (s) => {
       const ranking = rankingFor(s, resources);
+      evaluationStatus.dataset.status = ranking.evaluationStatus;
+      evaluationStatus.textContent = ranking.evaluationStatus === "available" ? t.compareVerified : ranking.evaluationStatus === "loading" ? t.compareLoading : t.compareUnavailable;
       const key = CRITERION_METRIC[s.criterion];
       table.querySelectorAll("th").forEach((th) => th.classList.toggle("is-key", th.dataset.key === key));
       const firstReference = ranking.references[0]?.siteId;
@@ -132,11 +135,10 @@ function rankingTable(ui: Ui): HTMLElement {
         ...rankedOrder(ranking).flatMap((m) => {
           const row = ranking.rows.find((r) => r.metrics === m);
           const site = siteById(s, m.siteId)!;
-          const results = checkRequirements(m, s.requirements);
-          const v = verdict(results);
+          const v = ranking.verdicts[m.scenarioId] ?? "unknown";
           const check = h("input", { type: "checkbox", "aria-label": `${t.colCompare}: ${fmt.site(site)}` });
-          check.checked = s.compareIds.includes(site.id);
-          check.disabled = !check.checked && s.compareIds.length >= 3;
+          check.checked = s.comparisons.some((c) => c.siteId === site.id && c.date === s.date);
+          check.disabled = !check.checked && s.comparisons.length >= 3;
           check.title = check.disabled ? t.compareMax : "";
           check.addEventListener("change", () => actions.toggleCompare(site.id));
           const name = h("button", { class: "link-button", type: "button", text: fmt.site(site) });
@@ -160,9 +162,9 @@ function rankingTable(ui: Ui): HTMLElement {
             ),
             cellBar(m.bothShare, "both", key === "bothShare"),
             cellBar(m.sunShare, "sun", key === "sunShare"),
-            h("td", { class: "cell-num", text: fmt.gap(m.sunGapH) }),
+            h("td", { class: "cell-num", text: `${isLowerBound(m, "sunGapH") ? "≥ " : ""}${fmt.gap(m.sunGapH)}` }),
             cellBar(m.earthShare, "earth", key === "earthShare"),
-            h("td", { class: "cell-num", text: fmt.gap(m.earthGapH) }),
+            h("td", { class: "cell-num", text: `${isLowerBound(m, "earthGapH") ? "≥ " : ""}${fmt.gap(m.earthGapH)}` }),
             h("td", { class: "cell-num", text: fmt.elevation(m.sunMaxElDeg) }),
             h("td", null, h("span", { class: "verdict", "data-verdict": v, title: t.verdict[v], text: t.verdictShort[v] })),
             h("td", { class: "cell-check" }, check),
@@ -173,7 +175,7 @@ function rankingTable(ui: Ui): HTMLElement {
       table.classList.toggle("is-loading", !ranking.complete);
     },
   );
-  return section(t.ranking, t.dataIntro, h("div", { class: "table-scroll" }, table));
+  return section(t.ranking, t.dataIntro, evaluationStatus, h("div", { class: "table-scroll" }, table));
 }
 
 function requirements(ui: Ui): HTMLElement {
@@ -185,8 +187,8 @@ function requirements(ui: Ui): HTMLElement {
   ];
   const rows = defs.map((def) => {
     let last = store.get().requirements[def.key] ?? def.fallback;
-    const on = h("input", { type: "checkbox", "aria-label": def.label });
-    const range = h("input", { type: "range", min: 0, max: def.max, step: def.step, "aria-label": def.label });
+    const on = h("input", { type: "checkbox", "aria-label": def.label, "data-testid": `requirement-${def.key}-enabled` });
+    const range = h("input", { type: "range", min: 0, max: def.max, step: def.step, "aria-label": def.label, "data-testid": `requirement-${def.key}-value` });
     const value = h("b");
     on.addEventListener("change", () => actions.setRequirements({ [def.key]: on.checked ? last : null }));
     range.addEventListener("input", () => {
@@ -218,7 +220,7 @@ function requirements(ui: Ui): HTMLElement {
       const name = (m: SiteMetrics): string => fmt.site(siteById(s, m.siteId)!);
       // The summary speaks about the candidates only.
       const all = ranking.rows.map((r) => r.metrics);
-      const best = ranking.rows.find((r) => r.rank === 1)?.metrics;
+      const best = ranking.evaluationStatus === "available" ? ranking.rows.find((r) => r.rank === 1)?.metrics : undefined;
       const top = (key: MetricKey): SiteMetrics | undefined => [...all].filter((m) => m[key] !== null).sort((a, b) => b[key]! - a[key]!)[0];
       if (best) lines.push(t.briefBest(name(best), t.criteriaShort[s.criterion], fmt.percent(best[CRITERION_METRIC[s.criterion]])));
       const power = top("sunShare");
@@ -230,7 +232,9 @@ function requirements(ui: Ui): HTMLElement {
       if (noSun.length) lines.push(t.briefNoSun(noSun.map(name).join(", ")));
       if (noEarth.length) lines.push(t.briefNoEarth(noEarth.map(name).join(", ")));
       const active = Object.values(s.requirements).some((v) => v !== null);
-      if (active && all.length) lines.push(t.briefPass(all.filter((m) => verdict(checkRequirements(m, s.requirements)) === "pass").length, all.length));
+      if (ranking.evaluationStatus !== "available") lines.push(ranking.evaluationStatus === "loading" ? t.compareLoading : t.compareUnavailable);
+      if (active && all.length && ranking.evaluationStatus === "available" && !all.some((m) => ranking.verdicts[m.scenarioId] === "pass")) lines.push(t.noEligible);
+      if (active && all.length && ranking.evaluationStatus === "available") lines.push(t.briefPass(all.filter((m) => ranking.verdicts[m.scenarioId] === "pass").length, all.length));
       // Best start date of the year for the selected site, on the chosen priority.
       const site = focusSite(s);
       const sweep = ui.resources.sweep(site.id, s.heightM, modelFor(s, site));
@@ -245,7 +249,8 @@ function requirements(ui: Ui): HTMLElement {
             bestIndex = i;
           }
         });
-        if (bestIndex >= 0 && s.dates[bestIndex]) lines.push(t.briefDateTip(fmt.site(site), fmt.startDateShort(s.dates[bestIndex]), fmt.percent(bestValue)));
+        // A descriptive sweep maximum is not a recommendation under user constraints.
+        if (!active && bestIndex >= 0 && s.dates[bestIndex]) lines.push(t.briefDateTip(fmt.site(site), fmt.startDateShort(s.dates[bestIndex]), fmt.percent(bestValue)));
       }
       brief.replaceChildren(...lines.map((line) => h("li", { text: line })));
     },
@@ -261,122 +266,90 @@ function compare(ui: Ui): HTMLElement {
   const earthChart = createElevationChart();
   const stripCharts = [createWindowStrips(), createWindowStrips(), createWindowStrips()];
   ui.onDispose(() => [sunChart, earthChart, ...stripCharts].forEach((c) => c.destroy()));
-  const hint = h("p", { class: "note", text: t.compareHint });
+  const status = h("p", { class: "note", role: "status", "data-testid": "selection-comparison-status" });
   const legend = h("div", { class: "legend" });
-  const charts = h(
-    "div",
-    { class: "compare-charts" },
+  const charts = h("div", { class: "compare-charts" },
     h("div", null, h("div", { class: "field-label chart-caption" }, icon("sun"), `${t.sun} · ${t.elevationAxis}`), sunChart.el),
-    h("div", null, h("div", { class: "field-label chart-caption" }, icon("earth"), `${t.earth} · ${t.elevationAxis}`), earthChart.el),
-  );
-  const card = section(t.compareTitle, null, hint, columns, legend, strips, charts);
-
+    h("div", null, h("div", { class: "field-label chart-caption" }, icon("earth"), `${t.earth} · ${t.elevationAxis}`), earthChart.el));
+  const card = section(t.compareTitle, t.compareHint, status, columns, h("p", { class: "note", text: t.compareRelativeTime }), legend, strips, charts);
   ui.watch(
-    (s) => [s.compareIds, s.date, s.heightM, s.scope, s.criterion, s.requirements, s.index, s.dataVersion],
+    (s) => [s.comparisons, s.date, s.heightM, s.scope, s.criterion, s.requirements, s.index, s.dataVersion],
     (s) => {
-      const picked = s.compareIds.map((id) => siteById(s, id)).filter((x): x is Site => x !== undefined);
-      hint.hidden = picked.length >= 2;
-      const ranking = rankingFor(s, resources);
-      const loaded = picked.map((site) => ({ site, bundle: bundleFor(s, resources, site) }));
-
-      legend.replaceChildren(...picked.map((site, i) => h("span", { class: "legend-item" }, h("i", { style: `background:${SITE_COLORS[i]}` }), fmt.site(site))));
-      columns.replaceChildren(
-        ...loaded.map(({ site, bundle }, i) => {
-          const row = ranking.rows.find((r) => r.metrics.siteId === site.id);
-          const m = rankedOrder(ranking).find((x) => x.siteId === site.id);
-          const v = m ? verdict(checkRequirements(m, s.requirements)) : "unknown";
-          const remove = h("button", { class: "icon-button", type: "button", "aria-label": t.removeCompare, title: t.removeCompare }, icon("cross"));
-          remove.addEventListener("click", () => actions.toggleCompare(site.id));
-          const open = h("button", { class: "link-button compare-name", type: "button", text: fmt.site(site) });
-          open.addEventListener("click", () => actions.selectSite(site.id));
-          const now = h("div", { class: "compare-now" });
-          if (bundle) {
-            const sample = sampleSeries(bundle.series, s.index);
-            for (const [bodyName, el, state] of [
-              ["sun", sample.sunElDeg, sample.sunState],
-              ["earth", sample.earthElDeg, sample.earthState],
-            ] as const) {
-              const visible = (state ?? 0) > 0;
-              const ev = nextEvent(bundle.scenario, bodyName, sample.tMs);
-              const left = ev ? fmt.duration(Date.parse(ev.tUtc) - sample.tMs) : "";
-              now.append(
-                h(
-                  "div",
-                  { class: `now-row now-${bodyName} ${visible ? "" : "is-off"}` },
-                  h("span", { class: "now-icon" }, icon(bodyName)),
-                  h(
-                    "div",
-                    { class: "now-text" },
-                    h("strong", { text: bodyName === "sun" ? t.sun : t.earth }),
-                    h("span", { class: "now-countdown", text: ev ? (ev.type === "set" ? t.setIn(left) : t.riseIn(left)) : visible ? t.noSetInPeriod : t.noRiseInPeriod }),
-                  ),
-                  h("div", { class: "now-side" }, h("span", { class: "now-value", text: fmt.elevation(el) })),
-                ),
-              );
-            }
-          } else now.append(h("p", { class: "note", text: t.loadingSite }));
-          const fact = (label: string, value: string, key = false) => h("div", { class: `fact ${key ? "is-key" : ""}` }, h("span", { text: label }), h("b", { text: value }));
-          const key = CRITERION_METRIC[s.criterion];
-          return h(
-            "article",
-            { class: "compare-column", style: `--site:${SITE_COLORS[i]}` },
-            h("header", null, h("span", { class: `site-rank ${row?.rank === 1 ? "is-best" : ""}`, text: row?.rank ? String(row.rank) : "–" }), h("i", { class: "site-swatch", "aria-hidden": "true" }), open, remove),
-            h("small", { class: "mono-small", text: fmt.coords(site.latDeg, site.lonDeg) }),
-            now,
-            fact(t.bothShare, fmt.percent(m?.bothShare ?? null), key === "bothShare"),
-            fact(t.sunShare, fmt.percent(m?.sunShare ?? null), key === "sunShare"),
-            fact(t.earthShare, fmt.percent(m?.earthShare ?? null), key === "earthShare"),
-            fact(t.longestNight, fmt.gap(m?.sunGapH ?? null)),
-            fact(t.longestBlackout, fmt.gap(m?.earthGapH ?? null)),
-            fact(t.sunMaxEl, fmt.elevation(m?.sunMaxElDeg ?? null)),
-            h("div", { class: "fact fact-verdict" }, h("span", { text: t.requirements }), h("span", { class: "verdict", "data-verdict": v, text: t.verdict[v] })),
-          );
-        }),
-      );
-
+      const selection = selectedComparisonFor(s, resources);
+      status.dataset.status = selection.evaluationStatus;
+      status.textContent = selection.evaluationStatus === "available" ? t.compareVerified : selection.evaluationStatus === "loading" ? t.compareLoading : t.compareUnavailable;
+      status.hidden = s.comparisons.length === 0;
+      const loaded = s.comparisons.map((choice, i) => {
+        const site = siteById(s, choice.siteId)!;
+        const local = { ...s, date: choice.date };
+        const bundle = bundleFor(local, resources, site);
+        return { choice, site, bundle, i, metrics: selection.metrics.find((m) => m.scenarioId === selection.request?.scenarioIds[i]) };
+      });
+      const title = (site: Site, date: string) => `${fmt.site(site)} · ${fmt.startDateShort(date)}`;
+      legend.replaceChildren(...loaded.map(({ site, choice, i }) => h("span", { class: "legend-item" }, h("i", { style: `background:${SITE_COLORS[i]}` }), title(site, choice.date))));
+      columns.replaceChildren(...loaded.map(({ site, choice, bundle, i, metrics: m }) => {
+        const id = selection.request?.scenarioIds[i];
+        const rank = id ? selection.ranks[id] : undefined;
+        const v = id ? selection.verdicts[id] ?? "unknown" : "unknown";
+        const remove = h("button", { class: "icon-button", type: "button", "aria-label": t.removeCompare, title: t.removeCompare, "data-testid": `comparison-remove-${i}` }, icon("cross"));
+        remove.addEventListener("click", () => actions.removeComparison(i));
+        const open = h("button", { class: "link-button compare-name", type: "button", text: fmt.site(site) });
+        open.addEventListener("click", () => { actions.setDate(choice.date); actions.selectSite(site.id); });
+        const date = h("select", { class: "select", "aria-label": `${t.startDate} ${fmt.site(site)} ${i + 1}`, "data-testid": `comparison-date-${i}` }, ...s.dates.map((d) => {
+          const option = h("option", { value: d, text: fmt.startDate(d) });
+          option.disabled = s.comparisons.some((other, j) => j !== i && other.siteId === site.id && other.date === d);
+          return option;
+        }));
+        date.value = choice.date;
+        date.addEventListener("change", () => actions.setComparisonDate(i, date.value));
+        const add = h("button", { class: "link-button", type: "button", text: t.compareAddDate, "data-testid": `comparison-add-date-${i}` });
+        add.disabled = s.comparisons.length >= 3;
+        add.addEventListener("click", () => actions.addComparison(site.id));
+        const now = h("div", { class: "compare-now" });
+        if (bundle) {
+          const sample = sampleScenario(bundle.series, bundle.scenario, s.index);
+          now.append(h("small", { class: "mono-small", text: new Date(sample.tMs).toISOString().replace("T", " ").replace(".000Z", " UTC") }));
+          for (const [bodyName, el, state] of [["sun", sample.sunElDeg, sample.sunState], ["earth", sample.earthElDeg, sample.earthState]] as const) {
+            const visible = state !== null && state > 0;
+            const ev = nextEvent(bundle.scenario, bodyName, sample.tMs);
+            const left = ev ? fmt.duration(Date.parse(ev.tUtc) - sample.tMs) : "";
+            const countdown = state === null ? t.visibilityUnknown : ev ? (ev.type === "set" ? t.setIn(left) : t.riseIn(left)) : visible ? t.noSetInPeriod : t.noRiseInPeriod;
+            now.append(h("div", { class: `now-row now-${bodyName} ${visible ? "" : "is-off"}` }, h("span", { class: "now-icon" }, icon(bodyName)), h("div", { class: "now-text" }, h("strong", { text: bodyName === "sun" ? t.sun : t.earth }), h("span", { class: "now-countdown", text: countdown })), h("div", { class: "now-side" }, h("span", { class: "now-value", text: fmt.elevation(el) }))));
+          }
+        } else now.append(h("p", { class: "note", text: t.loadingSite }));
+        const fact = (label: string, value: string, key = false) => h("div", { class: `fact ${key ? "is-key" : ""}` }, h("span", { text: label }), h("b", { text: value }));
+        const gap = (key: "sunGapH" | "earthGapH") => {
+          const metric = m?.published[key];
+          const lower = metric && (metric.truncatedStart || metric.truncatedEnd || metric.truncatedByMissingData);
+          return `${lower ? "≥ " : ""}${fmt.gap(m?.[key] ?? null)}`;
+        };
+        const key = CRITERION_METRIC[s.criterion];
+        return h("article", { class: "compare-column", style: `--site:${SITE_COLORS[i]}`, "data-testid": `comparison-column-${i}`, "data-scenario-id": id ?? "" },
+          h("header", null, h("span", { class: `site-rank ${rank === 1 ? "is-best" : ""}`, text: rank ? String(rank) : "–" }), h("i", { class: "site-swatch", "aria-hidden": "true" }), open, remove),
+          date, add, h("small", { class: "mono-small", text: fmt.coords(site.latDeg, site.lonDeg) }),
+          id && selection.pareto.has(id) ? h("span", { class: "tag tag-pareto", text: t.pareto, title: t.paretoHelp }) : null,
+          now, fact(t.bothShare, fmt.percent(m?.bothShare ?? null), key === "bothShare"), fact(t.sunShare, fmt.percent(m?.sunShare ?? null), key === "sunShare"), fact(t.earthShare, fmt.percent(m?.earthShare ?? null), key === "earthShare"),
+          fact(t.longestNight, gap("sunGapH")), fact(t.longestBlackout, gap("earthGapH")), fact(t.sunMaxEl, fmt.elevation(m?.sunMaxElDeg ?? null)),
+          h("div", { class: "fact fact-verdict" }, h("span", { text: t.requirements }), h("span", { class: "verdict", "data-verdict": v, text: t.verdict[v] })));
+      }));
       const ready = loaded.filter((x) => x.bundle);
       const first = ready[0]?.bundle;
       charts.hidden = !first;
       strips.hidden = !first;
       if (!first) return;
-      const t0 = Date.parse(first.series.t0Utc);
-      const cursorMs = t0 + s.index * first.series.stepS * 1000;
-      strips.replaceChildren(
-        ...ready.map(({ site, bundle }, i) => {
-          const chart = stripCharts[i];
-          chart.update({
-            t0Ms: t0,
-            durationMs: (first.series.n - 1) * first.series.stepS * 1000,
-            rows: [
-              { id: "sun", label: t.rowSun, color: COLORS.sun, windows: bundle!.scenario.windows["sun.anyDisk"] ?? [] },
-              { id: "earth", label: t.rowEarth, color: COLORS.earth, windows: bundle!.scenario.windows["earth.anyDisk"] ?? [] },
-              { id: "both", label: t.rowBoth, color: COLORS.both, windows: bundle!.scenario.overlapWindows },
-            ],
-            cursorMs,
-            onScrub: (tMs) => actions.setTime(tMs),
-          });
-          return h("div", { class: "compare-strip" }, h("span", { class: "legend-item" }, h("i", { style: `background:${SITE_COLORS[picked.indexOf(site)]}` }), fmt.site(site)), chart.el);
-        }),
-      );
-      const common = {
-        t0Ms: t0,
-        stepS: first.series.stepS,
-        n: first.series.n,
-        cursorIndex: s.index,
-        dayLabel: t.dayLabel,
-        formatDeg: (deg: number) => fmt.elevation(deg),
-        onScrub: (index: number) => actions.setIndex(index),
-      };
-      sunChart.update({
-        ...common,
-        tracks: ready.map(({ site, bundle }) => ({ id: site.id, label: fmt.site(site), color: SITE_COLORS[picked.indexOf(site)], elevationDeg: bundle!.series.sunElDeg, state: bundle!.series.sunState })),
-      });
-      earthChart.update({
-        ...common,
-        tracks: ready.map(({ site, bundle }) => ({ id: site.id, label: fmt.site(site), color: SITE_COLORS[picked.indexOf(site)], elevationDeg: bundle!.series.earthElDeg, state: bundle!.series.earthState })),
-      });
-    },
-  );
+      strips.replaceChildren(...ready.map(({ site, choice, bundle, i }) => {
+        const chart = stripCharts[i];
+        const t0 = Date.parse(bundle!.series.t0Utc);
+        chart.update({ t0Ms: t0, durationMs: (bundle!.series.n - 1) * bundle!.series.stepS * 1000,
+          rows: [{ id: "sun", label: t.rowSun, color: COLORS.sun, windows: bundle!.scenario.windows["sun.anyDisk"] ?? [] }, { id: "earth", label: t.rowEarth, color: COLORS.earth, windows: bundle!.scenario.windows["earth.anyDisk"] ?? [] }, { id: "both", label: t.rowBoth, color: COLORS.both, windows: bundle!.scenario.overlapWindows }],
+          cursorMs: t0 + s.index * bundle!.series.stepS * 1000,
+          onScrub: (tMs) => actions.setIndex((tMs - t0) / (bundle!.series.stepS * 1000)) });
+        return h("div", { class: "compare-strip" }, h("span", { class: "legend-item" }, h("i", { style: `background:${SITE_COLORS[i]}` }), title(site, choice.date)), chart.el);
+      }));
+      const common = { t0Ms: Date.parse(first.series.t0Utc), stepS: first.series.stepS, n: first.series.n, cursorIndex: s.index, dayLabel: t.dayLabel, formatDeg: (deg: number) => fmt.elevation(deg), onScrub: (index: number) => actions.setIndex(index) };
+      sunChart.update({ ...common, tracks: ready.map(({ site, choice, bundle, i }) => ({ id: bundle!.scenario.scenarioId, label: title(site, choice.date), color: SITE_COLORS[i], elevationDeg: bundle!.series.sunElDeg, state: bundle!.series.sunState })) });
+      earthChart.update({ ...common, tracks: ready.map(({ site, choice, bundle, i }) => ({ id: bundle!.scenario.scenarioId, label: title(site, choice.date), color: SITE_COLORS[i], elevationDeg: bundle!.series.earthElDeg, state: bundle!.series.earthState })) });
+    });
   return card;
 }
 
@@ -510,10 +483,17 @@ function method(ui: Ui): HTMLElement {
 
 /** The "Compare sites" tab: ranking, side by side, calendar of the year, 1 km grids, method. */
 export function createDataView(ui: Ui): HTMLElement {
+  const sceneStatus = h("p", { class: "note", role: "status", "data-testid": "scene-status" });
+  ui.watch((s) => [s.sceneStatus], (s) => {
+    sceneStatus.dataset.status = s.sceneStatus;
+    sceneStatus.hidden = s.sceneStatus === "ready";
+    sceneStatus.textContent = s.sceneStatus === "loading" ? ui.t.sceneLoading : ui.t.sceneUnavailable;
+  });
   return h(
     "main",
     { class: "data-view", id: "data-view" },
     h("header", { class: "data-title" }, h("h1", { text: ui.t.dataTitle })),
+    sceneStatus,
     toolbar(ui),
     h("div", { class: "data-grid" }, rankingTable(ui), requirements(ui)),
     compare(ui),

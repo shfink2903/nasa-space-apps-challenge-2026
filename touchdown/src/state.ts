@@ -6,6 +6,7 @@ import type { Criterion, Requirements } from "./planner/ranking";
 export type Tab = "explorer" | "data";
 /** "polar": the five south-pole sites with the terrain model. "all": every site with the geometric model. */
 export type Scope = "polar" | "all";
+export interface ComparisonSelection { siteId: string; date: string }
 
 export interface AppState {
   locale: Locale;
@@ -21,8 +22,9 @@ export interface AppState {
   requirements: Requirements;
   /** The site everything is shown for. There is always one. */
   focusId: string;
-  /** Sites shown side by side, 3 at most. */
-  compareIds: string[];
+  /** Explicit site/date pairs; height, duration and model are common. */
+  comparisons: ComparisonSelection[];
+  sceneStatus: "loading" | "ready" | "unavailable";
   hoverId: string | null;
   /** Fractional index in the display series (600 s steps). */
   index: number;
@@ -71,6 +73,9 @@ export interface Actions {
   selectSite(id: string): void;
   hover(id: string | null): void;
   toggleCompare(id: string): void;
+  addComparison(siteId: string, date?: string): void;
+  removeComparison(index: number): void;
+  setComparisonDate(index: number, date: string): void;
   setDate(date: string): void;
   shiftDate(weeks: number): void;
   setHeight(heightM: number): void;

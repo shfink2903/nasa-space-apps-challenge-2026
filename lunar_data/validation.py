@@ -34,18 +34,27 @@ def horizons_reference(raw, test_id, target, lat, lon):
               "EPHEM_TYPE": "'OBSERVER'", "START_TIME": "'2026-12-01'", "STOP_TIME": "'2026-12-01 03:00'",
               "STEP_SIZE": "'3h'", "QUANTITIES": "'4,20'", "ANG_FORMAT": "'DEG'", "APPARENT": "'AIRLESS'", "CSV_FORMAT": "'YES'"}
     path = Path(raw) / "horizons" / f"{test_id}_{identity(params)}.txt"
+    record_path = path.with_suffix(".source.json")
+    url = "https://ssd.jpl.nasa.gov/api/horizons.api?" + urllib.parse.urlencode(params)
     if path.exists():
+        if not record_path.is_file():
+            raise DataError("missing_provenance", str(path))
+        record = read_json(record_path)
+        if (not isinstance(record, dict) or record.get("sha256") != sha256(path)
+                or record.get("params") != params or record.get("url") != url):
+            raise DataError("integrity_failure", str(path), "Horizons archive or request metadata differ")
         text = path.read_text()
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        url = "https://ssd.jpl.nasa.gov/api/horizons.api?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=60, context=ssl.create_default_context(cafile=certifi.where())) as response:
             text = response.read().decode()
         if "$$SOE" not in text or "$$EOE" not in text:
             raise DataError("source_format_changed", "Horizons", "ephemeris markers absent")
         path.write_text(text)
-        write_json(path.with_suffix(".source.json"), {"url": url, "retrievedAt": utc_now(), "sha256": sha256(path), "params": params})
+        write_json(record_path, {"url": url, "retrievedAt": utc_now(), "sha256": sha256(path), "params": params})
+    if "$$SOE" not in text or "$$EOE" not in text:
+        raise DataError("source_format_changed", "Horizons", "ephemeris markers absent")
     lines = text.splitlines()
     header = next((line for line in lines if "Date__(UT)__HR:MN" in line and "Azi" in line and "Elev" in line), None)
     if header is None:

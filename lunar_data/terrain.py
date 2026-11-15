@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,19 @@ from .geometry import validate_point
 
 R_M = 1737400.
 CRS_GEO = "+proj=longlat +R=1737400 +no_defs"
+CACHE_NAMESPACE = "profiles-verified-v1"
+
+
+def _verified_source(path):
+    """Verify the label as well as the raster before interpreting its pixels."""
+    record_path = path.with_name(path.name + ".source.json")
+    if not record_path.is_file():
+        raise DataError("missing_provenance", str(path))
+    record = read_json(record_path)
+    if (not isinstance(record, dict) or record.get("sha256") != sha256(path)
+            or record.get("receivedSizeBytes") != path.stat().st_size):
+        raise DataError("integrity_failure", str(path))
+    return record
 
 
 def unit(lat, lon):
@@ -65,6 +79,7 @@ def mask_variation(az, el, radius, profile):
 class DEM:
     def __init__(self, label):
         self.label = Path(label)
+        self.label_source = _verified_source(self.label)
         text = self.label.read_text()
         required = {"SAMPLE_TYPE": "LSB_INTEGER", "SAMPLE_BITS": "16", "SCALING_FACTOR": "0.5",
                     "OFFSET": "1737400.", "CENTER_LATITUDE": "-90", "POSITIVE_LONGITUDE_DIRECTION": '"EAST"'}
@@ -75,9 +90,7 @@ class DEM:
         if '"MEAN EARTH/POLAR AXIS OF DE421"' not in text:
             raise DataError("source_format_changed", str(label), "coordinate system")
         img = self.label.with_suffix(".img")
-        self.source = read_json(img.with_name(img.name + ".source.json"))
-        if sha256(img) != self.source["sha256"]:
-            raise DataError("integrity_failure", str(img))
+        self.source = _verified_source(img)
         with rasterio.open(self.label) as ds:
             if ds.count != 1 or ds.dtypes != ("int16",) or ds.nodata not in (None, -32768):
                 raise DataError("source_format_changed", str(label), "dtype, band count or nodata")
@@ -126,12 +139,26 @@ class DEM:
                 "radialStepM": self.pixel_m, "azimuthStepDeg": azimuth_step, "rMinKm": rmin_km,
                 "groundHeightOverrideM": ground_height_m, "algorithm": "spherical-bilinear-v2"}
         pid = identity(spec)
-        cached = Path(cache) / f"profile_{pid}.json" if cache else None
+        # Legacy caches contain only an input-derived ID, which cannot attest to
+        # the computed arrays. Keep them untouched and recompute into a separate
+        # namespace; published profiles and their IDs retain their old format.
+        cached = Path(cache) / CACHE_NAMESPACE / f"profile_{pid}.json" if cache else None
         if cached and cached.exists():
-            result = read_json(cached)
-            if result["profileId"] != pid:
-                raise DataError("integrity_failure", str(cached))
+            try:
+                envelope = read_json(cached)
+                result = envelope["profile"]
+                valid = (envelope["cacheFormatVersion"] == 1
+                         and envelope["contentSha256"] == identity(result, 64)
+                         and result["profileId"] == pid
+                         and all(result.get(key) == value for key, value in spec.items()))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise DataError("integrity_failure", str(cached), "invalid profile cache") from exc
+            if not valid:
+                raise DataError("integrity_failure", str(cached), "profile cache checksum or parameters differ")
             return result
+        if cached and (Path(cache) / cached.name).exists():
+            warnings.warn("Legacy terrain cache has no content digest; ignored and recomputed into "
+                          f"{CACHE_NAMESPACE}. Legacy files are preserved.", RuntimeWarning, stacklevel=2)
         h0 = float(self.sample(lat, lon)[0]) if ground_height_m is None else ground_height_m
         if not np.isfinite(h0):
             raise DataError("outside_coverage", "terrain", site["id"])
@@ -161,7 +188,7 @@ class DEM:
                   "limits": ["Preliminary interpolated LOLA product; relief beyond rMaxKm not modeled.",
                              "Local slope, roughness and landing hazards not evaluated."]}
         if cached:
-            write_json(cached, result)
+            write_json(cached, {"cacheFormatVersion": 1, "contentSha256": identity(result, 64), "profile": result})
         return result
 
 

@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-11-15T10:21:29.109581+00:00",
+  "branch": "codex/data-pipeline-audit-fixes",
+  "root": "data/processed/v1",
+  "fileCountBefore": 4015,
+  "fileCountAfter": 4015,
+  "added": [],
+  "removed": [],
+  "changed": [],
+  "manifestSha256": "175bc0048f3fefb50fdba02dc87f768644af18f7333b2d8aa9c665c9342a7b92",
+  "inventorySha256": "38cab03823f99bf6b0cdb720df7a79140f2125d281eac072fd37714183da899d",
+  "method": "Exact relative file set and SHA-256 of every file, including manifest.json and .DS_Store, compared with snapshot from before any task edits.",
+  "scientificStatus": "Unchanged: original T9 failed; LOLA experimental; v1 scenarios not_validated.",
+  "tests": {
+    "pythonPassed": 182,
+    "touchdownPassed": 98,
+    "browserChecksPassed": 28,
+    "typescript": "passed",
+    "build": "passed"
+  },
+  "liveProvider": {
+    "status": "not_executed_pending_explicit_approval",
+    "requestsMade": 0,
+    "reason": "Automatic approval review rejected external payload and cost without explicit authorization."
+  }
+}

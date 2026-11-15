@@ -126,4 +126,11 @@ export class Stage {
     this.film.uniforms.uTime.value = timeS;
     this.composer.render();
   }
+
+  /** Release graphics resources when data-only mode takes over. */
+  dispose(): void {
+    for (const pass of this.composer.passes) pass.dispose();
+    this.composer.dispose();
+    this.renderer.dispose();
+  }
 }

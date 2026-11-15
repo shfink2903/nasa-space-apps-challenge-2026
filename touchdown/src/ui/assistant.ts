@@ -1,9 +1,9 @@
-import { sampleSeries } from "../data/dataset";
-import { scopeSites } from "../planner/catalog";
-import { nextEvent } from "../planner/clock";
-import { METRIC_IDS } from "../planner/metrics";
-import { checkRequirements, CRITERION_METRIC, verdict } from "../planner/ranking";
-import { bundleFor, focusSite, metricsFor, rankingFor, scenarioIdFor } from "../planner/select";
+import { parseScenarioId, type Metric } from "../data/dataset";
+import { buildChatRequest } from "../planner/assistantRequest";
+import { groupOf } from "../planner/catalog";
+import { nextEvent, sampleScenario } from "../planner/clock";
+import { isLowerBound, METRIC_IDS } from "../planner/metrics";
+import { bundleFor, focusSite, metricsFor, rankingFor } from "../planner/select";
 import type { AppState } from "../state";
 import type { Ui } from "./context";
 import { h, icon } from "./dom";
@@ -20,7 +20,8 @@ interface AiAnswer {
 interface AiEvidence {
   kind: string;
   siteId?: string;
-  metric?: { metricId: string; value: number | null; unit: string };
+  scenarioId?: string;
+  metric?: Metric;
   comparison?: { exploredCount: number; nonDominatedScenarioIds: string[] };
   range?: { metricId: string; min: number | null; max: number | null; unit: string };
 }
@@ -92,7 +93,7 @@ export function createAssistant(ui: Ui): HTMLElement {
     return e.kind;
   }
 
-  /** The metric cards the AI cites, as one row per site. These are the published values it read. */
+  /** One row per scenario, including when the same site is compared on different dates. */
   function evidenceTable(evidence: AiEvidence[]): HTMLElement | null {
     const columns: { id: string; label: string }[] = [
       { id: METRIC_IDS.bothShare, label: t.criteriaShort.balanced },
@@ -101,15 +102,19 @@ export function createAssistant(ui: Ui): HTMLElement {
       { id: METRIC_IDS.sunGapH, label: t.colNight },
       { id: METRIC_IDS.earthGapH, label: t.colBlackout },
     ];
-    const bySite = new Map<string, Map<string, AiEvidence["metric"]>>();
+    const byScenario = new Map<string, { siteId: string; metrics: Map<string, Metric> }>();
     for (const e of evidence) {
-      if (e.kind !== "metric" || !e.metric || !e.siteId) continue;
-      if (!bySite.has(e.siteId)) bySite.set(e.siteId, new Map());
-      bySite.get(e.siteId)!.set(e.metric.metricId, e.metric);
+      if (e.kind !== "metric" || !e.metric || !e.siteId || !e.scenarioId) continue;
+      if (!byScenario.has(e.scenarioId)) byScenario.set(e.scenarioId, { siteId: e.siteId, metrics: new Map() });
+      byScenario.get(e.scenarioId)!.metrics.set(e.metric.metricId, e.metric);
     }
-    const used = columns.filter((c) => [...bySite.values()].some((m) => m.has(c.id)));
-    if (bySite.size === 0 || used.length === 0) return null;
-    const cell = (m: AiEvidence["metric"]): string => (!m || m.value === null ? "—" : m.unit === "1" ? fmt.percent(m.value) : fmt.hours(m.value));
+    const used = columns.filter((c) => [...byScenario.values()].some((r) => r.metrics.has(c.id)));
+    if (byScenario.size === 0 || used.length === 0) return null;
+    const cell = (m: Metric | undefined): string => {
+      if (!m || m.value === null || m.quality === "unknown" || m.quality === "partial") return "—";
+      const value = m.unit === "1" ? fmt.percent(m.value) : fmt.hours(m.value);
+      return m.truncatedStart || m.truncatedEnd || m.truncatedByMissingData ? `≥ ${value}` : value;
+    };
     return h(
       "table",
       { class: "ai-table" },
@@ -117,9 +122,12 @@ export function createAssistant(ui: Ui): HTMLElement {
       h(
         "tbody",
         null,
-        ...[...bySite].map(([siteId, metrics]) => {
+        ...[...byScenario].map(([scenarioId, { siteId, metrics }]) => {
           const site = store.get().sites.find((x) => x.id === siteId);
-          return h("tr", null, h("td", { text: site ? fmt.site(site) : siteId }), ...used.map((c) => h("td", { text: cell(metrics.get(c.id)) })));
+          const key = parseScenarioId(scenarioId);
+          const label = [site ? fmt.site(site) : siteId, key ? fmt.startDateShort(key.date) : scenarioId,
+            key ? t.mastUnit(key.heightM) : ""].filter(Boolean).join(" · ");
+          return h("tr", { "data-scenario-id": scenarioId }, h("td", { text: label }), ...used.map((c) => h("td", { text: cell(metrics.get(c.id)) })));
         }),
       ),
     );
@@ -136,16 +144,13 @@ export function createAssistant(ui: Ui): HTMLElement {
     log.append(pending);
     pending.scrollIntoView({ block: "nearest" });
     const s = store.get();
-    // The AI reads the scenarios on screen: the compared sites, or all sites of the scope.
-    const ids = (s.compareIds.length >= 2 ? s.compareIds : scopeSites(s.sites, s.scope).map((x) => x.id))
-      .map((id) => s.sites.find((x) => x.id === id)!)
-      .map((site) => scenarioIdFor(s, site))
-      .filter((id): id is string => id !== null);
+    const request = buildChatRequest(s, text, sessionId);
     try {
+      if (!request) throw new Error("Selected scenario unavailable");
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, locale: s.locale, sessionId, context: { scenarioIds: ids, priority: [METRIC_IDS[CRITERION_METRIC[s.criterion]]] } }),
+        body: JSON.stringify(request),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const answer = (await res.json()) as AiAnswer;
@@ -195,22 +200,26 @@ export function createAssistant(ui: Ui): HTMLElement {
 
   // The rule-based summary of the selected site, at the chosen time.
   ui.watch(
-    (s) => [s.assistantOpen, s.focusId, s.date, s.heightM, s.scope, s.criterion, s.requirements, Math.round(s.index / 6), s.dataVersion],
+    (s) => [s.assistantOpen, s.focusId, s.date, s.heightM, s.scope, s.criterion, s.requirements, s.index, s.dataVersion],
     (s: AppState) => {
       if (!s.assistantOpen) return;
       const site = focusSite(s);
       const lines: string[] = [];
       const ranking = rankingFor(s, resources);
       const mine = ranking.rows.find((r) => r.metrics.siteId === site.id);
-      lines.push(mine?.rank ? `${fmt.site(site)} · ${t.rankOf(mine.rank, ranking.rows.length)} · ${t.criteriaShort[s.criterion]}` : `${fmt.site(site)} · ${t.landed}`);
+      lines.push(mine?.rank ? `${fmt.site(site)} · ${t.rankOf(mine.rank, ranking.rows.length)} · ${t.criteriaShort[s.criterion]}` : `${fmt.site(site)} · ${groupOf(site) === "candidate" ? t.unranked : t.landed}`);
       const bundle = bundleFor(s, resources, site);
       if (bundle) {
-        const sample = sampleSeries(bundle.series, s.index);
+        const sample = sampleScenario(bundle.series, bundle.scenario, s.index);
         for (const [name, state] of [
           ["sun", sample.sunState],
           ["earth", sample.earthState],
         ] as const) {
-          const visible = (state ?? 0) > 0;
+          if (state === null) {
+            lines.push(`${name === "sun" ? t.sun : t.earth}: ${t.state.unknown}.`);
+            continue;
+          }
+          const visible = state > 0;
           const ev = nextEvent(bundle.scenario, name, sample.tMs);
           const left = ev ? fmt.duration(Date.parse(ev.tUtc) - sample.tMs) : "";
           const countdown = ev ? (ev.type === "set" ? t.setIn(left) : t.riseIn(left)) : visible ? t.noSetInPeriod : t.noRiseInPeriod;
@@ -220,8 +229,8 @@ export function createAssistant(ui: Ui): HTMLElement {
       const m = metricsFor(s, resources, site);
       if (m) {
         lines.push(`${t.over30}: ${t.sunShare.toLowerCase()} ${fmt.percent(m.sunShare)}, ${t.earthShare.toLowerCase()} ${fmt.percent(m.earthShare)}, ${t.bothShare.toLowerCase()} ${fmt.percent(m.bothShare)}.`);
-        lines.push(`${t.longestNight}: ${fmt.gap(m.sunGapH)}. ${t.longestBlackout}: ${fmt.gap(m.earthGapH)}.`);
-        lines.push(t.verdict[verdict(checkRequirements(m, s.requirements))]);
+        lines.push(`${t.longestNight}: ${isLowerBound(m, "sunGapH") ? "≥ " : ""}${fmt.gap(m.sunGapH)}. ${t.longestBlackout}: ${isLowerBound(m, "earthGapH") ? "≥ " : ""}${fmt.gap(m.earthGapH)}.`);
+        lines.push(t.verdict[ranking.verdicts[m.scenarioId] ?? "unknown"]);
       }
       summary.replaceChildren(...lines.map((line) => h("li", { text: line })));
     },
