@@ -69,7 +69,7 @@ export function createTimeBar(store: Store, actions: Actions): HTMLElement {
   new ResizeObserver(() => drawTrack(track, store.get().series)).observe(track);
 
   store.subscribe((s, p) => {
-    if (s.phase !== p.phase || s.touring !== p.touring) panel.hidden = s.phase === "cruise" || s.touring;
+    if (s.phase !== p.phase || s.touring !== p.touring || s.compareOpen !== p.compareOpen) panel.hidden = s.phase === "cruise" || s.touring || s.compareOpen;
     if (s.series !== p.series) {
       drawTrack(track, s.series);
       if (s.series) {

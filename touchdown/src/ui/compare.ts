@@ -1,64 +1,68 @@
 import { sweepFor, type Derived, type Site } from "../data/dataset";
+import { HOURS_30_DAYS, HOURS_YEAR, SOLAR_KW_PER_M2, solarEnergyKwhPerM2 } from "../data/energy";
 import { EARTH, SUN, valuesAt, verdictAt } from "../data/mission";
 import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow } from "../data/ranking";
 import type { Actions, AppState, CompareTab, Store } from "../state";
-import { createCoordsForm, createRegionSwitch, formatCriterion, monthGroups } from "./bits";
+import { createCoordsForm, createRegionSwitch, monthGroups } from "./bits";
 import { h, icon } from "./dom";
-import { dateMs, formatCoords, formatDayMonth, formatDays, formatDaysShort, formatDeg, formatMonth, formatPercent0, formatShortDate, formatStartDate, siteLabel } from "./format";
+import { dateMs, formatCoords, formatDayMonth, formatDays, formatDaysExact, formatDaysShort, formatDeg, formatHours, formatInt, formatKw, formatMonth, formatShortDate, formatStartDate, siteLabel } from "./format";
 import { createPlanner } from "./planner";
 import { T } from "./strings";
 import { createCriteria, failureLines, verdictPill } from "./verdict";
 
 const RGB: Record<string, string> = { overlap: "232,236,244", sun: "255,186,96", earth: "157,188,255" };
 const SORTS = ["overlap", "sun", "earth"];
-const PLAY_MS = 650;
+/** One weekly date every PLAY_MS while the year plays. The bars and the rows move over the same time. */
+const PLAY_MS = 520;
+const MOVE_MS = 460;
 
 interface Column {
-  /** A criterion id (sortable), or "maxSun" / "maxEarth" / "model". */
+  /** A criterion id (sortable), or "energy" / "maxSun" / "maxEarth". */
   id: string;
   criterion: Criterion | null;
+  /** Small line under the title: the unit, or what is measured. */
+  hint: string;
   /** Only shown with exact values. */
   detail: boolean;
 }
 
-const column = (id: string, detail: boolean): Column => ({ id, criterion: CRITERIA.find((c) => c.id === id) ?? null, detail });
-/** Dataset metric behind each column, shown under the title with exact values. */
-const METRIC_OF: Record<string, string> = { maxSun: "sun.maxElevDeg", maxEarth: "earth.maxElevDeg" };
-const metricOf = (c: Column): string | null => c.criterion?.metricId ?? METRIC_OF[c.id] ?? null;
+const column = (id: string, hint: string, detail: boolean): Column => ({ id, criterion: CRITERIA.find((c) => c.id === id) ?? null, hint, detail });
 const COLUMNS: Column[] = [
-  column("sun", false),
-  column("earth", false),
-  column("overlap", false),
-  column("night", true),
-  column("blackout", true),
-  column("maxSun", true),
-  column("maxEarth", true),
-  column("model", true),
+  column("sun", T.colDays, false),
+  column("earth", T.colDays, false),
+  column("overlap", T.colDays, false),
+  column("energy", T.colEnergy, false),
+  column("night", T.colNight, true),
+  column("blackout", T.colBlackout, true),
+  column("maxSun", T.colAbove, true),
+  column("maxEarth", T.colAbove, true),
 ];
 
 interface RowView {
   tr: HTMLTableRowElement;
   rank: HTMLElement;
   verdict: HTMLElement;
-  mark: HTMLElement;
   cells: Map<string, { value: HTMLElement; fill: HTMLElement | null }>;
 }
 
 /**
- * "Evaluate the sites": the main page of the tool, full screen.
- * The user's criteria and the sites studied stay on top. Then three views:
- * the ranking on one landing date, the full year, and the launch delay.
- * Values come from the dataset index; nothing is computed here.
+ * "Evaluate the sites": the main page of the tool. Its blocks are panes of
+ * glass over the 3D view, and the top right is left open as a window on the
+ * Moon and the ship. The user's criteria and the sites studied stay on top.
+ * Then three views: the ranking on one landing date, the full year, and the
+ * launch delay. Values come from the dataset index; the only thing computed
+ * here is the solar energy (see data/energy.ts).
  */
 export function createCompare(store: Store, actions: Actions, derived: Derived): HTMLElement {
   let tab: CompareTab = store.get().compareTab;
   const planner = createPlanner(store, actions, derived);
-  let exact = false;
+  let exact = true;
   let timer = 0;
   let views = new Map<string, RowView>();
   let order = "";
   /** The cell the user clicked in the full-year view. */
   let picked: { siteId: string; date: string } | null = null;
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const tabDate = h("button", { class: "seg", type: "button", text: T.tabDate });
   const tabYear = h("button", { class: "seg", type: "button", text: T.tabYear });
@@ -66,7 +70,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   const lead = h("p", { class: "page-lead" });
 
   // --- The sites studied: region, and the user's own coordinates. ---
-  const yourPoint = h("p", { class: "note", hidden: true });
+  const yourPoint = h("p", { class: "your-point", hidden: true });
   const sitesCard = h(
     "section",
     { class: "criteria sites-card" },
@@ -92,13 +96,13 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     h("div", { class: "cmp-date-row" }, prev, h("div", { class: "cmp-slider-box" }, slider, months), next),
   );
 
-  // --- Ranking order, and exact values on request. ---
+  // --- Ranking order, and the exact values (on from the start). ---
   const sortButtons = SORTS.map((id) => {
     const b = h("button", { class: "seg", type: "button", text: T.sort[id] });
     b.addEventListener("click", () => actions.setRankBy(id));
     return { id, b };
   });
-  const exactBox = h("input", { type: "checkbox", id: "cmp-exact" });
+  const exactBox = h("input", { class: "switch", type: "checkbox", id: "cmp-exact", role: "switch" });
   const options = h(
     "div",
     { class: "cmp-options" },
@@ -113,13 +117,23 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     h(
       "div",
       { class: "page-inner" },
-      h("header", { class: "page-head" }, h("h1", { class: "page-title", text: T.evalTitle }), h("div", { class: "segmented page-tabs", role: "tablist" }, tabDate, tabYear, tabDelay)),
-      lead,
-      h("div", { class: "setup" }, createCriteria(store, actions), sitesCard),
+      h(
+        "div",
+        { class: "page-top" },
+        h(
+          "div",
+          { class: "page-top-main" },
+          h("header", { class: "page-head" }, h("h1", { class: "page-title", text: T.evalTitle }), h("div", { class: "segmented page-tabs", role: "tablist" }, tabDate, tabYear, tabDelay)),
+          lead,
+          createCriteria(store, actions),
+          sitesCard,
+        ),
+        // Left empty on purpose: the Moon and the ship show through here.
+        h("div", { class: "page-window", "aria-hidden": "true" }),
+      ),
       dateBar,
       options,
       body,
-      h("p", { class: "page-foot", text: T.pageFoot }),
     ),
   );
 
@@ -128,6 +142,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     timer = 0;
     playLabel.textContent = T.datePlay;
     play.replaceChildren(icon("play"), playLabel);
+    page.classList.remove("is-playing");
   };
   const step = (delta: number): boolean => {
     const s = store.get();
@@ -143,23 +158,23 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     actions.setCompare(false);
   };
 
-  const siteName = (site: Site, nonDominated = false): HTMLElement =>
-    h(
-      "span",
-      { class: "site-name", title: site.name },
-      h("span", { class: "site-name-text", text: siteLabel(site).title }),
-      site.status === "study_point" && h("em", { class: "tag tag-ice", text: T.studyTag }),
-      site.computed === true && h("em", { class: "tag tag-warn", title: T.customWarning, text: T.estimateShort }),
-      nonDominated && h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: T.nonDominatedTag }),
-    );
+  /** The user's own point is written larger than the catalogue sites. */
+  const own = (site: Site): string => (site.status === "custom" ? "is-own" : "");
+  const siteName = (site: Site): HTMLElement => h("span", { class: "site-name", title: site.name }, h("span", { class: "site-name-text", text: siteLabel(site).title }));
 
   const text = (c: Column, r: RankRow): string => {
-    if (c.id === "model") return T.modelShort[r.model];
-    const value = r.values[metricOf(c)!] ?? null;
+    if (c.id === "energy") {
+      const sun = r.values[SUN] ?? null;
+      return sun === null ? "—" : formatInt(solarEnergyKwhPerM2(sun, HOURS_30_DAYS));
+    }
+    if (!c.criterion) {
+      const value = r.values[c.id === "maxSun" ? "sun.maxElevDeg" : "earth.maxElevDeg"] ?? null;
+      return value === null ? "—" : formatDeg(value);
+    }
+    const value = r.values[c.criterion.metricId] ?? null;
     if (value === null) return "—";
-    if (!c.criterion) return formatDeg(value);
-    if (c.criterion.kind === "fraction" && !exact) return formatDaysShort(value);
-    return formatCriterion(c.criterion, value, exact);
+    if (c.criterion.kind === "hours") return formatHours(value);
+    return exact ? formatDaysExact(value) : formatDaysShort(value);
   };
 
   /** Builds the table once per precision level; `updateTable` then only changes values, so the bars animate. */
@@ -175,9 +190,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       h("th", { scope: "col", class: "verdict" }, h("span", { class: "col-title", text: T.colVerdict }), h("small", { text: T.colVerdictHint })),
       ...columns.map((c) => {
         const label = h("span", { class: "col-title", text: T.cols[c.id] });
-        const id = metricOf(c);
-        const share = c.criterion?.kind === "fraction";
-        const hint = h("small", null, share ? (exact ? T.colShare : T.colDays) : "", exact && id ? h("code", { text: id }) : null);
+        const hint = h("small", { text: c.hint });
         if (!c.criterion) return h("th", { scope: "col", "data-col": c.id }, label, hint);
         const button = h("button", { type: "button" }, label, hint);
         button.addEventListener("click", () => actions.setRankBy(c.id));
@@ -188,7 +201,6 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     for (const site of sitesIn(s.sites, s.region)) {
       const rank = h("td", { class: "rank" });
       const verdict = h("td", { class: "verdict" });
-      const mark = h("em", { class: "tag tag-amber", title: T.nonDominatedHelp, text: T.nonDominatedTag, hidden: true });
       const cells = new Map<string, { value: HTMLElement; fill: HTMLElement | null }>();
       const tds = columns.map((c) => {
         const value = h("b");
@@ -198,17 +210,18 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         cells.set(c.id, { value, fill });
         return h("td", { "data-col": c.id, class: bar ? "has-bar" : "" }, fill && h("div", { class: "cmp-bar" }, fill), value);
       });
-      const name = siteName(site);
-      name.append(mark);
-      const tr = h("tr", { tabindex: 0 }, rank, h("th", { scope: "row", class: "name", title: site.name }, name), verdict, ...tds);
+      const tr = h("tr", { tabindex: 0, class: own(site) }, rank, h("th", { scope: "row", class: "name" }, siteName(site)), verdict, ...tds);
       tr.addEventListener("click", () => open(site.id));
       tr.addEventListener("keydown", (event) => {
         if (event.key === "Enter") open(site.id);
       });
+      // The point of the row lights up on the Moon, in the window above.
+      tr.addEventListener("pointerenter", () => actions.hover(site.id));
+      tr.addEventListener("pointerleave", () => actions.hover(null));
       tbody.append(tr);
-      views.set(site.id, { tr, rank, verdict, mark, cells });
+      views.set(site.id, { tr, rank, verdict, cells });
     }
-    return h("div", null, h("table", { class: `compare-table ${exact ? "is-precise" : ""}` }, h("thead", null, head), tbody), h("p", { class: "note", text: T.rowHint }));
+    return h("div", { class: "glass table-card" }, h("table", { class: `compare-table ${exact ? "is-precise" : ""}` }, h("thead", null, head), tbody), h("p", { class: "note", text: T.rowHint }));
   }
 
   function updateTable(s: AppState, rows: RankRow[], active: Criterion): void {
@@ -221,7 +234,6 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       if (!view) return;
       view.rank.textContent = r.rank === null ? "" : String(r.rank);
       view.verdict.replaceChildren(verdictPill(verdictAt(derived, r.site, s.heightM, s.date, s.criteria), true));
-      view.mark.hidden = !(exact && r.nonDominated);
       view.tr.classList.toggle("is-selected", r.site.id === s.siteId);
       view.tr.classList.toggle("is-first", r.rank === 1);
       for (const c of columns) {
@@ -230,18 +242,34 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         if (cell.fill) cell.fill.style.width = `${(r.values[c.criterion!.metricId] ?? 0) * 100}%`;
       }
     });
-    // Reorder only when the ranking changes: moving a row cuts its bar animation.
+    // Reorder only when the ranking changes, and slide each row from its old place to the new one.
     const nextOrder = rows.map((r) => r.site.id).join(",");
     if (nextOrder !== order) {
+      const moving = order !== "" && !still.matches;
+      const before = new Map<string, number>();
+      if (moving) for (const [id, view] of views) before.set(id, view.tr.getBoundingClientRect().top);
       order = nextOrder;
       for (const r of rows) tbody.append(views.get(r.site.id)!.tr);
+      if (moving) {
+        for (const [id, view] of views) {
+          const delta = (before.get(id) ?? 0) - view.tr.getBoundingClientRect().top;
+          if (delta === 0) continue;
+          view.tr.style.transition = "none";
+          view.tr.style.transform = `translateY(${delta}px)`;
+        }
+        void tbody.offsetHeight; // the browser takes the start position before the slide begins
+        for (const view of views.values()) {
+          view.tr.style.transition = `transform ${MOVE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+          view.tr.style.transform = "";
+        }
+      }
     }
     for (const el of table.querySelectorAll<HTMLElement>("[data-col]")) el.classList.toggle("is-active", el.dataset.col === active.id);
   }
 
-  /** Full year: the solar energy possible at each site, then the dates when landing is possible. */
+  /** Full year: the solar energy received at each site, then the dates when landing is possible. */
   function yearView(s: AppState, shown: Site[]): HTMLElement {
-    // --- Solar energy: share of the year with the Sun visible (mean of the weekly dates). ---
+    // --- Solar energy over a year, from the mean share of time with the Sun visible (52 weekly dates). ---
     const energy = shown
       .map((site) => {
         const values = sweepFor(derived, site, s.heightM)?.values[SUN] ?? [];
@@ -255,11 +283,11 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
       fill.style.width = `${(mean ?? 0) * 100}%`;
       return h(
         "div",
-        { class: "energy-row" },
+        { class: `energy-row ${own(site)}` },
         siteName(site),
         h("div", { class: "energy-bar" }, fill),
-        h("b", { class: "energy-value", text: mean === null ? "—" : formatPercent0(mean) }),
-        h("small", { text: mean === null ? T.pending : T.energyPerMonth(formatDays(mean)) }),
+        h("b", { class: "energy-value", text: mean === null ? "—" : formatInt(solarEnergyKwhPerM2(mean, HOURS_YEAR)) }),
+        h("span", { class: "energy-mean", text: mean === null ? T.pending : T.energyMean(formatKw(SOLAR_KW_PER_M2 * mean)) }),
       );
     });
 
@@ -291,7 +319,9 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         }
         row.append(group);
       }
-      grid.append(siteName(r.site), row, h("small", { class: "cal-count", text: T.calCount(r.count, s.dates.length) }));
+      const name = siteName(r.site);
+      name.className += ` ${own(r.site)}`;
+      grid.append(name, row, h("span", { class: "cal-count", text: T.calCount(r.count, s.dates.length) }));
     }
     grid.addEventListener("click", (event) => {
       const cell = (event.target as HTMLElement).closest<HTMLElement>(".cal-cell");
@@ -326,8 +356,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         { class: "year-block energy" },
         h("h2", { class: "year-title", text: T.energyTitle }),
         h("p", { class: "year-lead", text: T.energyLead }),
+        h("div", { class: "energy-head", "aria-hidden": "true" }, h("span"), h("span"), h("span", { text: T.energyUnit }), h("span")),
         h("div", { class: "energy-list" }, ...energyRows),
-        h("p", { class: "note", text: T.energyNote }),
       ),
       h(
         "section",
@@ -411,6 +441,8 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     if (s.dates.indexOf(s.date) >= s.dates.length - 1) actions.setDate(s.dates[0]);
     playLabel.textContent = T.dateStop;
     play.replaceChildren(icon("pause"), playLabel);
+    // While it plays, the bars and the date cursor glide from one week to the next.
+    page.classList.add("is-playing");
     timer = window.setInterval(() => {
       if (!step(1)) stop();
     }, PLAY_MS);
@@ -422,6 +454,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
   tabDate.addEventListener("click", () => actions.setCompare(true, "date"));
   tabYear.addEventListener("click", () => actions.setCompare(true, "year"));
   tabDelay.addEventListener("click", () => actions.setCompare(true, "delay"));
+  page.style.setProperty("--play-ms", `${PLAY_MS}ms`);
   store.subscribe((s, p) => {
     if (s.dates !== p.dates) fillMonths(s.dates);
     if (s.compareTab !== p.compareTab) {

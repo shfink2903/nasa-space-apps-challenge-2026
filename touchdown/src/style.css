@@ -979,7 +979,7 @@ body[data-phase="final"] #scene {
   width: calc(100% - 66px);
 }
 .compare-table.is-precise td.has-bar {
-  min-width: 96px;
+  min-width: 136px;
 }
 .compare-table.is-precise th.name {
   max-width: 210px;
@@ -2032,21 +2032,12 @@ body:not([data-phase="cruise"]) .caption-actions {
   justify-content: space-between;
 }
 
-/* ---------- Evaluate the sites: a full page ---------- */
-/* The page hides the Moon, also behind the top bar; it scrolls under the bar, not through it. */
-body.is-page #hud::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  background: #06080e;
-}
+/* ---------- Evaluate the sites: panes of glass over the 3D view, with a window on the Moon ---------- */
 .page {
   position: absolute;
   inset: calc(var(--gap) * 2 + var(--bar)) 0 0 0;
   z-index: 5;
   overflow-y: auto;
-  background: #06080e;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
@@ -2211,7 +2202,7 @@ body.is-page #hud::before {
 }
 .energy-row {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 76px 200px;
+  grid-template-columns: 290px minmax(0, 1fr) 96px 230px;
   align-items: center;
   gap: 14px;
 }
@@ -2234,13 +2225,30 @@ body.is-page #hud::before {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.energy-row small {
-  font-size: 13px;
+.energy-head {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr) 96px 230px;
+  gap: 14px;
+  margin-top: 14px;
+  font-size: 12.5px;
   color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.energy-head span:nth-child(3) {
+  direction: rtl;
+}
+.energy-head + .energy-list {
+  margin-top: 6px;
+}
+.energy-mean {
+  font-size: 14px;
+  color: var(--muted);
+  white-space: nowrap;
 }
 .cal {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 124px;
+  grid-template-columns: 290px minmax(0, 1fr) 124px;
   align-items: center;
   gap: 8px 14px;
   margin-top: 14px;
@@ -2471,29 +2479,294 @@ body.is-page #hud::before {
   font-size: 15.5px;
 }
 
+/* ---------- Version 2: glass, window on the Moon, tabs ---------- */
+
+/* Top bar: every tab looks the same; only the open one is filled. */
+.nav-button.is-current,
+.nav-button.is-current:not(.is-primary) {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #1a1206;
+  font-weight: 600;
+}
+.nav-button.is-current:hover {
+  background: #ffc97f;
+}
+.topbar .brand small {
+  max-width: none;
+  color: var(--muted);
+}
+
+/* Glass: a pane that blurs the 3D view behind it. The page itself has no background. */
+.glass,
+.page .criteria,
+.page .cmp-options,
+.page .year-block,
+.page .plan-inputs,
+.page .plan-card,
+.page .plan-row,
+.page .cal-detail {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(11, 15, 24, 0.56);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 18px 44px rgba(0, 0, 0, 0.34);
+}
+.page .cmp-date {
+  border-color: rgba(255, 186, 96, 0.36);
+  background: linear-gradient(rgba(255, 186, 96, 0.13), rgba(255, 186, 96, 0.13)), rgba(11, 15, 24, 0.56);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 18px 44px rgba(0, 0, 0, 0.34);
+}
+.page .year-block.energy {
+  border-color: rgba(255, 186, 96, 0.36);
+  background: linear-gradient(rgba(255, 186, 96, 0.1), rgba(255, 186, 96, 0.03)), rgba(11, 15, 24, 0.56);
+}
+.page-title,
+.page-lead {
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.8);
+}
+.page-lead {
+  color: var(--ink);
+}
+.page-tabs {
+  background: rgba(11, 15, 24, 0.56);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+}
+/* Month labels may run past their cell; they never widen the page. */
+.page .cmp-months {
+  overflow: hidden;
+}
+/* Top of the page: the inputs on the left, a window on the Moon and the ship on the right. */
+.page-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.page-top-main {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.page-top-main .page-lead {
+  margin-top: -4px;
+}
+.page-window {
+  min-height: 340px;
+}
+.page .cmp-date {
+  margin-top: 16px;
+}
+.page .cmp-options {
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+.page .plan-inputs {
+  padding: 16px 18px;
+  border-radius: 16px;
+}
+.table-card {
+  padding: 6px 16px 12px;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+.your-point {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--amber);
+}
+
+/* The user's own point is written larger than the catalogue sites. */
+.compare-table tr.is-own {
+  background: rgba(255, 186, 96, 0.1);
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+.compare-table tr.is-own .site-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--amber);
+}
+.compare-table tr.is-own td b {
+  font-size: 17px;
+}
+.compare-table tr.is-own td,
+.compare-table tr.is-own th {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.energy-row.is-own .site-name,
+.site-name.is-own {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--amber);
+}
+.energy-row.is-own .energy-value {
+  font-size: 27px;
+}
+
+/* Exact values: a switch, on from the start. */
+.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.switch:checked {
+  background: var(--amber);
+}
+.switch:checked::before {
+  transform: translateX(18px);
+}
+.cmp-check .switch {
+  width: 42px;
+  height: 24px;
+}
+
+/* Playing the year: the bars glide from one week to the next. */
+.page.is-playing .cmp-bar i {
+  transition: width var(--play-ms, 500ms) linear;
+}
+.compare-table thead th small {
+  display: block;
+  font-weight: 400;
+  white-space: normal;
+}
+.compare-table.is-precise thead th.is-detail .col-title,
+.compare-table.is-precise thead th .col-title {
+  white-space: normal;
+}
+
+/* Site sheet: two tabs, and a larger "Scientific details" line. */
+.sheet-tabs {
+  margin: 12px 8px 0 0;
+}
+.sheet-tabs .seg {
+  height: 36px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.learn-block {
+  margin-top: 14px;
+}
+.learn-block .learn {
+  gap: 18px;
+}
+.learn-block .learn li {
+  grid-template-columns: 44px 1fr;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.learn-block .learn .cond-icon {
+  width: 44px;
+  height: 44px;
+}
+.learn-block .learn b {
+  font-size: 16.5px;
+}
+.learn-block .learn p {
+  margin-top: 4px;
+  font-size: 14.5px;
+  color: var(--ink);
+  opacity: 0.85;
+}
+.more > summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0;
+  font-size: 18px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.more > summary::-webkit-details-marker {
+  display: none;
+}
+.more > summary::before {
+  content: "";
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin: 0 3px 3px 5px;
+  border-right: 3px solid var(--amber);
+  border-bottom: 3px solid var(--amber);
+  transform: rotate(-45deg);
+  transition: transform 0.2s;
+}
+.more[open] > summary::before {
+  margin: 0 3px 6px 5px;
+  transform: rotate(45deg);
+}
+
+/* Bottom bar: room for the longer band label. */
+.dock-bands,
+.dock-scale {
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+
 /* ---------- Small screens ---------- */
 
 @media (max-width: 1280px) {
   :root {
     --rail: 372px;
   }
-  .topbar .brand small {
-    display: none;
-  }
-  .energy-row {
-    grid-template-columns: 236px minmax(0, 1fr) 70px 196px;
+  .energy-row,
+  .energy-head {
+    grid-template-columns: 220px minmax(0, 1fr) 90px 200px;
   }
   .cal {
-    grid-template-columns: 236px minmax(0, 1fr) 112px;
+    grid-template-columns: 220px minmax(0, 1fr) 112px;
   }
 }
 
 @media (max-width: 1040px) {
-  .setup {
-    grid-template-columns: 1fr;
-  }
   .nav-button {
     padding: 0 11px;
+  }
+  .topbar .brand small {
+    display: none;
+  }
+  /* No room for a window: the Moon stays behind the glass. */
+  .page-top {
+    grid-template-columns: 1fr;
+  }
+  .page-window {
+    display: none;
+  }
+  .energy-row,
+  .energy-head {
+    grid-template-columns: 200px minmax(0, 1fr) 90px;
+  }
+  .energy-mean,
+  .energy-head span:nth-child(4) {
+    display: none;
   }
 }
 
@@ -2588,11 +2861,17 @@ body.is-page #hud::before {
   }
   .dock-bands,
   .dock-scale {
-    grid-template-columns: 96px minmax(0, 1fr);
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
+  .band-labels {
+    font-size: 11px;
+    line-height: 1.1;
   }
   .page {
     position: fixed;
     top: 112px;
+    /* No window on a phone: the page is darkened so the text stays readable over the Moon. */
+    background: rgba(6, 8, 14, 0.7);
   }
   .page-inner {
     padding: 12px 12px 32px;
@@ -2634,8 +2913,8 @@ body.is-page #hud::before {
     grid-column: 1 / -1;
     grid-row: 2;
   }
-  .energy-row small {
-    grid-column: 1 / -1;
+  .energy-head {
+    display: none;
   }
   .cal {
     display: flex;

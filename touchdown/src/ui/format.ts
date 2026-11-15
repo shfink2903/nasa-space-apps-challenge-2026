@@ -66,6 +66,13 @@ export const formatDays = (fraction: number): string => T.days(dayCount(fraction
 /** "18 j", for table cells. */
 export const formatDaysShort = (fraction: number): string => T.daysShort(dayCount(fraction).replace("<", "< ").replace(">", "> "));
 
+/** A share of the 30 studied days as days with one decimal, e.g. "13,3 j". */
+export const formatDaysExact = (fraction: number): string => T.daysExact(n1.format(fraction * 30));
+/** A whole number with the thousands separator of the language, e.g. "6 204". */
+export const formatInt = (value: number): string => n0.format(value);
+/** Kilowatts with two decimals, e.g. "0,71". */
+export const formatKw = (value: number): string => n2.format(value);
+
 export function formatCoords(site: Site): string {
   const lat = `${n2.format(Math.abs(site.latDeg))}° ${site.latDeg >= 0 ? T.north : T.south}`;
   const lon = `${n2.format(Math.abs(site.lonDeg))}° ${site.lonDeg >= 0 ? T.east : T.west}`;

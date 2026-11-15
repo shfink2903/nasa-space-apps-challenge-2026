@@ -16,6 +16,8 @@ const CHASE_FAR = 0.2;
 const CHASE_NEAR = 0.082;
 const CRUISE_FAR = 9.6;
 const CRUISE_NEAR = 4.3;
+/** Camera distance when the Moon is shown in the window of a page: small enough to fit beside the text. */
+const ANCHOR_DISTANCE = 8.8;
 /** Cruise camera: over the southern hemisphere, so the south pole faces the viewer. */
 const CRUISE_LAT_DEG = -44;
 const CRUISE_LON_DEG = 10;
@@ -74,6 +76,16 @@ export class OrbitScene {
   private focusSite: Site | null = null;
   /** 0 = ship at its cruise place, 1 = ship small, beside the selected site. Eased every frame. */
   private shipFocus = 0;
+  /** Where the user turned the overview camera, in degrees from the default view. */
+  private turnLon = 0;
+  private turnLat = 0;
+  /**
+   * Place of the Moon on the overview when a page leaves it a window: screen position of its centre
+   * (-1..1, x to the right, y up). Null: the usual place. `anchorK` follows it a little each frame.
+   */
+  private anchor: { x: number; y: number } | null = null;
+  private anchorK = 0;
+  private anchorOn = false;
 
   // Flight: captured at the click, then interpolated.
   private from: Pose = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: UP.clone() };
@@ -125,27 +137,46 @@ export class OrbitScene {
     this.shipSun.position.copy(this.sunDir).multiplyScalar(10);
   }
 
+  /** Turns the overview camera around the Moon, in degrees. Latitude stops short of the poles. */
+  turn(dLonDeg: number, dLatDeg: number): void {
+    this.turnLon = (this.turnLon + dLonDeg) % 360;
+    this.turnLat = THREE.MathUtils.clamp(this.turnLat + dLatDeg, -82 - CRUISE_LAT_DEG, 82 - CRUISE_LAT_DEG);
+  }
+
+  /** Puts the Moon at a place of the screen on the overview (see `anchor`), or back to its usual place. */
+  setAnchor(anchor: { x: number; y: number } | null): void {
+    if (anchor) this.anchor = anchor;
+    this.anchorOn = anchor !== null;
+  }
+
   /** Slow approach. p = 0 far, 1 near. */
   setCruise(p: number, timeS: number): void {
     const e = easeInOutCubic(clamp01(p));
     const aspect = this.camera.aspect;
     const wide = smoothstep(0.75, 1.5, aspect);
-    const distance = mix(CRUISE_FAR, CRUISE_NEAR, e);
+    this.anchorK += ((this.anchorOn ? 1 : 0) - this.anchorK) * 0.07;
+    const k = this.anchorK;
+    // In its window the Moon keeps one size, whatever the approach.
+    const distance = mix(mix(CRUISE_FAR, CRUISE_NEAR, e), ANCHOR_DISTANCE, k);
     const drift = Math.sin(timeS * 0.03) * 2.5;
-    const dir = toV3(latLonToUnit(CRUISE_LAT_DEG + Math.sin(timeS * 0.021) * 1.2, CRUISE_LON_DEG + drift));
+    const dir = toV3(latLonToUnit(CRUISE_LAT_DEG + this.turnLat + Math.sin(timeS * 0.021) * 1.2, CRUISE_LON_DEG + this.turnLon + drift));
     this.pose.position.copy(dir).multiplyScalar(distance);
 
     // Aim beside the Moon so it sits right of centre and a little high, as in the sketch.
     const right = new THREE.Vector3().crossVectors(UP, dir).normalize();
     const up = new THREE.Vector3().crossVectors(dir, right).normalize();
+    // Aiming beside the Moon moves it the other way on screen: by a share of the half-width or half-height.
+    const halfH = Math.tan((this.camera.fov * DEG) / 2);
+    const x = mix((Math.tan(4.6 * DEG) * wide) / (halfH * aspect), this.anchor?.x ?? 0, k);
+    // Narrow screens: the panels fill the lower half, so the Moon is shown in the upper part.
+    const y = mix(Math.tan(mix(9, 2.2, wide) * DEG) / halfH, this.anchor?.y ?? 0, k);
     this.pose.target
       .set(0, 0, 0)
-      .addScaledVector(right, -distance * Math.tan(4.6 * DEG) * wide)
-      // Narrow screens: the panels fill the lower half, so the Moon is shown in the upper part.
-      .addScaledVector(up, -distance * Math.tan(mix(9, 2.2, wide) * DEG));
+      .addScaledVector(right, -distance * halfH * aspect * x)
+      .addScaledVector(up, -distance * halfH * y);
     this.pose.up.copy(UP);
     this.applyPose();
-    this.placeCruiseShip(e, timeS, 0);
+    this.placeCruiseShip(e * (1 - k), timeS, 0);
     this.moon.setDetail(0);
     this.setReticle(0, timeS);
   }
@@ -201,12 +232,18 @@ export class OrbitScene {
     const local = new THREE.Vector3(mix(-0.045, -0.1, wide) + 0.02 * e, mix(-0.07, 0.05, wide) + 0.012 * e, mix(-0.42, -0.34, wide) - 0.1 * e);
     // Focus: up and to the right of the site, clear of the panels and of the caption.
     local.lerp(new THREE.Vector3(mix(0.02, 0.062, wide), 0.045, -0.44), f);
+    // In the window of a page: beside the Moon, smaller, so both are seen together.
+    const a = this.anchorK * (1 - f);
+    if (this.anchor) {
+      const halfH = Math.tan((cam.fov * DEG) / 2) * 0.44;
+      local.lerp(new THREE.Vector3((this.anchor.x - 0.36) * halfH * cam.aspect, (this.anchor.y - 0.3) * halfH, -0.44), a);
+    }
     local.y += Math.sin(timeS * 0.5) * 0.0025;
     this.rig.root.position.copy(local).applyMatrix4(cam.matrixWorld);
     const nose = new THREE.Vector3(0.74, 0.5, -0.62).normalize().transformDirection(cam.matrixWorld);
     this.rig.root.quaternion.setFromUnitVectors(UP, nose);
     this.rig.root.rotateY(hullYaw(this.rig.root.quaternion, this.rig.root.position, cam.position) + 0.5 + Math.sin(timeS * 0.11) * 0.3);
-    this.rig.root.scale.setScalar((SHIP_CRUISE_SIZE * mix(1, 0.42, f)) / this.rig.height);
+    this.rig.root.scale.setScalar((SHIP_CRUISE_SIZE * mix(1, 0.42, f) * mix(1, 0.55, a)) / this.rig.height);
     this.rig.setThrottle(0, timeS);
     this.lightShip();
   }

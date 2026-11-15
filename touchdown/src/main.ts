@@ -32,7 +32,7 @@ import { OrbitScene } from "./scene/orbitScene";
 import { Stage } from "./scene/renderer";
 import { createHullEnvironment } from "./scene/sky";
 import { SurfaceScene } from "./scene/surfaceScene";
-import { createStore, type Actions } from "./state";
+import { createStore, PLAY_SPEED_H, type Actions } from "./state";
 import { createCaption } from "./ui/caption";
 import { createCompare } from "./ui/compare";
 import { h } from "./ui/dom";
@@ -121,7 +121,7 @@ async function boot(): Promise<void> {
     hoverId: null,
     index: 0,
     playing: false,
-    speedH: 6,
+    speedH: PLAY_SPEED_H,
     phase: "cruise",
     series: null,
     scenario: null,
@@ -277,7 +277,9 @@ async function boot(): Promise<void> {
     },
     home() {
       tour.stop();
-      store.set({ compareOpen: false });
+      const s = store.get();
+      // Leaving the evaluation with no site open: nothing stays selected on the Moon.
+      store.set(s.phase === "cruise" ? { compareOpen: false, siteId: null } : { compareOpen: false });
     },
     overview() {
       director.back();
@@ -328,7 +330,11 @@ async function boot(): Promise<void> {
     setRankBy: (rankBy) => store.set({ rankBy }),
     setRegion: (region) => store.set({ region }),
     setCompare(compareOpen, tab) {
-      if (compareOpen) tour.stop();
+      if (compareOpen) {
+        tour.stop();
+        // The evaluation shows the whole Moon in its window: leave the site view, keep the site selected.
+        if (store.get().phase !== "cruise") director.back();
+      }
       store.set(tab ? { compareOpen, compareTab: tab } : { compareOpen });
     },
     setCriteria(patch) {
@@ -425,9 +431,22 @@ async function boot(): Promise<void> {
     if (s.hoverId !== p.hoverId) for (const [id, pin] of pins) pin.classList.toggle("is-hover", id === s.hoverId);
     if (s.phase !== p.phase) document.body.dataset.phase = s.phase;
     if (s.touring !== p.touring) document.body.classList.toggle("is-touring", s.touring);
-    if (s.compareOpen !== p.compareOpen) document.body.classList.toggle("is-page", s.compareOpen);
+    if (s.compareOpen !== p.compareOpen) {
+      document.body.classList.toggle("is-page", s.compareOpen);
+      window.setTimeout(placeMoon, 0);
+    }
   });
   document.body.dataset.phase = "cruise";
+  /** The evaluation page leaves a window at its top right: the Moon and the ship move into it. */
+  const placeMoon = (): void => {
+    const box = store.get().compareOpen ? document.querySelector<HTMLElement>(".page-window")?.getBoundingClientRect() : undefined;
+    if (!box || box.width < 200 || box.height < 160) return orbit.setAnchor(null);
+    orbit.setAnchor({
+      x: ((box.left + box.width / 2) / window.innerWidth) * 2 - 1,
+      y: 1 - ((box.top + box.height / 2) / window.innerHeight) * 2,
+    });
+  };
+  window.addEventListener("resize", placeMoon);
 
   store.set({
     sites,
@@ -452,13 +471,13 @@ async function boot(): Promise<void> {
     },
     { passive: false },
   );
-  let dragY: number | null = null;
+  let drag: { x: number; y: number } | null = null;
   let down: { x: number; y: number } | null = null;
   canvas.addEventListener("pointerdown", (e) => {
-    dragY = e.clientY;
+    drag = { x: e.clientX, y: e.clientY };
     down = { x: e.clientX, y: e.clientY };
   });
-  window.addEventListener("pointerup", () => (dragY = null));
+  window.addEventListener("pointerup", () => (drag = null));
   // A plain click on the Moon (no drag) drops the free point there.
   canvas.addEventListener("pointerup", (e) => {
     const start = down;
@@ -469,10 +488,11 @@ async function boot(): Promise<void> {
     const hit = orbit.pick(((e.clientX - rect.left) / rect.width) * 2 - 1, -(((e.clientY - rect.top) / rect.height) * 2 - 1));
     if (hit) actions.selectPoint(hit.latDeg, hit.lonDeg);
   });
+  // On the overview a drag turns the camera around the Moon; the wheel comes closer.
   canvas.addEventListener("pointermove", (e) => {
-    if (dragY === null || store.get().phase !== "cruise") return;
-    director.approach((dragY - e.clientY) * 0.002);
-    dragY = e.clientY;
+    if (drag === null || store.get().phase !== "cruise") return;
+    orbit.turn((drag.x - e.clientX) * 0.28, (e.clientY - drag.y) * 0.28);
+    drag = { x: e.clientX, y: e.clientY };
   });
   window.addEventListener("keydown", (event) => {
     const tag = (event.target as HTMLElement).tagName;

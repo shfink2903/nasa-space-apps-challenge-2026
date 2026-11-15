@@ -1,6 +1,6 @@
 import { parseScenarioId, type Derived } from "../data/dataset";
 import { EARTH, SUN, valuesAt, verdictAt } from "../data/mission";
-import type { Actions, Store } from "../state";
+import { PLAY_SPEED_H, type Actions, type Store } from "../state";
 import { landingChoice } from "./caption";
 import { h } from "./dom";
 import { formatDays, formatShortDate, siteLabel } from "./format";
@@ -130,7 +130,7 @@ export function createTour(store: Store, actions: Actions, derived: Derived): { 
     at = -1;
     el.hidden = true;
     setPlaying(false);
-    actions.setSpeed(6);
+    actions.setSpeed(PLAY_SPEED_H);
     store.set({ touring: false });
     actions.overview();
   };

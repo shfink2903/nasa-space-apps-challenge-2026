@@ -52,8 +52,7 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
   const hint = h("p", { class: "caption-hint", text: T.heroHint });
   const skip = h("button", { class: "button", type: "button" }, icon("skip"), T.skip);
   const back = h("button", { class: "button", type: "button" }, icon("back"), T.back);
-  const credits = h("small", { class: "credits", text: T.credits });
-  const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, south, stepper, h("div", { class: "caption-actions" }, evaluate, explore, skip, back), hint, credits);
+  const el = h("section", { class: "caption", "aria-live": "polite" }, kicker, title, text, south, stepper, h("div", { class: "caption-actions" }, evaluate, explore, skip, back), hint);
   evaluate.addEventListener("click", () => actions.setCompare(true, "date"));
   explore.addEventListener("click", () => actions.startTour());
   skip.addEventListener("click", () => actions.skip());
@@ -64,7 +63,7 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
     const site = s.sites.find((x) => x.id === s.siteId);
     const cruise = s.phase === "cruise" || !site;
     const flying = !cruise && s.phase !== "focus";
-    el.hidden = s.touring || (!cruise && !flying);
+    el.hidden = s.touring || s.compareOpen || (!cruise && !flying);
     kicker.textContent = cruise ? T.heroKicker : T.phaseKicker[s.phase];
     title.textContent = cruise ? T.heroTitle : siteLabel(site).title;
     text.textContent = cruise ? T.heroText : s.phase === "surface" ? T.surfaceText : T.flightText;
@@ -74,12 +73,12 @@ export function createCaption(store: Store, actions: Actions): HTMLElement {
       step.classList.toggle("is-done", i < at);
       step.classList.toggle("is-current", i === at);
     });
-    evaluate.hidden = explore.hidden = hint.hidden = south.hidden = credits.hidden = !cruise;
+    evaluate.hidden = explore.hidden = hint.hidden = south.hidden = !cruise;
     skip.hidden = !(s.phase === "transfer" || s.phase === "descent" || s.phase === "final");
     back.hidden = !flying;
   };
   store.subscribe((s, p) => {
-    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites || s.touring !== p.touring) render();
+    if (s.phase !== p.phase || s.siteId !== p.siteId || s.sites !== p.sites || s.touring !== p.touring || s.compareOpen !== p.compareOpen) render();
   });
   render();
   return el;
