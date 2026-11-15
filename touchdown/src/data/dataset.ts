@@ -146,9 +146,13 @@ export function loadScenario(id: string, signal?: AbortSignal): Promise<Scenario
   return getJson<Scenario>(`scenarios/${id}.json`, signal);
 }
 
-/** Series files are gzip on disk. The server sends the raw bytes; decode here. */
+/**
+ * Series files are gzip on disk. They are fetched under the ".bin" name the
+ * build ships next to each one (scripts/dataset-build.ts), so a static host
+ * sends the raw bytes instead of decoding them. Decoded here.
+ */
 export async function loadSeries(scenario: Scenario, signal?: AbortSignal): Promise<Series> {
-  const res = await fetch(`${DATA_BASE}/${scenario.seriesRef.path}`, { signal });
+  const res = await fetch(`${DATA_BASE}/${scenario.seriesRef.path}.bin`, { signal });
   if (!res.ok || !res.body) throw new Error(`${scenario.seriesRef.path}: HTTP ${res.status}`);
   const stream = res.body.pipeThrough(new DecompressionStream("gzip"));
   return (await new Response(stream).json()) as Series;
@@ -157,7 +161,7 @@ export async function loadSeries(scenario: Scenario, signal?: AbortSignal): Prom
 /** Series of a published scenario, straight from its id (the file is named after it). */
 export async function loadSeriesById(scenarioId: string, signal?: AbortSignal): Promise<Series> {
   const path = `series/${scenarioId}.json.gz`;
-  const res = await fetch(`${DATA_BASE}/${path}`, { signal });
+  const res = await fetch(`${DATA_BASE}/${path}.bin`, { signal });
   if (!res.ok || !res.body) throw new Error(`${path}: HTTP ${res.status}`);
   return (await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).json()) as Series;
 }

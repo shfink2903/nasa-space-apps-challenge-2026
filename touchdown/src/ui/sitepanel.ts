@@ -20,6 +20,7 @@ import {
   formatStamp,
   siteLabel,
 } from "./format";
+import { createElevationChart } from "../charts/elevationChart";
 import { createSkyChart } from "./skychart";
 import { T } from "./strings";
 import { createCriteria, failureLines } from "./verdict";
@@ -154,6 +155,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   // --- Scientific details: folded, complete. ---
   const sky = createSkyChart();
   const skyNote = h("p", { class: "note" });
+  const elevation = createElevationChart();
   const line = (label: string) => {
     const value = h("b");
     return { row: h("div", { class: "cond-line" }, h("span", { text: label }), value), value };
@@ -193,6 +195,9 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     { class: "more" },
     h("summary", { text: T.moreTitle }),
     h("figure", { class: "sky-fig" }, sky.el, h("figcaption", null, skyNote)),
+    h("h3", { class: "block-title", text: T.elevTitle }),
+    elevation.el,
+    h("p", { class: "note", text: T.elevNote }),
     h("h3", { class: "block-title", text: T.now }),
     sunHeight.row,
     sunDisk.row,
@@ -404,7 +409,31 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     // Light caught by a flat panel: the sine of the Sun's height. Geometry only, no panel size or power.
     panel.value.textContent = formatPercent0(sunNow.visible ? Math.max(0, Math.sin((sample.sunElDeg * Math.PI) / 180)) : 0);
     sky.setNow(sample);
+    if (more.open) drawElevation(s);
   }
+
+  /** Elevation of both bodies over the 30 days, with the cursor. Drawn only while the details are open. */
+  function drawElevation(s: AppState): void {
+    const series = s.series;
+    if (!series) return;
+    elevation.update({
+      t0Ms: Date.parse(series.t0Utc),
+      stepS: series.stepS,
+      n: series.n,
+      tracks: [
+        { id: "sun", label: T.sunTrack, color: `rgb(${SUN_RGB})`, elevationDeg: series.sunElDeg, state: series.sunState },
+        { id: "earth", label: T.earthTrack, color: `rgb(${EARTH_RGB})`, elevationDeg: series.earthElDeg, state: series.earthState },
+      ],
+      cursorIndex: s.index,
+      dayLabel,
+      formatDeg: formatElevation,
+      onScrub: (index) => actions.setIndex(index),
+    });
+  }
+  const dayLabel = (day: number): string => T.daysShort(String(day));
+  more.addEventListener("toggle", () => {
+    if (more.open) drawElevation(store.get());
+  });
 
   store.subscribe((s, p) => {
     const site = s.sites.find((x) => x.id === s.siteId);

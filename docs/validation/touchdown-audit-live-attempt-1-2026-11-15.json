@@ -1,0 +1,587 @@
+{
+  "startedAt": "2026-11-15T10:22:35.632Z",
+  "pass": false,
+  "requests": 1,
+  "errors": [],
+  "scope": "One real OpenRouter question through the production Touchdown browser and local API; scientific v1 unchanged",
+  "result": {
+    "budget": {
+      "calls": 1,
+      "inputAllowanceMethod": "utf8_bytes_plus_framing",
+      "limitUsd": "0.05",
+      "observedCostReason": null,
+      "observedCostUsd": "0",
+      "reservedUpperEstimateUsd": "0.00572552"
+    },
+    "cached": false,
+    "datasetVersion": "v1",
+    "evidence": [
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_8174243877dee4d0dd51",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.6094949001736111
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_8a6b0161150d2045a53d",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.longestGapH",
+          "quality": "complete",
+          "reason": null,
+          "truncatedByMissingData": false,
+          "truncatedEnd": false,
+          "truncatedStart": false,
+          "unit": "h",
+          "value": 269.140625
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_e699b465e60310e149c5",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.nextSetH",
+          "quality": "complete",
+          "reason": null,
+          "selectedUtcOffsetS": 0,
+          "unit": "h",
+          "value": 313.7649739583333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_1ef254804b1509358c16",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.fullDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.5458702256944444
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_a1aa213a35c5099993d4",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.maxElevDeg",
+          "quality": "sampled",
+          "reason": {
+            "code": "sampled_at_compute_step",
+            "detail": null
+          },
+          "unit": "deg",
+          "value": 5.193229573304191
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_af9e829c7dc92ada5ab8",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.3546321614583333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_b59021cc549a139a8f90",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.longestGapH",
+          "quality": "complete",
+          "reason": null,
+          "truncatedByMissingData": false,
+          "truncatedEnd": false,
+          "truncatedStart": true,
+          "unit": "h",
+          "value": 349.6477864583333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_9428d190eefed885425b",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.nextSetH",
+          "quality": "complete",
+          "reason": null,
+          "selectedUtcOffsetS": 0,
+          "unit": "h",
+          "value": 604.9829427083333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_53d193c7631884206077",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.fullDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.2705334924768519
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_6de3955503f947f30613",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.maxElevDeg",
+          "quality": "sampled",
+          "reason": {
+            "code": "sampled_at_compute_step",
+            "detail": null
+          },
+          "unit": "deg",
+          "value": 10.34235470365705
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_84d6e22988d29ec09c1e",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "overlap.sunAny_earthAny.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.030662977430555554
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_87ce77d7e1b75addd19f",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "analysis.analysableFraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 1
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_b889b187ef075f07c2d3",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 1579810.78125,
+          "metricId": "sun.meanElevWhenAnyDiskDeg",
+          "quality": "sampled",
+          "reason": {
+            "code": "sampled_at_compute_step",
+            "detail": null
+          },
+          "unit": "deg",
+          "value": 0.1820381667711721
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_909876df184700635791",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": null,
+          "metricId": "sun.directIllumination.fraction",
+          "quality": "unknown",
+          "reason": {
+            "code": "exact_occultations_not_modeled",
+            "detail": null
+          },
+          "unit": "1",
+          "value": null
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_a7922d08404f4f235339",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.5960847077546296
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_e766258c9101257fab28",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.longestGapH",
+          "quality": "complete",
+          "reason": null,
+          "truncatedByMissingData": false,
+          "truncatedEnd": false,
+          "truncatedStart": false,
+          "unit": "h",
+          "value": 269.140625
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_786910a6789a8827fba4",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.nextSetH",
+          "quality": "complete",
+          "reason": null,
+          "selectedUtcOffsetS": 0,
+          "unit": "h",
+          "value": 145.76497395833334
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_11ddda22e1daa7e2a468",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.fullDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.5492664930555555
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_14ec86e6f5fa52b5c266",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.maxElevDeg",
+          "quality": "sampled",
+          "reason": {
+            "code": "sampled_at_compute_step",
+            "detail": null
+          },
+          "unit": "deg",
+          "value": 5.193229573304243
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_0d5fdd2eb710c342358a",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.3546321614583333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_47f4624cbfec030a18f5",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.longestGapH",
+          "quality": "complete",
+          "reason": null,
+          "truncatedByMissingData": false,
+          "truncatedEnd": true,
+          "truncatedStart": false,
+          "unit": "h",
+          "value": 283.0170572916667
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_98ae34fc6cce3673ebf7",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.nextSetH",
+          "quality": "complete",
+          "reason": null,
+          "selectedUtcOffsetS": 0,
+          "unit": "h",
+          "value": 436.9829427083333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_7cf7a76a0f693fe96e78",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.fullDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.2705334924768519
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_bab7d33c324b94f140d3",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.maxElevDeg",
+          "quality": "sampled",
+          "reason": {
+            "code": "sampled_at_compute_step",
+            "detail": null
+          },
+          "unit": "deg",
+          "value": 10.34235470365679
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_8da8b078efa9d730b13a",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "overlap.sunAny_earthAny.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.030662977430555554
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_6f2b3c15199d43da656b",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "analysis.analysableFraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 1
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_fd6fd83035018e5f14f0",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 1545051.5625,
+          "metricId": "sun.meanElevWhenAnyDiskDeg",
+          "quality": "sampled",
+          "reason": {
+            "code": "sampled_at_compute_step",
+            "detail": null
+          },
+          "unit": "deg",
+          "value": -0.12655951033939508
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_413e9244518301355eab",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": null,
+          "metricId": "sun.directIllumination.fraction",
+          "quality": "unknown",
+          "reason": {
+            "code": "exact_occultations_not_modeled",
+            "detail": null
+          },
+          "unit": "1",
+          "value": null
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      }
+    ],
+    "evidenceReturned": 28,
+    "evidenceTotal": 28,
+    "evidenceTruncated": false,
+    "explanationStatus": "unavailable",
+    "finishedAt": "2026-11-15T10:22:47.669663Z",
+    "generations": [],
+    "limits": [
+      "Provider output was not accepted; do not interpret it as a physical result."
+    ],
+    "locale": "fr",
+    "message": "L’explication IA est indisponible. Les résultats calculés restent consultables.",
+    "reason": {
+      "code": "provider_http_error",
+      "detail": {
+        "status": 400
+      },
+      "field": "OpenRouter"
+    },
+    "requestId": "answer_5ed0e40a88c11a9797ba",
+    "scenarios": [],
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-11-15T10:22:46.724619Z",
+    "status": "unavailable",
+    "toolTrace": [],
+    "validationTrace": []
+  },
+  "request": {
+    "message": "Compare exactement les deux scénarios sélectionnés. Appelle compare avec les deux scenarioIds sélectionnés. Cite le verdict de comparaison, les fractions de Soleil et de Terre, et la plus longue nuit. Respecte la priorité et le seuil fournis ; précise les limites du modèle expérimental.",
+    "locale": "fr",
+    "context": {
+      "scenarioIds": [
+        "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "sp_s8600_20261208_30d_h2m_lola_4c1bd88e"
+      ],
+      "priority": [
+        "earth.anyDisk.fraction"
+      ]
+    },
+    "constraints": [
+      {
+        "metricId": "sun.anyDisk.longestGapH",
+        "op": "<=",
+        "value": 360,
+        "unit": "h",
+        "origin": "user"
+      }
+    ]
+  },
+  "failure": "expect(received).toBe(expected) // Object.is equality\n\nExpected: \"available\"\nReceived: \"unavailable\"",
+  "finishedAt": "2026-11-15T10:22:47.708Z",
+  "costQualification": "No provider usage returned on HTTP 400. The historical observedCostUsd=0 field is not proof of zero billed cost."
+}

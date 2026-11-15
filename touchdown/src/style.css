@@ -2685,3 +2685,18 @@ body.is-page #hud::before {
 .page .crit-row b {
   font-size: 20px;
 }
+
+/* Elevation chart of the scientific details (src/charts/elevationChart.ts). */
+.chart-elevation {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: 160px;
+}
+.chart-elevation canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+  cursor: ew-resize;
+}

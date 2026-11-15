@@ -20,11 +20,14 @@ Other commands:
 |---|---|
 | `npm test` | Unit tests (Vitest). They read the real dataset. |
 | `npm run typecheck` | TypeScript check. |
-| `npm run build` | Type check, then production build in `dist/`. |
-| `npm run preview` | Serves `dist/` and the dataset on port 5180. |
+| `npm run build` | Type check, production build in `dist/`, and a byte-for-byte copy of the dataset in `dist/data/v1` with SHA-256 checks. |
+| `npm run preview` | Serves `dist/`, dataset included, on port 5180. |
 | `npm run prepare:assets` | Downloads the NASA source images and rebuilds `public/textures/`. Not needed for a normal run: the textures are committed. |
+| `npm run prepare:derived` | Rebuilds the compact index `public/derived/v1.json` from the dataset. |
 
-To host the build on a static server, also publish `data/processed/v1` at the path `/data/v1`, and send the `series/*.json.gz` files as raw bytes (no `Content-Encoding: gzip`).
+`dist/` is complete on its own: any static server can host it. Each `series/*.json.gz` file has a `.bin` copy next to it, and the app fetches that one, so a host never decodes the gzip bytes on the way.
+
+The local service `python -m lunar_data.server` (see `AI_GUIDE.md`) can serve `dist/` too. Its AI assistant has no panel in this interface.
 
 ## What you see
 
@@ -47,7 +50,7 @@ The site sheet reads from top to bottom:
 - **Sun** and **Earth**: lit or not now, the time left, and the number of days out of 30.
 - **Over the year**: one cell per weekly landing date, possible or not. Click a cell to choose that date.
 - **Your mission criteria**, then three points to understand.
-- **Scientific details** (folded): the sky chart, angles, both disc conventions, longest night and blackout, the 1 km grid, observer height, model level, validation status, scenario id and published limits.
+- **Scientific details** (folded): the sky chart, the height of the Sun and the Earth over the 30 days, angles, both disc conventions, longest night and blackout, the 1 km grid, observer height, model level, validation status, scenario id and published limits.
 
 With a site open, the bottom bar shows the 30 days studied as two bands, *Sun visible* and *Earth visible*, with one cursor and a play button.
 

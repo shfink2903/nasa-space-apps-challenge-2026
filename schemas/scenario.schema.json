@@ -3,78 +3,777 @@
   "$id": "urn:true-larpers:lunar-data:scenario:1",
   "title": "Lunar site scenario v1",
   "type": "object",
-  "required": ["schemaVersion", "scenarioId", "siteId", "datasetVersion", "engineVersion", "kernelSetId", "profileId", "request", "modelLevel", "coverageStatus", "validationStatus", "processingStatus", "events", "windows", "metrics", "evaluation", "provenance", "limits", "notEvaluated"],
+  "required": [
+    "schemaVersion",
+    "scenarioId",
+    "siteId",
+    "datasetVersion",
+    "engineVersion",
+    "kernelSetId",
+    "profileId",
+    "request",
+    "modelLevel",
+    "coverageStatus",
+    "validationStatus",
+    "processingStatus",
+    "events",
+    "windows",
+    "metrics",
+    "evaluation",
+    "provenance",
+    "limits",
+    "notEvaluated",
+    "analysableWindows",
+    "overlapWindows"
+  ],
   "properties": {
-    "schemaVersion": {"type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$"},
-    "scenarioId": {"type": "string", "minLength": 1},
-    "siteId": {"type": "string", "minLength": 1},
-    "datasetVersion": {"type": "string"},
-    "engineVersion": {"type": "string"},
-    "kernelSetId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "profileId": {"type": ["string", "null"]},
-    "modelLevel": {"enum": ["geometric", "lola"]},
-    "coverageStatus": {"enum": ["covered", "partial", "outside"]},
-    "validationStatus": {"enum": ["validated_on_reference_cases", "not_validated", "failed"]},
-    "processingStatus": {"enum": ["complete", "partial", "failed"]},
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "scenarioId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "siteId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "datasetVersion": {
+      "type": "string"
+    },
+    "engineVersion": {
+      "type": "string"
+    },
+    "kernelSetId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "profileId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "modelLevel": {
+      "enum": [
+        "geometric",
+        "lola"
+      ]
+    },
+    "coverageStatus": {
+      "enum": [
+        "covered",
+        "partial",
+        "outside"
+      ]
+    },
+    "validationStatus": {
+      "enum": [
+        "validated_on_reference_cases",
+        "not_validated",
+        "failed"
+      ]
+    },
+    "processingStatus": {
+      "enum": [
+        "complete",
+        "partial",
+        "failed"
+      ]
+    },
     "request": {
       "type": "object",
-      "required": ["siteId", "surfaceStartUtc", "analysisDurationS", "observerHeightM", "computeStepS", "diskConvention", "hardConstraints", "missionMargins"],
+      "required": [
+        "siteId",
+        "surfaceStartUtc",
+        "analysisDurationS",
+        "observerHeightM",
+        "computeStepS",
+        "diskConvention",
+        "hardConstraints",
+        "missionMargins"
+      ],
       "properties": {
-        "surfaceStartUtc": {"$ref": "#/$defs/parameter"},
-        "analysisDurationS": {"$ref": "#/$defs/parameter"},
-        "observerHeightM": {"$ref": "#/$defs/parameter"},
-        "computeStepS": {"$ref": "#/$defs/parameter"},
-        "hardConstraints": {"type": "array"},
-        "diskConvention": {"type": "array", "items": {"enum": ["anyDisk", "fullDisk"]}},
-        "missionMargins": {"type": ["object", "null"]}
+        "surfaceStartUtc": {
+          "$ref": "#/$defs/utcParameter"
+        },
+        "analysisDurationS": {
+          "$ref": "#/$defs/durationParameter"
+        },
+        "observerHeightM": {
+          "$ref": "#/$defs/heightParameter"
+        },
+        "computeStepS": {
+          "$ref": "#/$defs/stepParameter"
+        },
+        "hardConstraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/constraint"
+          }
+        },
+        "diskConvention": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "anyDisk",
+              "fullDisk"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "missionMargins": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "timeS",
+                "angleDeg"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "timeS": {
+                  "$ref": "#/$defs/timeMarginParameter"
+                },
+                "angleDeg": {
+                  "$ref": "#/$defs/angleMarginParameter"
+                }
+              }
+            }
+          ]
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayStepS": {
+          "$ref": "#/$defs/displayStepParameter"
+        }
       }
     },
     "events": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["body", "convention", "type", "tUtc", "bracketS"],
+        "required": [
+          "body",
+          "convention",
+          "type",
+          "tUtc",
+          "bracketS"
+        ],
         "properties": {
-          "body": {"enum": ["sun", "earth"]},
-          "convention": {"enum": ["anyDisk", "fullDisk"]},
-          "type": {"enum": ["rise", "set", "grazing"]},
-          "tUtc": {"type": "string"},
-          "bracketS": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+          "body": {
+            "enum": [
+              "sun",
+              "earth"
+            ]
+          },
+          "convention": {
+            "enum": [
+              "anyDisk",
+              "fullDisk"
+            ]
+          },
+          "type": {
+            "enum": [
+              "rise",
+              "set",
+              "grazing"
+            ]
+          },
+          "tUtc": {
+            "$ref": "#/$defs/utc"
+          },
+          "bracketS": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "bracketUtc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/utc"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
         }
       }
     },
-    "windows": {"type": "object"},
+    "windows": {
+      "$ref": "#/$defs/bodyWindows"
+    },
     "metrics": {
       "type": "array",
       "items": {
-        "type": "object",
-        "required": ["metricId", "value", "unit", "denominatorS", "quality", "reason"],
-        "properties": {
-          "metricId": {"type": "string"},
-          "value": {"type": ["number", "null"]},
-          "unit": {"type": "string"},
-          "denominatorS": {"type": ["number", "null"], "minimum": 0},
-          "quality": {"enum": ["complete", "partial", "unknown", "sampled"]},
-          "reason": {"type": ["object", "null"]}
-        },
-        "allOf": [{"if": {"properties": {"value": {"type": "null"}}}, "then": {"properties": {"reason": {"type": "object", "required": ["code"]}}}}]
+        "$ref": "#/$defs/metric"
       }
     },
     "evaluation": {
       "type": "object",
-      "required": ["nominal", "prudent"],
-      "properties": {"nominal": {"$ref": "#/$defs/verdict"}, "prudent": {"$ref": "#/$defs/verdict"}}
+      "required": [
+        "nominal",
+        "prudent"
+      ],
+      "properties": {
+        "nominal": {
+          "$ref": "#/$defs/verdict"
+        },
+        "prudent": {
+          "$ref": "#/$defs/verdict"
+        },
+        "prudentMetrics": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/metric"
+              }
+            }
+          ]
+        }
+      }
     },
-    "provenance": {"type": "object", "required": ["sources", "catalogueSources", "parameters"]},
-    "limits": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "notEvaluated": {"type": "array"},
+    "provenance": {
+      "type": "object",
+      "required": [
+        "sources",
+        "catalogueSources",
+        "parameters"
+      ],
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "catalogueSources": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "parameters": {
+          "type": "object"
+        }
+      }
+    },
+    "limits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "notEvaluated": {
+      "type": "array"
+    },
     "seriesRef": {
-      "type": "object", "required": ["path", "encoding", "sha256"],
-      "properties": {"path": {"type": "string"}, "encoding": {"const": "gzip"}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+      "type": "object",
+      "required": [
+        "path",
+        "encoding",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "encoding": {
+          "const": "gzip"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "uncompressedSizeBytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "analysableWindows": {
+      "$ref": "#/$defs/bodyWindows"
+    },
+    "overlapWindows": {
+      "$ref": "#/$defs/windows"
     }
   },
   "$defs": {
-    "parameter": {"type": "object", "required": ["value", "unit", "origin"], "properties": {"unit": {"type": "string"}, "origin": {"type": "string"}}},
-    "verdict": {"type": "object", "required": ["status", "constraints"], "properties": {"status": {"enum": ["pass", "fail", "unknown", "not_evaluated"]}, "constraints": {"type": "array"}}}
+    "parameter": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "origin"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "string"
+          ]
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "required": [
+        "status",
+        "constraints"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_evaluated"
+          ]
+        },
+        "constraints": {
+          "type": "array"
+        }
+      }
+    },
+    "utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "durationParameter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/parameter"
+        },
+        {
+          "properties": {
+            "value": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "const": "s"
+            }
+          }
+        }
+      ]
+    },
+    "heightParameter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/parameter"
+        },
+        {
+          "properties": {
+            "value": {
+              "type": "number",
+              "minimum": 0
+            },
+            "unit": {
+              "const": "m"
+            }
+          }
+        }
+      ]
+    },
+    "stepParameter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/parameter"
+        },
+        {
+          "properties": {
+            "value": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 600
+            },
+            "unit": {
+              "const": "s"
+            }
+          }
+        }
+      ]
+    },
+    "displayStepParameter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/parameter"
+        },
+        {
+          "properties": {
+            "value": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "const": "s"
+            }
+          }
+        }
+      ]
+    },
+    "timeMarginParameter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/parameter"
+        },
+        {
+          "properties": {
+            "value": {
+              "type": "number",
+              "minimum": 0
+            },
+            "unit": {
+              "const": "s"
+            }
+          }
+        }
+      ]
+    },
+    "angleMarginParameter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/parameter"
+        },
+        {
+          "properties": {
+            "value": {
+              "type": "number",
+              "minimum": 0
+            },
+            "unit": {
+              "const": "deg"
+            }
+          }
+        }
+      ]
+    },
+    "utcParameter": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/parameter"
+        },
+        {
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/utc"
+            },
+            "unit": {
+              "const": "UTC"
+            }
+          }
+        }
+      ]
+    },
+    "constraint": {
+      "type": "object",
+      "required": [
+        "metricId",
+        "op",
+        "value",
+        "unit",
+        "origin"
+      ],
+      "properties": {
+        "metricId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "op": {
+          "enum": [
+            "<=",
+            ">=",
+            "<",
+            ">",
+            "=="
+          ]
+        },
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "required": [
+        "startUtc",
+        "endUtc",
+        "truncatedStart",
+        "truncatedEnd"
+      ],
+      "properties": {
+        "startUtc": {
+          "$ref": "#/$defs/utc"
+        },
+        "endUtc": {
+          "$ref": "#/$defs/utc"
+        },
+        "truncatedStart": {
+          "type": "boolean"
+        },
+        "truncatedEnd": {
+          "type": "boolean"
+        }
+      }
+    },
+    "windows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/window"
+      }
+    },
+    "bodyWindows": {
+      "type": "object",
+      "required": [
+        "sun.anyDisk",
+        "sun.fullDisk",
+        "earth.anyDisk",
+        "earth.fullDisk"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sun.anyDisk": {
+          "$ref": "#/$defs/windows"
+        },
+        "sun.fullDisk": {
+          "$ref": "#/$defs/windows"
+        },
+        "earth.anyDisk": {
+          "$ref": "#/$defs/windows"
+        },
+        "earth.fullDisk": {
+          "$ref": "#/$defs/windows"
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "required": [
+        "metricId",
+        "value",
+        "unit",
+        "denominatorS",
+        "quality",
+        "reason"
+      ],
+      "properties": {
+        "metricId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unit": {
+          "enum": [
+            "1",
+            "h",
+            "deg"
+          ]
+        },
+        "denominatorS": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "quality": {
+          "enum": [
+            "complete",
+            "partial",
+            "unknown",
+            "sampled"
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "code"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        },
+        "truncatedStart": {
+          "type": "boolean"
+        },
+        "truncatedEnd": {
+          "type": "boolean"
+        },
+        "truncatedByMissingData": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "type": "object",
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metricId": {
+                "pattern": "(\\.fraction|Fraction)$"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "1"
+              },
+              "value": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metricId": {
+                "pattern": "(longestGapH|nextSetH)$"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "h"
+              },
+              "value": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metricId": {
+                "pattern": "Deg$"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "const": "deg"
+              },
+              "value": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": -90,
+                "maximum": 90
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "quality": {
+                "const": "unknown"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metricId": {
+                "pattern": "\\.longestGapH$"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "truncatedStart",
+              "truncatedEnd",
+              "truncatedByMissingData"
+            ]
+          }
+        }
+      ]
+    }
   }
 }

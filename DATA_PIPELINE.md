@@ -1,7 +1,9 @@
 # DATA pipeline
 
-Implementation of [data.md](data.md). Preparation is Python; the UI reads static
-files. No frontend or scene is included here.
+Implementation of [data.md](data.md). Preparation is Python. `touchdown/` is the
+maintained application consuming the prepared dataset: static files provide the
+scientific values; the local Python API provides comparison verdicts and the
+optional OpenRouter explanation. No second frontend is part of this delivery.
 
 ## Offline reading
 
@@ -31,11 +33,43 @@ Missing dates are never substituted. Request an explicit model level for a serie
 `get_profile(profileId)`, `get_sensitivity(siteId, heightM)` and
 `get_evidence(comparisonId)` provide the other prepared outputs.
 
-Web UI: serve the dataset as static assets. Fetch summary first, then
+Touchdown: serve the dataset as static assets. Fetch summary first, then
 `seriesRef.path` when selected. Decode gzip bytes (for example with browser
 `DecompressionStream("gzip")`) before parsing JSON. Use summary windows and
 verdicts, never display samples, for durations or conclusions.
 Contract: [schemas/scenario.schema.json](schemas/scenario.schema.json).
+
+### Runtime comparison contract
+
+`POST /api/compare` is the source of the verdicts, ranks and Pareto set displayed
+by Touchdown. It reads the prepared scenarios and calls the same deterministic
+comparison implementation as the assistant's `compare` tool. No SPICE calculation,
+external provider request or model fee is involved in this endpoint.
+
+Mission constraints are empty by default: a descriptive ranking is not a
+`pass` verdict. Only thresholds enabled by the user become constraints with
+`origin: "user"`. The UI can compare up to three explicit site/date pairs,
+including different dates of the same site; height, duration and model stay common.
+The assistant receives exactly those scenario IDs, priority and constraints.
+Missing dates are not replaced with a nearby date or a catalogue-wide selection.
+
+The complete request identifies the UI comparison cache. A response for an older
+date, priority or threshold cannot replace the current selection's result. If the
+API is unavailable, static values remain readable; active-constraint verdicts
+remain unknown, and no API rank or Pareto result is invented locally. A static
+file server alone therefore does not provide the complete comparison workflow.
+See [AI_GUIDE.md](AI_GUIDE.md) for the local server and development proxy.
+
+Current visibility and animation eligibility use the published half-open
+`windows` and `analysableWindows`, including at event boundaries. Angles may be
+interpolated from the 600-second display series for drawing; missing visibility
+remains unknown. The landing animation's visibility rule is not an assessment of
+power or landing safety. Data views initialize independently of WebGL; when the
+scene fails or loses its context, data controls and the assistant remain available
+subject to their own data/API dependencies, while flight controls are disabled.
+
+The v1 sensitivity grids always describe the 30-day period starting
+2026-12-01. Changing the selected comparison date does not recalculate that grid.
 
 ## Reproduce
 
@@ -72,6 +106,36 @@ Failed staging stays in `v1.tmp` for diagnosis and is never published. Choose
 another destination or remove only the failed staging directory before retrying.
 Released datasets cannot be overwritten.
 
+### Cache migration and integrity checks
+
+Terrain preparation now stores verified cache entries under
+`<cache>/profiles-verified-v1/profile_<profileId>.json`. Each entry is an envelope
+with `cacheFormatVersion`, a canonical-content `contentSha256` and the original
+`profile`. Reading checks the digest, profile ID and complete calculation
+parameters. Returned/published profile objects retain their existing format.
+
+Older `<cache>/profile_<profileId>.json` files have no content digest. They are
+ignored with an explicit warning, preserved unchanged, and recomputed into the
+new namespace. They are not made trustworthy by hashing their existing contents.
+A verified entry with changed content or parameters fails with
+`integrity_failure`; use another cache directory for a clean recomputation.
+The first terrain build after migration can therefore cost more time than a warm
+cache run. No new cold/warm performance bound is claimed.
+
+DEM labels and raster images are checked against their source records by SHA-256
+and byte size before raster interpretation. Cached Horizons references are checked
+against their hash, request parameters and URL before use. Missing provenance or
+altered archives are errors, not permission to silently replace a reference.
+
+`lunar-data verify` checks hashes and byte counts, the current scenario schema,
+request/metric units and bounds, window/metric consistency, event brackets and
+decompressed display-series structure. This is a full local read, including
+decompression of every referenced series; it does not rerun SPICE or prove
+physical accuracy. Its I/O and CPU cost is distinct from normal lazy UI reads,
+terrain generation and paid OpenRouter requests. No final verification latency is
+guaranteed. Finder `.DS_Store` metadata is excluded from the scientific manifest
+inventory without deleting or modifying it; arbitrary extra files still fail.
+
 Custom coordinates are a preparation operation, never triggered by the reader:
 
 ```python
@@ -102,17 +166,25 @@ was not tested.
 The annual ET grid includes the final endpoint; the measured count is recorded.
 Exact weekly UTC epochs can differ by milliseconds. Annual vectors are
 interpolated only within a declared 2 ms offset; bisection recomputes SPICE
-geometry directly. Calculation: 60 s, grazing refinement: 5 s, event brackets:
-<=1 s, display: 600 s. These settings are not physical error bounds.
+geometry directly. Calculation: 60 s, grazing refinement: 5 s, rise/set event
+brackets: <=1 s, display: 600 s. Grazing candidates retain their wider search
+bracket. These settings are not physical error bounds.
 
-## Optional OpenRouter adapter
+Nonzero mission margins now retain only detected sets belonging to surviving
+prudent windows. An analysis boundary or data hole no longer becomes an invented
+set. This changes future calculations with margins; it does not rewrite the
+immutable v1 scenarios, whose mission margins are absent.
 
-`lunar_data.ai.explain(packet)` requires server-side `OPENROUTER_API_KEY` and an
-explicit `OPENROUTER_MODEL`. No default model, paid request or provider call in
-this delivery. Provider support and tool orchestration remain untested.
+The software correction report is
+[Touchdown audit fixes, 15 November 2026](docs/validation/touchdown-audit-fixes-2026-11-15.md).
+It separates checks already run from final integration qualification and preserves
+the scientific limitations of v1.
 
-One bounded call, no retry or provider fallback. Structured citations only;
-actual numbers are rendered from referenced metrics. Model-written digits and
-guarantees are rejected. Missing configuration or invalid output leaves the
-deterministic data available. These checks do not establish semantic correctness
-of free text. Context sizes use named `cl100k_base`; provider counts may differ.
+## OpenRouter agent
+
+The complete tool-calling agent is in `lunar_data.agent`, served by
+`lunar_data.server` and integrated into Touchdown. It uses OpenRouter with an
+explicit model and server-side key. See [AI_GUIDE.md](AI_GUIDE.md) for the tool
+boundary, budgets, startup and live qualification. The earlier single-call
+`lunar_data.ai.explain(packet)` remains a legacy compatibility adapter; the UI
+uses the new agent. Scientific validation of the immutable v1 bundle is unchanged.
