@@ -25,7 +25,8 @@ const FOCUS_SECONDS = 1.5;
 export class Director {
   phase: Phase = "cruise";
   private t = 0;
-  private progress = 0;
+  /** Start close: the south pole is what the planner came to see. Wheel or drag to pull back. */
+  private progress = 0.82;
   private transferS = 6;
   private horizon: HorizonProfile | null = null;
   private fade: Fade | null = null;

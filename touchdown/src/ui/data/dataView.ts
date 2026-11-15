@@ -14,6 +14,7 @@ import type { AppState } from "../../state";
 import type { Ui } from "../context";
 import { h, icon } from "../dom";
 import { customPoint } from "./customPoint";
+import { downloadCsv } from "../csv";
 
 /** One colour per compared site, in the order they were picked. */
 const SITE_COLORS = ["#ffd08a", "#8fe3c4", "#c9a6ff"];
@@ -22,6 +23,16 @@ const METRIC_TABS: { key: MetricKey; kind: Ramp }[] = [
   { key: "sunShare", kind: "sun" },
   { key: "earthShare", kind: "earth" },
 ];
+
+/** Small download button, top right of a card. */
+function csvButton(ui: Ui, build: () => { name: string; rows: (string | number | null | undefined)[][] }): HTMLElement {
+  const b = h("button", { class: "button card-action", type: "button", title: ui.t.csvHelp, "aria-label": ui.t.csvHelp }, icon("download"), h("span", { text: ui.t.csv }));
+  b.addEventListener("click", () => {
+    const { name, rows } = build();
+    downloadCsv(name, rows);
+  });
+  return b;
+}
 
 function section(title: string, hint: string | null, ...children: (Node | null)[]): HTMLElement {
   return h("section", { class: "panel data-card" }, h("header", { class: "data-head" }, h("h2", { text: title }), hint ? h("p", { text: hint }) : null), ...children);
@@ -175,7 +186,18 @@ function rankingTable(ui: Ui): HTMLElement {
       table.classList.toggle("is-loading", !ranking.complete);
     },
   );
-  return section(t.ranking, t.dataIntro, h("div", { class: "table-scroll" }, table));
+  const csv = csvButton(ui, () => {
+    const s = ui.store.get();
+    const ranking = rankingFor(s, resources);
+    const header = ["site_id", "site", "lat_deg", "lon_deg", "model", "period_start", "mast_m", "rank", "sun_earth_share", "sun_share", "sun_full_disc_share", "earth_share", "longest_night_h", "longest_night_is_minimum", "longest_blackout_h", "longest_blackout_is_minimum", "sun_max_elevation_deg", "sunlight_kwh_m2_estimate", "battery_kwh_100w_estimate", "requirements"];
+    const rows = rankedOrder(ranking).map((m) => {
+      const site = siteById(s, m.siteId)!;
+      const rank = ranking.rows.find((r) => r.metrics === m)?.rank ?? "";
+      return [site.id, fmt.site(site), site.latDeg, site.lonDeg, modelFor(s, site), s.date, s.heightM, rank, m.bothShare, m.sunShare, m.sunFullShare, m.earthShare, m.sunGapH, m.sunGapAtLeast ? "yes" : "no", m.earthGapH, m.earthGapAtLeast ? "yes" : "no", m.sunMaxElDeg, incidentEnergyKWhM2(m), batteryKWh(m.sunGapH), verdict(checkRequirements(m, s.requirements))];
+    });
+    return { name: `touchdown_ranking_${s.date}_h${s.heightM}m_${s.scope}.csv`, rows: [header, ...rows] };
+  });
+  return section(t.ranking, t.dataIntro, csv, h("div", { class: "table-scroll" }, table));
 }
 
 function requirements(ui: Ui): HTMLElement {
@@ -432,7 +454,20 @@ function calendar(ui: Ui): HTMLElement {
     draw(store.get());
   });
   ui.watch((s) => [s.sites, s.dates, s.scope, s.criterion, s.date, s.heightM, s.focusId, s.dataVersion], draw);
-  return section(t.calendarTitle, t.calendarHint, tabs, chart.el);
+  const csv = csvButton(ui, () => {
+    const s = store.get();
+    const header = ["site_id", "site", "model", "mast_m", "period_start", "sun_earth_share", "sun_share", "earth_share", "longest_night_h", "longest_night_is_minimum"];
+    const rows = scopeSites(s.sites, s.scope).flatMap((site) => {
+      const sweep = resources.sweep(site.id, s.heightM, modelFor(s, site));
+      return s.dates.map((date, i) => {
+        const r = sweep?.rows[i];
+        const m = r ? readMetrics(site.id, r.scenarioId, r.metrics) : null;
+        return [site.id, fmt.site(site), modelFor(s, site), s.heightM, date, m?.bothShare, m?.sunShare, m?.earthShare, m?.sunGapH, m ? (m.sunGapAtLeast ? "yes" : "no") : ""];
+      });
+    });
+    return { name: `touchdown_52_weeks_h${s.heightM}m_${s.scope}.csv`, rows: [header, ...rows] };
+  });
+  return section(t.calendarTitle, t.calendarHint, csv, tabs, chart.el);
 }
 
 function sensitivity(ui: Ui): HTMLElement {
@@ -523,16 +558,50 @@ function method(ui: Ui): HTMLElement {
 
 /** The "Compare sites" tab: ranking, side by side, calendar of the year, 1 km grids, method. */
 export function createDataView(ui: Ui): HTMLElement {
-  return h(
-    "main",
-    { class: "data-view", id: "data-view" },
-    h("header", { class: "data-title" }, h("h1", { text: ui.t.dataTitle })),
-    toolbar(ui),
-    h("div", { class: "data-grid" }, rankingTable(ui), requirements(ui)),
-    compare(ui),
-    customPoint(ui, section),
-    calendar(ui),
-    sensitivity(ui),
-    method(ui),
+  const { t } = ui;
+  const withId = (el: HTMLElement, id: string): HTMLElement => {
+    el.id = id;
+    el.classList.add("data-section");
+    return el;
+  };
+  const parts: [keyof typeof t.sections, HTMLElement][] = [
+    ["ranking", h("div", { class: "data-grid" }, rankingTable(ui), requirements(ui))],
+    ["compare", compare(ui)],
+    ["custom", customPoint(ui, section)],
+    ["calendar", calendar(ui)],
+    ["grid", sensitivity(ui)],
+    ["method", method(ui)],
+  ];
+  const view = h("main", { class: "data-view", id: "data-view" });
+  // Jump links: the tab is long, a planner should reach any part in one click.
+  const links = parts.map(([key]) => {
+    const b = h("button", { class: "section-link", type: "button", text: t.sections[key], "data-target": `sec-${key}` });
+    b.addEventListener("click", () => {
+      const target = view.querySelector<HTMLElement>(`#sec-${key}`);
+      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+    });
+    return b;
+  });
+  const nav = h("nav", { class: "section-nav", "aria-label": t.sectionsNav }, ...links);
+  view.append(
+    h("header", { class: "data-title" }, h("h1", { text: t.dataTitle })),
+    h("div", { class: "data-sticky" }, toolbar(ui), nav),
+    ...parts.map(([key, el]) => withId(el, `sec-${key}`)),
   );
+  // Highlight the section on screen.
+  if ("IntersectionObserver" in window) {
+    const seen = new Map<string, boolean>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) seen.set(e.target.id, e.isIntersecting);
+        const current = parts.map(([key]) => `sec-${key}`).find((id) => seen.get(id));
+        for (const l of links) l.classList.toggle("is-on", l.dataset.target === current);
+      },
+      { root: view, rootMargin: "-160px 0px -55% 0px" },
+    );
+    for (const [key] of parts) observer.observe(view.querySelector(`#sec-${key}`)!);
+    ui.onDispose(() => observer.disconnect());
+  }
+  return view;
 }

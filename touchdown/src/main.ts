@@ -28,6 +28,7 @@ import { createTimePanel } from "./ui/explorer/timePanel";
 import { createFormat } from "./ui/format";
 import { createGuide } from "./ui/guide";
 import { createTopBar } from "./ui/topbar";
+import { decodeState, encodeState } from "./ui/share";
 
 // Open on the sunniest study point (near Malapert massif): a first screen that shows a workable site.
 const FIRST_SITE = "sp_s8600";
@@ -122,6 +123,23 @@ async function boot(): Promise<void> {
   let userScrubbed = false;
   let pendingLand: string | null = null;
   let compiled = false;
+
+  // --- A shared link opens on its scenario. ---
+  const shared = decodeState(window.location.hash, sites, dates, 4320);
+  if (Object.keys(shared).length) {
+    store.set(shared);
+    if (shared.focusId || shared.compareIds) userPicked = true;
+    if (shared.index !== undefined) userScrubbed = true;
+  }
+  // Keep the address bar in step with the view, so copying it shares the scenario.
+  let urlTimer = 0;
+  store.subscribe(() => {
+    window.clearTimeout(urlTimer);
+    urlTimer = window.setTimeout(() => {
+      const next = encodeState(store.get());
+      if (next !== window.location.hash) history.replaceState(null, "", next);
+    }, 400);
+  });
 
   // --- Actions. ---
   const actions: Actions = {
@@ -218,6 +236,18 @@ async function boot(): Promise<void> {
     overview: () => director.overview(),
     setAssistant: (assistantOpen) => store.set({ assistantOpen }),
     setGuide: (guideOpen) => store.set({ guideOpen }),
+    async share() {
+      const t = strings(store.get().locale);
+      const url = `${window.location.href.split("#")[0]}${encodeState(store.get())}`;
+      history.replaceState(null, "", url);
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast(t.linkCopied);
+      } catch {
+        // Clipboard blocked (http, permissions): show the link so it can be copied by hand.
+        showToast(`${t.linkManual} ${url}`);
+      }
+    },
   };
 
   // --- Interface. Built again when the language changes. ---

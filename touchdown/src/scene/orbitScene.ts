@@ -12,15 +12,17 @@ const UP = new THREE.Vector3(0, 1, 0);
 const SOUTH_POLE = new THREE.Vector3(0, -1, 0);
 
 /** Scene distances are in Moon radii. Ship size here is for the picture only. */
-const SHIP_CRUISE_SIZE = 0.07;
-const SHIP_PARKED_SIZE = 0.06;
+// Small and in the corner: the ship invites the landing, the Moon carries the information.
+const SHIP_CRUISE_SIZE = 0.034;
+const SHIP_PARKED_SIZE = 0.03;
 const SHIP_ORBIT_SIZE = 0.03;
 const CHASE_FAR = 0.2;
 const CHASE_NEAR = 0.082;
 const CRUISE_FAR = 6.6;
-const CRUISE_NEAR = 3.0;
+// Near enough that the polar sites (69° S to 89.5° S) fill the frame and separate.
+const CRUISE_NEAR = 2.25;
 /** The overview looks at the Moon from under the south pole. */
-const CRUISE_LAT_DEG = -74;
+const CRUISE_LAT_DEG = -79;
 const CRUISE_LON_DEG = 4;
 /** Site view: this far above the site and this far back, on its south side. */
 const FOCUS_UP = 0.5;
@@ -69,6 +71,31 @@ function beam(color: THREE.Color): THREE.Mesh {
   return mesh;
 }
 
+/** Rings at 80°, 85° and 88° S, and meridians every 30° from 75° S to the pole, just above the ground. */
+function createGraticule(): THREE.LineSegments {
+  const points: number[] = [];
+  const at = (lat: number, lon: number) => {
+    const p = latLonToUnit(lat, lon);
+    points.push(p[0] * 1.0015, p[1] * 1.0015, p[2] * 1.0015);
+  };
+  for (const lat of [-80, -85, -88]) {
+    for (let lon = 0; lon < 360; lon += 3) {
+      at(lat, lon);
+      at(lat, lon + 3);
+    }
+  }
+  for (let lon = 0; lon < 360; lon += 30) {
+    for (let lat = -75; lat < -89.5; lat -= 0.5) {
+      at(lat, lon);
+      at(lat - 0.5, lon);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+  const material = new THREE.LineBasicMaterial({ color: 0x9dbcff, transparent: true, opacity: 0.3, depthWrite: false });
+  return new THREE.LineSegments(geometry, material);
+}
+
 /**
  * Far view: the georeferenced Moon seen from under its south pole, Sun, Earth
  * and stars, with the ship drawn in its own overlay scene (same camera, fresh
@@ -102,6 +129,7 @@ export class OrbitScene {
   private chaseDir = new THREE.Vector3();
   private focusPose: Pose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
   private beamLevel = 0;
+  private graticule!: THREE.LineSegments;
 
   constructor(assets: OrbitAssets) {
     this.moon = createMoonMaterial(assets.moonColor, assets.moonSlope);
@@ -126,6 +154,8 @@ export class OrbitScene {
       }),
     );
     this.scene.add(this.reticle);
+    this.graticule = createGraticule();
+    this.scene.add(this.graticule);
 
     this.rig = createShipRig(assets.ship, assets.hullEnv, 0);
     this.shipScene.add(this.rig.root, this.shipSun, this.moonFill, new THREE.AmbientLight(0x8fa0c0, 0.05));
@@ -176,14 +206,15 @@ export class OrbitScene {
     const distance = mix(CRUISE_FAR, CRUISE_NEAR, e);
     const dir = toV3(latLonToUnit(CRUISE_LAT_DEG + Math.sin(timeS * 0.021) * 1.2, CRUISE_LON_DEG + Math.sin(timeS * 0.03) * 2.5));
     this.pose.position.copy(dir).multiplyScalar(distance);
-    // Far away, look at the whole Moon. Closer, turn toward the polar region.
-    const target = SOUTH_POLE.clone().multiplyScalar(0.35 * e);
+    // Far away, look at the whole Moon. Closer, turn to the pole itself.
+    const target = SOUTH_POLE.clone().multiplyScalar(0.35 * e + 0.62 * smoothstep(0.4, 1, e));
     this.pose.quaternion.copy(lookQuat(this.pose.position, target, UP));
     this.applyPose();
     this.parkShip(timeS, SHIP_CRUISE_SIZE, 1 - 0.25 * e);
     this.moon.setDetail(0);
     this.beamLevel = 0;
     this.setReticle(0, timeS);
+    this.setGraticule(0.18 + 0.32 * e);
   }
 
   /** Remembers where the camera and the ship are, as the start of the next move. */
@@ -222,6 +253,7 @@ export class OrbitScene {
     this.moon.setDetail(0.55 * e);
     this.beamLevel = e;
     this.setReticle(e, timeS);
+    this.setGraticule(0.5 - 0.2 * e);
   }
 
   /** Starts a flight to a site. Returns the angle the camera swings around the Moon, in radians. */
@@ -284,6 +316,7 @@ export class OrbitScene {
     this.pose.quaternion.copy(quatAt(k));
     this.applyPose();
     this.lightShip();
+    this.setGraticule(0.3 * (1 - smoothstep(0, 0.5, k)));
     this.moon.setDetail(mix(0.55, 0.7, e));
     this.beamLevel = 1 - smoothstep(0.3, 0.8, k);
     this.setReticle(1, timeS);
@@ -303,6 +336,7 @@ export class OrbitScene {
     this.applyPose();
     this.rig.root.quaternion.copy(this.tailDown(this.rig.root.position, station.position));
     this.lightShip();
+    this.setGraticule(0);
     this.moon.setDetail(mix(0.7, 1, e));
     this.beamLevel = 0;
     this.setReticle(1, timeS);
@@ -360,6 +394,12 @@ export class OrbitScene {
     const toShip = this.rig.root.position.clone().normalize();
     this.moonFill.position.copy(toShip).multiplyScalar(-10);
     this.moonFill.intensity = 0.55 * clamp01(0.5 + 0.5 * this.sunDir.dot(toShip));
+  }
+
+  /** Polar grid: latitude rings and meridians, for orientation. Faint, off during the descent. */
+  private setGraticule(level: number): void {
+    (this.graticule.material as THREE.LineBasicMaterial).opacity = level;
+    this.graticule.visible = level > 0.01;
   }
 
   private setReticle(level: number, timeS: number): void {

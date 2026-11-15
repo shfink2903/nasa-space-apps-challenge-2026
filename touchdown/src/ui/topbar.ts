@@ -18,6 +18,8 @@ export function createTopBar(ui: Ui): HTMLElement {
   });
   const guide = h("button", { class: "button button-quiet", type: "button", "aria-label": t.help }, icon("help"), h("span", { text: t.help }));
   const assistant = h("button", { class: "button button-quiet", type: "button", "aria-label": t.assistant }, icon("chat"), h("span", { text: t.assistant }));
+  const share = h("button", { class: "button button-quiet", type: "button", "aria-label": t.share, title: t.shareHelp }, icon("link"), h("span", { text: t.share }));
+  share.addEventListener("click", () => actions.share());
   guide.addEventListener("click", () => actions.setGuide(!ui.store.get().guideOpen));
   assistant.addEventListener("click", () => actions.setAssistant(!ui.store.get().assistantOpen));
   const languages = (["fr", "en"] as Locale[]).map((locale) => {
@@ -31,7 +33,7 @@ export function createTopBar(ui: Ui): HTMLElement {
     { class: "topbar" },
     h("div", { class: "brand" }, h("span", { class: "brand-mark", "aria-hidden": "true" }), h("div", null, h("b", { text: t.brand }), h("small", { text: t.tagline }))),
     h("nav", { class: "tabs", role: "tablist" }, ...tabs.map((x) => x.b)),
-    h("div", { class: "topbar-right" }, guide, assistant, h("div", { class: "segments" }, ...languages.map((x) => x.b))),
+    h("div", { class: "topbar-right" }, share, guide, assistant, h("div", { class: "segments" }, ...languages.map((x) => x.b))),
   );
 
   ui.watch(

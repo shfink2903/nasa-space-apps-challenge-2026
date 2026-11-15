@@ -93,4 +93,6 @@ export interface Actions {
   overview(): void;
   setAssistant(open: boolean): void;
   setGuide(open: boolean): void;
+  /** Copies a link that opens on the current scenario. */
+  share(): void;
 }

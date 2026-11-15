@@ -4,7 +4,7 @@
   --faint: #7a8296; /* 5:1 on --solid (WCAG AA for small text) */
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.16);
-  --glass: rgba(9, 12, 19, 0.66);
+  --glass: rgba(9, 12, 19, 0.8); /* readable over the bright Moon */
   --glass-strong: rgba(9, 12, 19, 0.86);
   --solid: #0b0f17;
   --page: #06080d;
@@ -1229,9 +1229,51 @@ input[type="range"] {
   font-weight: 500;
   letter-spacing: -0.02em;
 }
-.data-toolbar {
+.data-sticky {
   position: sticky;
   top: 0;
+  z-index: 4;
+  margin: 14px 0;
+  padding-bottom: 8px;
+  background: var(--page);
+  box-shadow: 0 10px 18px -12px rgba(0, 0, 0, 0.8);
+}
+.data-sticky .data-toolbar {
+  margin: 0;
+}
+.section-nav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px 4px 0;
+  scrollbar-width: none;
+}
+.section-link {
+  flex: none;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--solid);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.section-link:hover,
+.section-link:focus-visible {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.section-link.is-on {
+  color: var(--solid);
+  background: var(--amber);
+  border-color: var(--amber);
+}
+.data-section {
+  scroll-margin-top: 170px;
+}
+.data-toolbar {
+  position: relative;
   z-index: 4;
   display: flex;
   flex-wrap: wrap;
@@ -1762,6 +1804,21 @@ input[type="range"] {
   .data-view {
     padding-inline: 10px;
   }
+  /* On a phone the full toolbar would eat a third of the screen: it scrolls away, the section links stay. */
+  .data-sticky {
+    /* Its children join the scroll container, so the links can stick on their own. */
+    display: contents;
+  }
+  .section-nav {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding: 6px 0;
+    background: var(--page);
+  }
+  .data-section {
+    scroll-margin-top: 50px;
+  }
   .data-card {
     padding: 14px;
   }
@@ -1841,4 +1898,20 @@ input[type="range"] {
     padding: 0 7px;
     font-size: 12px;
   }
+}
+
+/* Card-level action (CSV download), top right. */
+.data-card {
+  position: relative;
+}
+.card-action {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.data-card:has(.card-action) .data-head {
+  padding-right: 84px;
 }

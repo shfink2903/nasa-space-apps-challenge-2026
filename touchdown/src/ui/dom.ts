@@ -42,6 +42,7 @@ const ICONS: Record<string, string> = {
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
   table: '<path d="M4 5h16v14H4zM4 10h16M4 15h16M10 5v14"/>',
   link: '<path d="M5 19l14-14M9 5h10v10"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6l1-7z"/>',
   rocket: '<path d="M12 3c3 2 5 6 5 10l-2 3H9l-2-3c0-4 2-8 5-10zM9 16l-2 4 4-2M15 16l2 4-4-2"/><circle cx="12" cy="10" r="1.6"/>',
   zoomOut: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6"/>',
