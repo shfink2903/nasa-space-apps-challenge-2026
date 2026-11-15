@@ -104,9 +104,8 @@ npm run test:e2e
 Touchdown browser checks intercept AI chat locally. They verify selection,
 priority and constraints sent by the interface without starting another provider
 request. The local service remains configured for real use through its server-side
-environment. See [Touchdown planner verification](docs/validation/touchdown-planner-v1.md)
-for the final revision's results and limits. Older browser qualifications from the
-separate web/ application do not qualify Touchdown and are not shipped here.
+environment. See [Touchdown planner verification](docs/validation/touchdown-south-pole-planner-v1.md)
+for the final revision's results and limits.
 
 Official protocol references: [tool calling](https://openrouter.ai/docs/guides/features/tool-calling),
 [structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs),
