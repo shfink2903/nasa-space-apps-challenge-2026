@@ -6,13 +6,16 @@
  * interface can rank and compare sites without loading ~30 MB of source files.
  * Run again after a new dataset release: `npm run prepare:derived`.
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(here, "../../data/processed/v1");
-const OUT = resolve(here, "../public/derived/v1.json");
+const VERSION = process.env.LUNAR_DATASET_VERSION ?? "v1";
+if (!/^v[\w.-]+$/.test(VERSION)) throw new Error("Invalid LUNAR_DATASET_VERSION");
+const ROOT = resolve(here, "../../data/processed", VERSION);
+const OUT = resolve(here, "../public/derived", `${VERSION}.json`);
 
 export const METRIC_IDS = [
   "sun.anyDisk.fraction",
@@ -25,7 +28,7 @@ export const METRIC_IDS = [
 ];
 
 const read = (path) => JSON.parse(readFileSync(resolve(ROOT, path), "utf8"));
-const list = (dir) => readdirSync(resolve(ROOT, dir)).filter((f) => f.endsWith(".json")).sort();
+const list = (dir) => existsSync(resolve(ROOT, dir)) ? readdirSync(resolve(ROOT, dir)).filter((f) => f.endsWith(".json")).sort() : [];
 const dateOf = (scenarioId) => /_(\d{8})_30d_/.exec(scenarioId)?.[1] ?? null;
 const valueOf = (metrics, id) => metrics.find((m) => m.metricId === id)?.value ?? null;
 
@@ -35,6 +38,8 @@ for (const file of list("sweeps")) {
   const values = {};
   for (const id of METRIC_IDS) values[id] = doc.rows.map((row) => valueOf(row.metrics, id));
   sweeps[`${doc.siteId}|${Number(doc.heightM)}|${doc.modelLevel}`] = {
+    terrainMethodId: doc.terrainMethodId ?? null,
+    coverageStatus: doc.rows.map((row) => row.coverageStatus),
     dates: doc.rows.map((row) => row.surfaceStartUtc.slice(0, 10).replaceAll("-", "")),
     validationStatus: [...new Set(doc.rows.map((row) => row.validationStatus))].join(","),
     values,
@@ -46,7 +51,9 @@ for (const file of list("comparisons")) {
   const doc = read(`comparisons/${file}`);
   const date = dateOf(doc.scenarioIds[0]);
   if (!date) throw new Error(`No date in ${file}`);
-  comparisons[`${date}|${doc.modelLevel}`] = {
+  const key = doc.heightM === undefined ? `${date}|${doc.modelLevel}` : `${date}|${doc.modelLevel}|${doc.heightM}|${doc.terrainMethodId ?? "legacy"}`;
+  if (comparisons[key]) throw new Error(`Duplicate comparison key ${key}`);
+  comparisons[key] = {
     comparisonId: doc.comparisonId,
     exploredCount: doc.exploredCount,
     criteria: doc.method.criteria.map((c) => ({ metricId: c.metricId, direction: c.direction })),
@@ -77,9 +84,11 @@ for (const file of list("sensitivity")) {
 }
 
 const manifest = read("manifest.json");
+if (manifest.datasetVersion !== VERSION) throw new Error("Dataset version mismatch");
 const out = {
   schemaVersion: "1.0.0",
   datasetVersion: manifest.datasetVersion ?? "v1",
+  datasetManifestSha256: createHash("sha256").update(readFileSync(resolve(ROOT, "manifest.json"))).digest("hex"),
   note: "Compact copy of published values (sweeps, comparisons, sensitivity). No value is computed here.",
   metricIds: METRIC_IDS,
   sweeps,
@@ -89,6 +98,6 @@ const out = {
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, JSON.stringify(out));
 console.log(
-  `derived/v1.json: ${Object.keys(sweeps).length} sweeps, ${Object.keys(comparisons).length} comparisons, ` +
+  `derived/${VERSION}.json: ${Object.keys(sweeps).length} sweeps, ${Object.keys(comparisons).length} comparisons, ` +
     `${Object.keys(sensitivity).length} sensitivity grids, ${(JSON.stringify(out).length / 1024).toFixed(0)} kB`,
 );

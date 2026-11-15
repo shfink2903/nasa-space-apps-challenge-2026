@@ -21,6 +21,7 @@ KERNELS = [
     ("fk/satellites/moon_de440_250416.tf", 19478),
 ]
 DEMS = {"ldem_80s_80m": 115520000, "ldem_75s_120m": 116250752, "ldem_60s_240m": 120435200}
+FINE_DEMS = {"ldem_85s_20m": 460136448}
 USER_AGENT = "true-larpers-data/1.0 (NASA Space Apps preparation)"
 
 
@@ -82,14 +83,17 @@ def fetch(url, path, expected_size=None):
     raise AssertionError("unreachable")
 
 
-def acquire(root, terrain=False):
+def acquire(root, terrain=False, terrain_preset=None):
+    if terrain_preset not in (None, "polar20"):
+        raise DataError("invalid_request", "terrainPreset", terrain_preset)
     root = Path(root)
     records = []
     for relative, size in KERNELS:
         print(f"Acquire {relative}", flush=True)
         records.append(fetch(f"{NAIF}/{relative}", root / "kernels" / Path(relative).name, size))
-    if terrain:
-        for product, size in DEMS.items():
+    if terrain or terrain_preset:
+        products = {**DEMS, **(FINE_DEMS if terrain_preset == "polar20" else {})}
+        for product, size in products.items():
             for extension, n in (("lbl", None), ("img", size)):
                 print(f"Acquire {product}.{extension}", flush=True)
                 records.append(fetch(f"{PDS}/{product}.{extension}", root / "lola" / f"{product}.{extension}", n))

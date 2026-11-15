@@ -152,6 +152,10 @@ def compute(geometry, site, request, engine_version, dataset_version, profile=No
                        "catalogueSources": site["sources"], "parameters": {"moonRadiusKm": parameter(1737.4, "km", "source:pck00011"),
                        "sunRadiusKm": parameter(695700., "km", "source:data_plan_8.1"), "earthRadiusKm": parameter(6378.137, "km", "source:data_plan_8.1")}},
     }
+    scenario["terrainMethodId"] = profile.get("terrainMethodId", "legacy-lola-v1") if profile else "geometric-v1"
+    if profile and "terrainMethod" in profile:
+        scenario["provenance"]["terrainMethod"] = profile["terrainMethod"]
+        scenario["provenance"]["sources"] += profile.get("demLabelSources", [])
     if include_series:
         # A non-divisible custom duration gets explicit times; never pretend it is regular.
         display_times = time_grid(start, duration, 600.)

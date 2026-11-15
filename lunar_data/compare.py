@@ -115,9 +115,11 @@ def compare(scenarios, criteria=None, priority=None, constraints=None):
     for c in criteria:
         if c.get("direction") not in ("min", "max") or not c.get("metricId") or not c.get("origin"):
             raise DataError("invalid_request", "criteria", "metricId, direction and origin required")
-    compatibility = {(s["modelLevel"], s["kernelSetId"], s["request"]["analysisDurationS"]["value"], s["request"]["computeStepS"]["value"]) for s in scenarios}
+    compatibility = {(s["modelLevel"], s.get("terrainMethodId", "legacy-" + s["modelLevel"] + "-v1"),
+                      s["kernelSetId"], s["request"]["observerHeightM"]["value"],
+                      s["request"]["analysisDurationS"]["value"], s["request"]["computeStepS"]["value"]) for s in scenarios}
     if len(compatibility) != 1:
-        raise DataError("incompatible_scenarios", "scenarioIds", "model level, kernels, duration and compute step must match")
+        raise DataError("incompatible_scenarios", "scenarioIds", "terrain method, height, model level, kernels, duration and compute step must match")
     verdicts = {s["scenarioId"]: evaluate(s["metrics"], constraints) if constraints is not None else s["evaluation"]["nominal"] for s in scenarios}
     eligible = [s for s in scenarios if verdicts[s["scenarioId"]]["status"] in ("pass", "not_evaluated") and s["coverageStatus"] == "covered"]
     front = [s["scenarioId"] for s in eligible if not any(dominates(other, s, criteria) for other in eligible if other is not s)]
@@ -152,7 +154,9 @@ def compare(scenarios, criteria=None, priority=None, constraints=None):
         unranked = [s["scenarioId"] for s in scenarios if s["scenarioId"] not in ranks]
     result = {"schemaVersion": "1.0.0", "scenarioIds": [s["scenarioId"] for s in scenarios],
               "method": {"type": "pareto", "criteria": criteria, "priority": priority, "weights": None},
-              "modelLevel": scenarios[0]["modelLevel"], "coverageStatus": "covered" if all(s["coverageStatus"] == "covered" for s in scenarios) else "partial",
+              "modelLevel": scenarios[0]["modelLevel"], "terrainMethodId": scenarios[0].get("terrainMethodId"),
+              "heightM": scenarios[0]["request"]["observerHeightM"]["value"],
+              "coverageStatus": "covered" if all(s["coverageStatus"] == "covered" for s in scenarios) else "partial",
               "validationStatus": "not_validated", "verdicts": verdicts, "nonDominatedScenarioIds": front,
               "ranking": ranking, "rankByScenarioId": ranks, "unrankedScenarioIds": unranked, "recommendation": None,
               "recommendationReason": reason("descriptive_pareto_only" if eligible else "all_failed_or_unknown"),

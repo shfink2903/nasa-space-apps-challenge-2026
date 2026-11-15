@@ -1,4 +1,4 @@
-import { sweepFor, type Derived, type Site } from "../data/dataset";
+import { DATASET_VERSION, RELIEF_DEMO, sweepFor, type Derived, type Site } from "../data/dataset";
 import { HOURS_30_DAYS, HOURS_YEAR, SOLAR_KW_PER_M2, solarEnergyKwhPerM2 } from "../data/energy";
 import { EARTH, SUN, valuesAt, verdictAt } from "../data/mission";
 import { criterionById, CRITERIA, rankSites, sitesIn, type Criterion, type RankRow } from "../data/ranking";
@@ -71,12 +71,13 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
 
   // --- The sites studied: region, and the user's own coordinates. ---
   const yourPoint = h("p", { class: "your-point", hidden: true });
+  const terrainNote = h("p", { class: "criteria-lead", text: T.coordsTitle });
   const sitesCard = h(
     "section",
     { class: "criteria sites-card" },
     h("header", { class: "criteria-head" }, h("h3", { class: "card-title", text: T.sitesTitle }), createRegionSwitch(store, actions)),
-    h("p", { class: "criteria-lead", text: T.coordsTitle }),
-    createCoordsForm((lat, lon) => actions.addPoint(lat, lon)),
+    terrainNote,
+    !RELIEF_DEMO && createCoordsForm((lat, lon) => actions.addPoint(lat, lon)),
     yourPoint,
   );
 
@@ -210,7 +211,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
         cells.set(c.id, { value, fill });
         return h("td", { "data-col": c.id, class: bar ? "has-bar" : "" }, fill && h("div", { class: "cmp-bar" }, fill), value);
       });
-      const tr = h("tr", { tabindex: 0, class: own(site) }, rank, h("th", { scope: "row", class: "name" }, siteName(site)), verdict, ...tds);
+      const tr = h("tr", { tabindex: 0, class: own(site), "data-site-id": site.id }, rank, h("th", { scope: "row", class: "name" }, siteName(site)), verdict, ...tds);
       tr.addEventListener("click", () => open(site.id));
       tr.addEventListener("keydown", (event) => {
         if (event.key === "Enter") open(site.id);
@@ -379,6 +380,9 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     const active = criterionById(s.rankBy);
     const shown = sitesIn(s.sites, s.region);
     const i = s.dates.indexOf(s.date);
+    tabYear.hidden = s.dates.length < 52;
+    if (tabYear.hidden && tab === "year") tab = "date";
+    play.disabled = s.dates.length < 2;
 
     tabDate.classList.toggle("is-on", tab === "date");
     tabYear.classList.toggle("is-on", tab === "year");
@@ -386,6 +390,7 @@ export function createCompare(store: Store, actions: Actions, derived: Derived):
     lead.textContent = tab === "date" ? T.leadDate : tab === "year" ? T.leadYear : T.leadDelay;
     lead.hidden = lead.textContent === "";
     const custom = s.sites.find((x) => x.status === "custom");
+    if (RELIEF_DEMO) terrainNote.textContent = `Relief LOLA : 20 m près du site, 80–120 m au loin — expérimental. Trois points d’étude · hauteur commune ${s.heightM} m · ${DATASET_VERSION}`;
     yourPoint.hidden = !custom;
     if (custom) yourPoint.textContent = T.yourPoint(formatCoords(custom));
     dateBar.hidden = options.hidden = tab !== "date";

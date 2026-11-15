@@ -55,6 +55,7 @@ export interface RankRow {
 }
 
 export function rankSites(sites: Site[], derived: Derived, date: string, heightM: number, criterion: Criterion): RankRow[] {
+  const reliefDemo = derived.datasetVersion.startsWith("v1.1-relief");
   const rows: RankRow[] = sites.map((site) => {
     const model = bestModel(site);
     const sweep = sweepFor(derived, site, heightM, model);
@@ -62,15 +63,18 @@ export function rankSites(sites: Site[], derived: Derived, date: string, heightM
     const values: Record<string, number | null> = {};
     for (const id of derived.metricIds) values[id] = i < 0 ? null : (sweep!.values[id]?.[i] ?? null);
     const scenarioId = pickScenarioId(site, date, heightM, model);
-    const comparison = derived.comparisons[`${date}|${model}`];
+    const comparison = derived.comparisons[`${date}|${model}|${heightM}|${sweep?.terrainMethodId ?? "legacy"}`]
+      ?? (reliefDemo ? undefined : derived.comparisons[`${date}|${model}`]);
+    const eligible = !reliefDemo || (model === "lola" && !!site.terrainMethodId && sweep?.terrainMethodId === site.terrainMethodId
+      && sweep.coverageStatus?.[i] === "covered" && !site.computed);
     return {
       site,
       model,
       scenarioId,
       values,
-      value: values[criterion.metricId] ?? null,
+      value: eligible ? values[criterion.metricId] ?? null : null,
       rank: null,
-      nonDominated: scenarioId !== null && comparison !== undefined && comparison.nonDominated.includes(scenarioId),
+      nonDominated: eligible && scenarioId !== null && comparison !== undefined && comparison.nonDominated.includes(scenarioId),
     };
   });
 

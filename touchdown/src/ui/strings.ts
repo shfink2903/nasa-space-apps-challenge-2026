@@ -35,7 +35,7 @@ const FR = {
   tagline: "Every landing starts here.",
   pageTitle: "Landfall — Où et quand se poser sur la Lune",
   loading: "Préparation de la Lune…",
-  loadError: "Chargement impossible. Vérifiez que le jeu de données est servi sous /data/v1.",
+  loadError: `Chargement impossible. Vérifiez que le jeu de données est servi sous /data/${import.meta.env.LUNAR_DATASET_VERSION ?? "v1"}.`,
   siteError: "Données du site indisponibles. Retour à la vue d'ensemble.",
   contextLost: "Le contexte graphique a été perdu. Rechargez la page.",
   otherLang: "EN",
@@ -53,7 +53,7 @@ const FR = {
   heroText: "Comparez les conditions d'éclairage et de communication, explorez les possibilités et identifiez les meilleures fenêtres d'alunissage.",
   heroSouth: "Pôle Sud : cible stratégique des prochaines missions lunaires.",
   heroHint: "Ou cliquez un point de la Lune pour voir ses conditions.",
-  credits: "Vol et échelles illustratifs. Données v1. Lune : NASA SVS. Starship : I_am_Darth, CC BY-NC-SA.",
+  credits: `Vol, sol 3D et échelles illustratifs. Données ${import.meta.env.LUNAR_DATASET_VERSION ?? "v1"}. Lune : NASA SVS. Starship : I_am_Darth, CC BY-NC-SA.`,
   pinStats: (sun: string, earth: string) => `Soleil ${sun}, Terre ${earth}`,
 
   // Days out of the 30 studied days.
@@ -353,7 +353,7 @@ const EN: typeof FR = {
   tagline: "Every landing starts here.",
   pageTitle: "Landfall — Where and when to land on the Moon",
   loading: "Preparing the Moon…",
-  loadError: "Loading failed. Check that the dataset is served under /data/v1.",
+  loadError: `Loading failed. Check that the dataset is served under /data/${import.meta.env.LUNAR_DATASET_VERSION ?? "v1"}.`,
   siteError: "Site data unavailable. Back to the overview.",
   contextLost: "The graphics context was lost. Reload the page.",
   otherLang: "FR",
@@ -369,7 +369,7 @@ const EN: typeof FR = {
   heroText: "Compare lighting and communication conditions, explore the options and find the best landing windows.",
   heroSouth: "South pole: strategic target of the next lunar missions.",
   heroHint: "Or click a point on the Moon to see its conditions.",
-  credits: "Illustrative flight and scales. Data v1. Moon: NASA SVS. Starship: I_am_Darth, CC BY-NC-SA.",
+  credits: `Illustrative flight, 3D ground and scales. Data ${import.meta.env.LUNAR_DATASET_VERSION ?? "v1"}. Moon: NASA SVS. Starship: I_am_Darth, CC BY-NC-SA.`,
   pinStats: (sun: string, earth: string) => `Sun ${sun}, Earth ${earth}`,
 
   days: (n: string) => (n === "<1" ? "under 1 day" : n === ">29" ? "over 29 days" : n === "1" ? "1 day" : `${n} days`),

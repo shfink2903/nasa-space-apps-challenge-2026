@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import {
   availableDates,
+  RELIEF_DEMO,
   indexAt,
   loadDerived,
   loadHorizon,
@@ -132,7 +133,7 @@ async function boot(): Promise<void> {
   // --- Data: catalogue and compact index first, then the series that lights the first view. ---
   const [catalogue, derived] = await Promise.all([loadSites(), loadDerived()]);
   // The dataset catalogue, then the sourced sites it lacks (CLPS, Artemis, other agencies).
-  const sites = [...catalogue, ...EXTRA_SITES];
+  const sites = RELIEF_DEMO ? catalogue : [...catalogue, ...EXTRA_SITES];
   const reference = sites.find((s) => s.id === REFERENCE_SITE) ?? sites[0];
   const dates = availableDates(reference);
   let loadAbort = new AbortController();
@@ -185,6 +186,7 @@ async function boot(): Promise<void> {
    */
   const yearRuns = new Map<string, number>();
   const fillYear = (group: string, list: Site[], heightM: number): void => {
+    if (RELIEF_DEMO) return;
     const run = (yearRuns.get(group) ?? 0) + 1;
     yearRuns.set(group, run);
     const live = (): boolean => yearRuns.get(group) === run;
@@ -224,6 +226,7 @@ async function boot(): Promise<void> {
   const loadActive = (site: Site, date: string, heightM: number): Promise<{ horizon: HorizonProfile | null }> => {
     loadAbort.abort();
     loadAbort = new AbortController();
+    if (RELIEF_DEMO) store.set({ scenario: null, horizon: null });
     const load = site.computed ? loadCustom(site, date, heightM) : loadSiteData(site, date, heightM, loadAbort.signal);
     const signal = loadAbort.signal;
     return load.then((d) => {
@@ -262,10 +265,12 @@ async function boot(): Promise<void> {
       });
     },
     selectPoint(latDeg, lonDeg) {
+      if (RELIEF_DEMO) return;
       actions.addPoint(latDeg, lonDeg);
       actions.selectSite(CUSTOM_ID);
     },
     addPoint(latDeg, lonDeg) {
+      if (RELIEF_DEMO) return;
       const site = customSite(latDeg, lonDeg);
       site.name = T.customName;
       const state = store.get();
@@ -290,7 +295,8 @@ async function boot(): Promise<void> {
       const site = siteById(s.siteId);
       if (!site || s.phase !== "focus" || !siteData || !s.scenario || !s.series || s.lightSiteId !== site.id) return;
       // The series of a new date loads a moment after the date changes: wait for it.
-      if (parseScenarioId(s.scenario.scenarioId)?.date !== s.date) return;
+      const loaded = parseScenarioId(s.scenario.scenarioId);
+      if (loaded?.date !== s.date || loaded.heightM !== s.heightM) return;
       // No Sun at the site at the chosen time: no landing (the caption offers the next sunrise instead).
       if (!visibilityAt(s.scenario, "sun.anyDisk", sampleSeries(s.series, s.index).tMs).visible) return;
       // The site does not meet the user's mission criteria for this date: no landing either.

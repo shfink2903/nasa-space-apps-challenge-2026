@@ -1,0 +1,17 @@
+{
+  "pass": true,
+  "datasetVersion": "v1",
+  "checks": [
+    "v1 backup starts and opens comparison with external network blocked"
+  ],
+  "errors": [],
+  "failedRequests": [],
+  "externalRequests": [],
+  "horizons": [
+    "http://127.0.0.1:8014/data/v1/horizons/sp_s8600_h2m_36f176b1754d.json"
+  ],
+  "scenarios": [
+    "http://127.0.0.1:8014/data/v1/scenarios/apollo11_20261201_30d_h2m_geometric_6945cd61.json",
+    "http://127.0.0.1:8014/data/v1/scenarios/sp_s8600_20261201_30d_h2m_lola_d8450ada.json"
+  ]
+}

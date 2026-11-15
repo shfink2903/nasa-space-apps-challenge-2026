@@ -1,10 +1,12 @@
 /**
- * Read-only access to the frozen dataset (data/processed/v1), served at /data/v1.
+ * Read-only access to the dataset selected by LUNAR_DATASET_VERSION (default v1).
  * The UI shows these values. It never recomputes windows, durations or verdicts.
  */
 import { lerpAngleDeg } from "./astro";
 
-export const DATA_BASE = "/data/v1";
+export const DATASET_VERSION = import.meta.env.LUNAR_DATASET_VERSION ?? "v1";
+export const DATA_BASE = `/data/${DATASET_VERSION}`;
+export const RELIEF_DEMO = DATASET_VERSION.startsWith("v1.1-relief");
 
 /** "custom" is a free point chosen by the user; it is not in the dataset catalogue. */
 export type SiteStatus = "historical" | "study_point" | "announced" | "custom";
@@ -19,6 +21,7 @@ export interface Site {
   latDeg: number;
   lonDeg: number;
   terrainProduct: string | null;
+  terrainMethodId?: string;
   /** "single_source", "unverified" or "team_defined", as published. */
   verification: string;
   scenarioIds: string[];
@@ -67,6 +70,8 @@ export interface VisibilityWindow {
 export type WindowKey = "sun.anyDisk" | "sun.fullDisk" | "earth.anyDisk" | "earth.fullDisk";
 
 export interface Scenario {
+  datasetVersion?: string;
+  terrainMethodId?: string;
   scenarioId: string;
   siteId: string;
   modelLevel: string;
@@ -138,12 +143,16 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 export async function loadSites(signal?: AbortSignal): Promise<Site[]> {
+  const manifest = await getJson<{ datasetVersion: string }>("manifest.json", signal);
+  if (manifest.datasetVersion !== DATASET_VERSION) throw new Error("Dataset version mismatch");
   const doc = await getJson<{ sites: Site[] }>("sites.json", signal);
   return doc.sites;
 }
 
-export function loadScenario(id: string, signal?: AbortSignal): Promise<Scenario> {
-  return getJson<Scenario>(`scenarios/${id}.json`, signal);
+export async function loadScenario(id: string, signal?: AbortSignal): Promise<Scenario> {
+  const scenario = await getJson<Scenario>(`scenarios/${id}.json`, signal);
+  if (scenario.datasetVersion !== DATASET_VERSION) throw new Error("Scenario dataset version mismatch");
+  return scenario;
 }
 
 /**
@@ -170,14 +179,11 @@ export async function loadSeriesById(scenarioId: string, signal?: AbortSignal): 
 export async function loadHorizon(scenario: Scenario, signal?: AbortSignal): Promise<HorizonProfile | null> {
   if (!scenario.profileId) return null;
   const parsed = parseScenarioId(scenario.scenarioId);
-  if (!parsed) return null;
+  if (!parsed) throw new Error("Invalid scenario id for terrain profile");
   const file = `horizons/${scenario.siteId}_h${parsed.heightM}m_${scenario.profileId}.json`;
-  try {
-    return await getJson<HorizonProfile>(file, signal);
-  } catch (err) {
-    if ((err as Error).name === "AbortError") throw err;
-    return null;
-  }
+  const profile = await getJson<HorizonProfile>(file, signal);
+  if (profile.profileId !== scenario.profileId) throw new Error("Horizon profile mismatch");
+  return profile;
 }
 
 export interface Sample {
@@ -267,6 +273,8 @@ export function indexAt(series: Series, tMs: number): number {
 // ---------- Compact index of published sweeps, comparisons and sensitivity grids ----------
 
 export interface SweepEntry {
+  terrainMethodId?: string | null;
+  coverageStatus?: string[];
   dates: string[];
   validationStatus: string;
   values: Record<string, (number | null)[]>;
@@ -300,13 +308,21 @@ export interface Derived {
 }
 
 export async function loadDerived(signal?: AbortSignal): Promise<Derived> {
-  const res = await fetch("/derived/v1.json", { signal });
-  if (!res.ok) throw new Error(`derived/v1.json: HTTP ${res.status}`);
-  return (await res.json()) as Derived;
+  const res = await fetch(`/derived/${DATASET_VERSION}.json`, { signal });
+  if (!res.ok) throw new Error(`derived/${DATASET_VERSION}.json: HTTP ${res.status}`);
+  const derived = (await res.json()) as Derived;
+  if (derived.datasetVersion !== DATASET_VERSION) throw new Error("Derived dataset version mismatch");
+  return derived;
 }
 
 export function sweepFor(derived: Derived, site: Site, heightM: number, model = bestModel(site)): SweepEntry | null {
-  return derived.sweeps[`${site.id}|${heightM}|${model}`] ?? null;
+  const sweep = derived.sweeps[`${site.id}|${heightM}|${model}`] ?? null;
+  if (!derived.datasetVersion.startsWith("v1.1-relief") || !sweep) return sweep;
+  if (site.computed || model !== "lola" || !site.terrainMethodId || sweep.terrainMethodId !== site.terrainMethodId) return null;
+  // Missing terrain cannot yield a value or a mission verdict, even if an index
+  // mistakenly contains finite metrics for that row.
+  return { ...sweep, values: Object.fromEntries(Object.entries(sweep.values).map(([id, values]) =>
+    [id, values.map((value, i) => sweep.coverageStatus?.[i] === "covered" ? value : null)])) };
 }
 
 /** Published 30-day metric of a site for one start date. Null when the dataset has no value. */

@@ -17,7 +17,7 @@ from .common import DataError, canonical, finite, identity, read_json, sha256, u
 from .compare import compare, evidence
 from .geometry import Geometry, time_grid
 from .scenario import compute, normalized_request
-from .terrain import DEM, combined_profile, destination
+from .terrain import DEM, combined_profile, destination, polar20_profile, POLAR20_SITES
 
 
 def engine_version():
@@ -52,7 +52,7 @@ def token_count(value):
 
 
 def build(output="data/processed/v1", raw="data/raw", cache="data/interim", starts=52, terrain=True,
-          heights=(2., 10.), site_ids=None, parent=None, sensitivity=False):
+          heights=(2., 10.), site_ids=None, parent=None, sensitivity=False, terrain_preset=None, refined=False, numerical_report=None):
     # Reject invalid combinations before touching staging, scientific inputs or caches.
     if isinstance(starts, bool) or not isinstance(starts, int) or not 1 <= starts <= 52:
         raise DataError("invalid_request", "starts", "1 to 52 weekly starts required")
@@ -66,6 +66,12 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
         finite(height, "observerHeightM", 0)
     if len(set(heights)) != len(heights):
         raise DataError("invalid_request", "heights", "duplicate observer heights")
+    if terrain_preset not in (None, "polar20") or refined and terrain_preset != "polar20":
+        raise DataError("invalid_request", "terrainPreset")
+    if terrain_preset == "polar20":
+        if not terrain or sensitivity or site_ids is not None and set(site_ids) != set(POLAR20_SITES):
+            raise DataError("invalid_request", "polar20", "requires all three study sites, terrain, no legacy sensitivity grid")
+        site_ids = list(POLAR20_SITES)
     sites = list_sites()
     if site_ids is not None:
         if not isinstance(site_ids, (list, tuple)) or not site_ids or any(not isinstance(sid, str) for sid in site_ids):
@@ -93,6 +99,7 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
     vectors = geo.cached_vectors(annual_ets)
     ephem_elapsed = time.perf_counter() - clock
     dem_cache, profiles, scenarios, timings = {}, {}, [], []
+    compute_step = 10. if refined else 60.
     days = [datetime(2026, 12, 1, tzinfo=timezone.utc) + timedelta(weeks=i) for i in range(starts)]
     try:
         for site in sites:
@@ -102,12 +109,21 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
                 for height in heights:
                     profile = None
                     if level == "lola":
-                        product = site["terrainProduct"]
+                        product = "ldem_85s_20m" if terrain_preset == "polar20" else site["terrainProduct"]
                         if product not in dem_cache:
                             dem_cache[product] = DEM(Path(raw) / "lola" / f"{product}.lbl")
                         tick = time.perf_counter()
                         extended = {"ldem_80s_80m": "ldem_75s_120m", "ldem_75s_120m": "ldem_60s_240m"}.get(product)
-                        if extended:
+                        if terrain_preset == "polar20":
+                            for name in ("ldem_80s_80m", "ldem_75s_120m"):
+                                if name not in dem_cache:
+                                    dem_cache[name] = DEM(Path(raw) / "lola" / f"{name}.lbl")
+                            profile = polar20_profile(dem_cache[product], dem_cache["ldem_80s_80m"], dem_cache["ldem_75s_120m"],
+                                                      site, height, cache, fine_radius_km=25. if refined else 20.,
+                                                      azimuth_step=.05 if refined else .1)
+                            site["terrainProduct"] = product
+                            site["terrainMethodId"] = profile["terrainMethodId"]
+                        elif extended:
                             if extended not in dem_cache:
                                 dem_cache[extended] = DEM(Path(raw) / "lola" / f"{extended}.lbl")
                             profile = combined_profile(dem_cache[product], dem_cache[extended], site, height, cache=cache)
@@ -129,15 +145,17 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
                         # mean weekly UTC starts do not land exactly on this grid.
                         # Use exact per-scenario times, interpolate vectors only if
                         # offset differs <= 2 ms; otherwise compute a new grid.
-                        req = normalized_request(site, start=start, height=height)
-                        ets = time_grid(geo.et(start), 2592000., 60.)
-                        if abs(annual_ets[offset] - ets[0]) <= .002:
+                        req = normalized_request(site, start=start, height=height, step=compute_step)
+                        ets = time_grid(geo.et(start), 2592000., compute_step)
+                        interpolated = compute_step == 60. and abs(annual_ets[offset] - ets[0]) <= .002
+                        if interpolated:
                             vv = {body: np.stack([np.interp(ets, annual_ets, arr[:, j]) for j in range(3)], axis=1) for body, arr in vectors.items()}
                         else:
                             vv = geo.cached_vectors(ets)
                         print(f"Compute {sid} h={height:g} {level} {start}", flush=True)
                         scenario = compute(geo, site, req, version, out.name, profile, vv, ets)
-                        scenario["limits"].append("Annual vectors interpolated to exact UTC grid (offset <= 2 ms); events recomputed directly.")
+                        if interpolated:
+                            scenario["limits"].append("Annual vectors interpolated to exact UTC grid (offset <= 2 ms); events recomputed directly.")
                         save_scenario(staging, scenario)
                         site["scenarioIds"].append(scenario["scenarioId"])
                         scenarios.append(scenario)
@@ -148,6 +166,7 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
                         timings.append({"kind": "scenario", "scenarioId": scenario["scenarioId"], "seconds": time.perf_counter() - tick})
                     write_json(staging / "sweeps" / f"{sid}_h{height:g}m_{level}_dates.json", {
                         "schemaVersion": "1.0.0", "siteId": sid, "heightM": height, "modelLevel": level,
+                        "terrainMethodId": scenario["terrainMethodId"],
                         "total": len(sweep), "returned": len(sweep), "rows": sweep,
                         "explored": {"firstStartUtc": sweep[0]["surfaceStartUtc"], "lastStartUtc": sweep[-1]["surfaceStartUtc"], "weeklyStarts": starts, "analysisDurationS": 2592000.}})
         # A comparison remains bounded to 60 scenarios and never mixes terrain levels.
@@ -157,8 +176,10 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
             start = day.isoformat().replace("+00:00", "Z")
             for level in ("geometric", "lola"):
                 group = [s for s in scenarios if s["modelLevel"] == level and s["request"]["surfaceStartUtc"]["value"] == start]
-                for first in range(0, len(group), 60):
-                    subset = group[first:first + 60]
+                for height in heights:
+                    subset = [s for s in group if s["request"]["observerHeightM"]["value"] == height]
+                    if not subset:
+                        continue
                     c = compare(subset)
                     cid = c["comparisonId"]
                     write_json(staging / "comparisons" / f"{cid}.json", c)
@@ -173,6 +194,19 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
                     grid = sensitivity_grid(geo, site, height, dem_cache[site["terrainProduct"]], cache, version, out.name,
                                             far_dem=dem_cache["ldem_75s_120m"])
                     write_json(staging / "sensitivity" / f'{site["id"]}_h{height:g}m_grid1km.json', grid)
+        numerical = None
+        if numerical_report:
+            numerical = read_json(numerical_report)
+            reference = out.parent / numerical["datasetVersion"] / "manifest.json"
+            tested = read_json(reference)
+            if (numerical.get("numericalAcceptance") != "accepted" or len(numerical.get("tests", [])) != 18
+                    or not all(t.get("pass") for t in numerical["tests"])
+                    or sha256(reference) != numerical["datasetManifestSha256"]
+                    or tested.get("kernelSetId") != geo.kernel_set_id
+                    or tested.get("refined") != refined
+                    or tested.get("terrainMethodId") != next(iter(profiles.values())).get("terrainMethodId")):
+                raise DataError("numerical_validation_mismatch", "numericalReport")
+            write_json(staging / "validation" / Path(numerical_report).name, numerical)
         write_json(staging / "sites.json", {"schemaVersion": "1.0.0", "sites": sites, "total": len(sites), "returned": len(sites), "unavailable": [], "next": None})
         write_json(staging / "index.json", {"schemaVersion": "1.0.0", "scenarioIds": [s["scenarioId"] for s in scenarios],
                    "comparisonIds": comparisons, "profileIds": list(profiles), "total": len(scenarios)})
@@ -183,7 +217,8 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
         records = read_json(Path(raw) / "SOURCES.json")
         write_json(staging / "sources.json", records)
         write_json(staging / "schema" / "scenario.schema.json", read_json("schemas/scenario.schema.json"))
-        validation_reports = sorted(Path("docs/validation").glob("scientific*.json"))
+        # Historical validation reports describe the old terrain method only.
+        validation_reports = [] if terrain_preset else sorted(Path("docs/validation").glob("scientific*.json"))
         for report in validation_reports:
             write_json(staging / "validation" / report.name, read_json(report))
         files = [{"path": str(p.relative_to(staging)), "sizeBytes": p.stat().st_size, "sha256": sha256(p)} for p in sorted(staging.rglob("*")) if p.is_file() and not _os_metadata(p)]
@@ -196,6 +231,14 @@ def build(output="data/processed/v1", raw="data/raw", cache="data/interim", star
                     "levelsPrepared": ["N0", "N2"] + (["N1_experimental"] if profiles else []) + (["N3_sensitivity_experimental"] if sensitivity else []),
                     "notEvaluated": ["UI review", "live OpenRouter provider", "full physical error bounds"],
                     "files": files, "fileCount": len(files), "totalSizeBytes": sum(f["sizeBytes"] for f in files)}
+        if terrain_preset:
+            manifest.update(terrainPreset=terrain_preset, refined=refined,
+                            comparisonSiteIds=list(POLAR20_SITES), weeklyStarts=starts,
+                            terrainMethodId=next(iter(profiles.values()))["terrainMethodId"],
+                            terrainMethod=next(iter(profiles.values()))["terrainMethod"])
+            if numerical:
+                manifest["numericalChecks"] = {"status": "accepted", "report": "validation/" + Path(numerical_report).name,
+                                                "scope": "three sites, heights 2/10 m, December 2026 only; not physical validation"}
         write_json(staging / "manifest.json", manifest)
         verify(staging)
         os.rename(staging, out)

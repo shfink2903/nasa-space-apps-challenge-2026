@@ -127,7 +127,7 @@ class DEM:
         return map_coordinates(self.heights, [np.atleast_1d(row) - .5, np.atleast_1d(col) - .5],
                                order=1, mode="constant", cval=np.nan)
 
-    def profile(self, site, height_m, radius_km=150., azimuth_step=.1, cache=None, rmin_km=None, ground_height_m=None):
+    def profile(self, site, height_m, radius_km=150., azimuth_step=.1, cache=None, rmin_km=None, ground_height_m=None, near_surface=False):
         lat, lon = site["latDeg"], site["lonDeg"]
         validate_point(lat, lon)
         finite(height_m, "observerHeightM", 0)
@@ -138,6 +138,10 @@ class DEM:
                 "labelSha256": sha256(self.label), "rMaxKm": radius_km,
                 "radialStepM": self.pixel_m, "azimuthStepDeg": azimuth_step, "rMinKm": rmin_km,
                 "groundHeightOverrideM": ground_height_m, "algorithm": "spherical-bilinear-v2"}
+        if near_surface:
+            if rmin_km is not None or radius_km < .08:
+                raise DataError("invalid_request", "nearSurface", "requires a near band of at least 80 m")
+            spec.update(algorithm="spherical-bilinear-near-v3", nearSurfaceStepM=1., nearSurfaceEndM=80.)
         pid = identity(spec)
         # Legacy caches contain only an input-derived ID, which cannot attest to
         # the computed arrays. Keep them untouched and recompute into a separate
@@ -164,6 +168,9 @@ class DEM:
             raise DataError("outside_coverage", "terrain", site["id"])
         distances = np.arange(2 * self.pixel_m / 1000. if rmin_km is None else rmin_km, radius_km, self.pixel_m / 1000.)
         distances = np.append(distances, radius_km)
+        if near_surface:
+            distances = np.unique(np.concatenate((np.arange(1., 81.) / 1000.,
+                np.arange(.08, radius_km, self.pixel_m / 1000.), [radius_km])))
         az = np.arange(0, 360, azimuth_step)
         hz, dmax, reach = [], [], []
         lat0, lon0 = np.radians(lat), np.radians(lon)
@@ -220,4 +227,55 @@ def combined_profile(near_dem, far_dem, site, height_m, radius_km=300., azimuth_
     result["truncatedAzimuthCount"] = sum(r < radius_km - 1e-8 for r in result["reachKm"])
     result["limits"] = near["limits"] + ["Composite: fine DEM through 150 km, wider DEM beyond; fixed fine-DEM observer altitude."]
     result["demSources"] = [near_dem.source, far_dem.source]
+    return result
+
+
+POLAR20_SITES = ("sp_s8600", "sp_s8800", "sp_s8950")
+
+
+def polar20_profile(fine_dem, middle_dem, far_dem, site, height_m, cache=None,
+                    fine_radius_km=20., azimuth_step=.1):
+    """Common three-band terrain method; a fixed fine-DEM observer and no gap filling."""
+    finite(fine_radius_km, "fineRadiusKm", 1., 30.)
+    h0 = float(fine_dem.sample(site["latDeg"], site["lonDeg"])[0])
+    if not np.isfinite(h0):
+        raise DataError("outside_coverage", "fineObserver", site["id"])
+    bands = [(fine_dem, .001, fine_radius_km), (middle_dem, fine_radius_km, 150.), (far_dem, 150., 300.)]
+    profiles = [dem.profile(site, height_m, end, azimuth_step, cache,
+                           rmin_km=None if i == 0 else start, ground_height_m=h0, near_surface=i == 0)
+                for i, (dem, start, end) in enumerate(bands)]
+    method = {"algorithm": "polar20-fixed-observer-v1", "nearSurfaceStepM": 1., "nearSurfaceEndM": 80.,
+              "azimuthStepDeg": azimuth_step, "interpolation": "bilinear",
+              "bands": [{"product": dem.product, "sha256": dem.source["sha256"],
+                         "labelSha256": dem.label_source["sha256"], "rangeKm": [start, end],
+                         "pixelM": dem.pixel_m} for dem, start, end in bands]}
+    result = dict(profiles[0])
+    result.update(rMaxKm=300., algorithm=method["algorithm"], terrainMethodId=identity(method, 64),
+                  terrainMethod=method, demProducts=method["bands"], radialStepsM=[d.pixel_m for d, _, _ in bands],
+                  demSources=[d.source for d, _, _ in bands],
+                  demLabelSources=[d.label_source for d, _, _ in bands],
+                  profileId=identity({"method": method, "profiles": [p["profileId"] for p in profiles]}))
+    result["horizonElevationDeg"], result["distanceOfMaxKm"], result["reachKm"] = [], [], []
+    for i in range(len(result["azimuthDeg"])):
+        complete = all(p["horizonElevationDeg"][i] is not None and p["reachKm"][i] >= end - 1e-8
+                       for p, (_, _, end) in zip(profiles, bands))
+        if complete:
+            p = max(profiles, key=lambda p: p["horizonElevationDeg"][i])
+            result["horizonElevationDeg"].append(p["horizonElevationDeg"][i])
+            result["distanceOfMaxKm"].append(p["distanceOfMaxKm"][i])
+            result["reachKm"].append(300.)
+        else:
+            result["horizonElevationDeg"].append(None)
+            result["distanceOfMaxKm"].append(None)
+            incomplete = next(p for p, (_, _, end) in zip(profiles, bands)
+                              if p["horizonElevationDeg"][i] is None or p["reachKm"][i] < end - 1e-8)
+            result["reachKm"].append(incomplete["reachKm"][i])
+    result["truncatedAzimuthCount"] = sum(v is None for v in result["horizonElevationDeg"])
+    result["limits"] = [
+        "Experimental LOLA terrain: 20 m pixels nearby, 80/120 m farther away; pixel size is not a physical accuracy bound.",
+        "The first 80 m are sampled every metre on interpolated 20 m terrain; unresolved rocks and small obstacles remain unknown.",
+        "Observer altitude is fixed from the fine DEM across all bands; terrain beyond 300 km is not modeled.",
+        "Band boundaries are evaluated in both products; no terrain gap is replaced by flat ground.",
+        "Local slope, roughness and landing hazards are not evaluated.",
+    ]
     return result

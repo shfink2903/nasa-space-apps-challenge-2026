@@ -12,6 +12,9 @@ data/processed/*.tmp/
 # Touchdown app
 touchdown/node_modules/
 touchdown/dist/
+touchdown/dist-v1-backup/
+touchdown/dist-relief/
+touchdown/dist-relief-30d/
 touchdown/.cache/
 
 .env.*

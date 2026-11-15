@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { cp, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 interface Manifest {
   files: { path: string; sizeBytes: number; sha256: string }[];
@@ -27,12 +27,15 @@ export async function verifyDataset(source: string, target: string): Promise<{ f
   return { files: manifest.files.length, series };
 }
 
-/** Copy the frozen source, preserving it byte-for-byte, and fail incomplete builds. */
+/** Publish the manifest's frozen files only, preserving bytes and excluding local metadata. */
 export async function packageDataset(source: string, target: string): Promise<{ files: number; series: number }> {
   const manifest: Manifest = JSON.parse(await readFile(join(source, "manifest.json"), "utf8"));
   await rm(target, { recursive: true, force: true });
-  await cp(source, target, { recursive: true });
+  await mkdir(target, { recursive: true });
+  await cp(join(source, "manifest.json"), join(target, "manifest.json"));
   for (const entry of manifest.files) {
+    await mkdir(dirname(join(target, entry.path)), { recursive: true });
+    await cp(join(source, entry.path), join(target, entry.path));
     if (entry.path.endsWith(".gz"))
       await cp(join(target, entry.path), join(target, entry.path + ".bin"));
   }

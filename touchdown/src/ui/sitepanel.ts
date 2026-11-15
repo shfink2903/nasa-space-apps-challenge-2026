@@ -1,4 +1,4 @@
-import { metric, parseScenarioId, sampleSeries, visibilityAt, type Derived, type DiskState, type Scenario, type Site, type Visibility } from "../data/dataset";
+import { DATA_BASE, DATASET_VERSION, RELIEF_DEMO, metric, parseScenarioId, sampleSeries, visibilityAt, type Derived, type DiskState, type Scenario, type Site, type Visibility } from "../data/dataset";
 import { EARTH, nextGoDate, SUN, valuesAt, verdictAt } from "../data/mission";
 import type { Actions, AppState, Store } from "../state";
 import { monthGroups } from "./bits";
@@ -255,6 +255,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   );
 
   function renderYear(site: Site, s: AppState): void {
+    yearBlock.hidden = s.dates.length < 52;
     yearGrid.replaceChildren(
       ...monthGroups(s.dates).map((g) =>
         h(
@@ -372,7 +373,17 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     renderSensitivity(site, s);
     heightButtons.forEach((b, i) => b.classList.toggle("is-on", HEIGHTS[i] === s.heightM));
     model.textContent = custom ? T.modelCustom : lola ? T.modelLola : T.modelGeometric;
+    if (RELIEF_DEMO && lola) model.textContent = `Relief LOLA : 20 m près du site, 80–120 m au loin — expérimental · ${DATASET_VERSION} · hauteur ${s.heightM} m · ${scenario.coverageStatus}`;
     limits.replaceChildren(...scenario.limits.map((text) => h("li", { text })));
+    if (RELIEF_DEMO) {
+      limits.append(h("li", null, h("a", { href: "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_85s_20m.lbl", target: "_blank", rel: "noopener", text: "Source : NASA/PDS — LOLA LDEM 85S 20M" })));
+      limits.append(h("li", { text: "Le sol de la scène 3D est illustratif. Le graphique d’horizon utilise les données de relief calculées. La précision physique reste non validée." }));
+      for (const [label, href] of [
+        ["Provenance, produits et paramètres", `${DATA_BASE}/manifest.json`],
+        ["Scénario, fenêtres et métriques sources", `${DATA_BASE}/scenarios/${scenario.scenarioId}.json`],
+        ["Contrôles numériques de décembre", "/relief-numerical-checks.json"],
+      ]) limits.append(h("li", null, h("a", { href, target: "_blank", rel: "noopener", text: label })));
+    }
     if (site.source) limits.append(h("li", { text: `Position: ${site.source.title}, ${site.source.url}` }));
     if (!custom && site.verification !== "verified" && T.verification[site.verification]) limits.append(h("li", { text: T.verification[site.verification] }));
     traceScenario.value.textContent = scenario.scenarioId;
@@ -453,11 +464,17 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
 
   store.subscribe((s, p) => {
     const site = s.sites.find((x) => x.id === s.siteId);
-    const ready = site !== undefined && s.lightSiteId === s.siteId && s.series !== null && s.scenario !== null;
+    const loaded = s.scenario ? parseScenarioId(s.scenario.scenarioId) : null;
+    const selectionMatches = !RELIEF_DEMO || loaded?.date === s.date && loaded.heightM === s.heightM;
+    const ready = selectionMatches && site !== undefined && s.lightSiteId === s.siteId && s.series !== null && s.scenario !== null;
     const show = s.phase !== "cruise" && site !== undefined && !s.touring && !s.compareOpen;
     const wasHidden = sheet.hidden;
     sheet.hidden = !show;
     sheet.classList.toggle("is-loading", show && !ready);
+    if (RELIEF_DEMO) {
+      sheet.setAttribute("aria-busy", String(show && !ready));
+      sheet.querySelector<HTMLElement>(".sheet-scroll")!.style.visibility = ready ? "visible" : "hidden";
+    }
     if (!show || !ready || !site || !s.scenario) return;
     const still =
       wasHidden ||

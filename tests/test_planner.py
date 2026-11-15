@@ -27,7 +27,7 @@ def scenario_id(dataset, site="sp_s8950", date="20261201", model="lola"):
 
 def fixture_scenario(identifier, sun, earth=.5, quality="complete"):
     return {"scenarioId": identifier, "modelLevel": "lola", "kernelSetId": "same-kernels",
-            "request": {"analysisDurationS": {"value": 2592000}, "computeStepS": {"value": 60}},
+            "request": {"analysisDurationS": {"value": 2592000}, "computeStepS": {"value": 60}, "observerHeightM": {"value": 2}},
             "coverageStatus": "covered", "evaluation": {"nominal": {"status": "not_evaluated"}},
             "metrics": [{"metricId": "sun.anyDisk.fraction", "value": sun, "unit": "1", "quality": quality},
                         {"metricId": "earth.anyDisk.fraction", "value": earth, "unit": "1", "quality": "complete"}]}

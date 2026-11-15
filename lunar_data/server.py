@@ -178,9 +178,10 @@ def make_server(app, host="127.0.0.1", port=8001):
                 return self.send_json(404, {"error": {"code": "not_found"}})
             # Expose only the prepared bundle or an explicit built frontend, never
             # the repository root, .env, source files or raw scientific inputs.
-            if path.startswith("/data/v1/"):
+            dataset_prefix = f'/data/{app.dataset.manifest["datasetVersion"]}/'
+            if path.startswith(dataset_prefix):
                 base = app.dataset.root.resolve()
-                relative = unquote(path[len("/data/v1/"):])
+                relative = unquote(path[len(dataset_prefix):])
                 if relative.endswith(".json.gz.bin"):
                     relative = relative[:-4]  # Browser fetches compressed bytes without transparent gzip decoding.
             elif app.web_root:
@@ -238,7 +239,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8001)
-    parser.add_argument("--dataset", default="data/processed/v1")
+    parser.add_argument("--dataset", default=str(Path("data/processed") / os.environ.get("LUNAR_DATASET_VERSION", "v1")))
     parser.add_argument("--web-root", default="touchdown/dist")
     parser.add_argument("--env-file", default=".env")
     args = parser.parse_args()

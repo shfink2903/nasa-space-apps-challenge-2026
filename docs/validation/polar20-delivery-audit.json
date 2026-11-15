@@ -1,0 +1,76 @@
+{
+  "checkedAt": "2026-11-15T16:13:12.064823+00:00",
+  "pass": true,
+  "physicalValidation": "not_validated",
+  "bundles": [
+    {
+      "datasetVersion": "v1.1-relief-30d",
+      "manifestSha256": "424e05d8cd1cdca47189734f8be8f978ad052b7a5f9852fac3694cb1fa40e87b",
+      "scenarios": 12,
+      "lolaScenarios": 6,
+      "profiles": 6,
+      "comparisons": 4,
+      "compactValuesChecked": 84,
+      "allCovered": true,
+      "legacySensitivityCopied": false,
+      "terrainMethodId": "918995ab86375adda4f607cb122ac1252b94e68fb5095e13575f0c8370243a0d",
+      "kernelSetId": "75a856f6a0945e69ecc38cdd8e47de918c0915da4c3f47a25dbe964bbde74d84"
+    },
+    {
+      "datasetVersion": "v1.1-relief-year",
+      "manifestSha256": "c23a667e2e570a85e2253d2b2c09487a2a028f1e565083b97c82a85f372b8b3e",
+      "scenarios": 624,
+      "lolaScenarios": 312,
+      "profiles": 6,
+      "comparisons": 208,
+      "compactValuesChecked": 4368,
+      "allCovered": true,
+      "legacySensitivityCopied": false,
+      "terrainMethodId": "918995ab86375adda4f607cb122ac1252b94e68fb5095e13575f0c8370243a0d",
+      "kernelSetId": "75a856f6a0945e69ecc38cdd8e47de918c0915da4c3f47a25dbe964bbde74d84"
+    }
+  ],
+  "fineTerrainSources": [
+    {
+      "announcedSizeBytes": 4991,
+      "extent": "south polar stereographic",
+      "format": "lbl",
+      "frame": "MOON_ME / DE421 MER",
+      "id": "ldem_85s_20m",
+      "invalidValue": null,
+      "label": null,
+      "lastModified": "Fri, 02 Jun 2017 16:01:43 GMT",
+      "organization": "NASA PDS Geosciences",
+      "product": "ldem_85s_20m.lbl",
+      "receivedSizeBytes": 4991,
+      "retrievedAt": "2026-11-15T14:11:16.250642Z",
+      "sha256": "0cbc74e623ce4af19a84f3d40752f4cc2655d36deb6e35e2d31c1ab3ee64ea9c",
+      "units": "DN \u00d7 0.5 m above 1737400 m sphere",
+      "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_85s_20m.lbl"
+    },
+    {
+      "announcedSizeBytes": 460136448,
+      "extent": "south polar stereographic",
+      "format": "img",
+      "frame": "MOON_ME / DE421 MER",
+      "id": "ldem_85s_20m",
+      "invalidValue": null,
+      "label": "ldem_85s_20m.lbl",
+      "lastModified": "Thu, 06 Jul 2017 13:55:39 GMT",
+      "organization": "NASA PDS Geosciences",
+      "product": "ldem_85s_20m.img",
+      "receivedSizeBytes": 460136448,
+      "retrievedAt": "2026-11-15T14:11:50.742265Z",
+      "sha256": "d900ac0aa97fbb983f9898873ead759d870fdb33978afc17fb4e1fa526aa49b2",
+      "units": "DN \u00d7 0.5 m above 1737400 m sphere",
+      "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_85s_20m.img"
+    }
+  ],
+  "v1": {
+    "unchanged": true,
+    "filesChecked": 4014,
+    "changed": [],
+    "added": [],
+    "baselineFile": "/tmp/lunar-v1-before-polar20.json"
+  }
+}

@@ -34,6 +34,15 @@ it("rejects a build with a missing dataset file", () => fixture(async (source, t
   await expect(verifyDataset(source, target)).rejects.toThrow(/example.json.gz/);
 }));
 
+it("produces the same published files despite unlisted local metadata", () => fixture(async (source, target) => {
+  await writeFile(join(source, ".DS_Store"), "local Finder metadata");
+  await writeFile(join(source, "series/local-notes.txt"), "unpublished local notes");
+  await packageDataset(source, target);
+  await expect(readFile(join(target, ".DS_Store"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(readFile(join(target, "series/local-notes.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await verifyDataset(source, target)).toEqual({ files: 1, series: 1 });
+}));
+
 it("rejects altered browser gzip copies", () => fixture(async (source, target) => {
   await packageDataset(source, target);
   await writeFile(join(target, "series/example.json.gz.bin"), "broken");

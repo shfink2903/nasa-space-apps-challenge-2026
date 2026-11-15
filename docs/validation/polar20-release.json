@@ -1,0 +1,63 @@
+{
+  "releasedAt": "2026-11-15T14:30:57.875858+00:00",
+  "selectedDatasetVersion": "v1.1-relief-year",
+  "releaseStatus": "local_demo_checked",
+  "scientificValidation": "not_validated",
+  "builds": {
+    "v1.1-relief-year": {
+      "path": "touchdown/dist-relief",
+      "marker": {
+        "datasetVersion": "v1.1-relief-year",
+        "datasetManifestSha256": "c23a667e2e570a85e2253d2b2c09487a2a028f1e565083b97c82a85f372b8b3e"
+      },
+      "uiAssetsSha256": {
+        "assets/index-8vyddNNH.js": "3517ccfc2ff455fc8b027f3dbe7feee3f82b5407d636be6586cb5d5c15628e25",
+        "assets/index-DPJc6UQR.css": "04f66a9b8c63d2a8ced267279496175827f6195534b134dfab9a582b74318264"
+      },
+      "indexSha256": "1ce70f32e0a6907ac0755067fc3f7e63d90c17a9ca6a76309b1737da27147fe6",
+      "browserReport": "docs/validation/polar20-browser-v1.1-relief-year.json"
+    },
+    "v1.1-relief-30d": {
+      "path": "touchdown/dist-relief-30d",
+      "marker": {
+        "datasetVersion": "v1.1-relief-30d",
+        "datasetManifestSha256": "424e05d8cd1cdca47189734f8be8f978ad052b7a5f9852fac3694cb1fa40e87b"
+      },
+      "uiAssetsSha256": {
+        "assets/index-DPJc6UQR.css": "04f66a9b8c63d2a8ced267279496175827f6195534b134dfab9a582b74318264",
+        "assets/index-DS37ImWz.js": "6132d27a82956a792c4b421048325607ae8f3fc3477542b44938d43d15630850"
+      },
+      "indexSha256": "3b9f3bdcbe9ba75deb68629b5df6b70b8e27ed34b2b3375b29aa9cbf2690b9d2",
+      "browserReport": "docs/validation/polar20-browser-v1.1-relief-30d.json"
+    },
+    "v1": {
+      "path": "touchdown/dist-v1-backup",
+      "marker": {
+        "datasetVersion": "v1",
+        "datasetManifestSha256": "175bc0048f3fefb50fdba02dc87f768644af18f7333b2d8aa9c665c9342a7b92"
+      },
+      "uiAssetsSha256": {
+        "assets/index-DPJc6UQR.css": "04f66a9b8c63d2a8ced267279496175827f6195534b134dfab9a582b74318264",
+        "assets/index-ZBcCkukh.js": "84ce12c32f4463bb16f19b2c4d032e71907e057ffe0edd9041d725c87ebb9efe"
+      },
+      "indexSha256": "0110386f48e04ec2809091b89f6d083058889a4c2bd48b3a369f3e932cb8538f",
+      "browserReport": "docs/validation/polar20-browser-v1.json"
+    }
+  },
+  "checks": {
+    "pythonTests": 220,
+    "uiTests": 107,
+    "typescript": "passed in each build",
+    "numericalTests": 18,
+    "numericalTestsPassed": 18,
+    "maxEventDifferenceS": 350,
+    "toleranceEventS": 600,
+    "metricCopiesChecked": 4452,
+    "v1FilesUnchanged": 4014
+  },
+  "limitations": [
+    "Numerical sensitivity tested on December 2026 only; annual scenarios satisfy structural and integrity checks.",
+    "No validation against observed shadows; 20 m pixel spacing is not a physical accuracy guarantee.",
+    "3D ground remains illustrative. No new thermal, battery, eclipse or radio-link model."
+  ]
+}

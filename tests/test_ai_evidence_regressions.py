@@ -85,16 +85,13 @@ def test_history_cannot_override_selected_method_or_scenarios(dataset, changed):
         tools.dispatch("get_evidence", {"comparisonId": old["comparisonId"]})
 
 
-def test_compatible_frozen_v1_evidence_is_refreshed_without_modifying_bundle(dataset):
+def test_mixed_height_frozen_v1_evidence_is_rejected_without_modifying_bundle(dataset):
     cid = dataset.index["comparisonIds"][0]
     path = dataset.root / "ai" / f"{cid}.evidence.json"
     before = sha256(path)
-    old = dataset.get_evidence(cid)["data"][0]["comparison"]
     tools = DataTools(dataset)
-    result = tools.dispatch("get_evidence", {"comparisonId": cid})
-    current = dataset.compare(old["scenarioIds"], constraints=[])["data"]
-    assert result["comparison"]["comparison"] == current
-    assert "rankByScenarioId" in current and "unrankedScenarioIds" in current
+    with pytest.raises(DataError, match="incompatible_scenarios"):
+        tools.dispatch("get_evidence", {"comparisonId": cid})
     assert sha256(path) == before
 
 

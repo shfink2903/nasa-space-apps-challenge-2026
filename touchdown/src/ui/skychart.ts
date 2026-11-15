@@ -6,6 +6,24 @@ const LOW_DEG = -10;
 const SUN = "255,186,96";
 const EARTH = "157,188,255";
 
+/** Keep every source bin: even a narrow missing sector must break the polygon. */
+export function terrainSegments(profile: HorizonProfile, centerAz: number): { fraction: number; elevation: number }[][] {
+  const n = profile.horizonElevationDeg.length;
+  if (!n) return [];
+  const start = Math.round(((centerAz + 180) % 360) / profile.azimuthStepDeg) % n;
+  const segments: { fraction: number; elevation: number }[][] = [];
+  let segment: { fraction: number; elevation: number }[] = [];
+  for (let k = 0; k <= n; k++) {
+    const elevation = profile.horizonElevationDeg[(start + k) % n];
+    if (elevation === null || !Number.isFinite(elevation)) {
+      if (segment.length) segments.push(segment);
+      segment = [];
+    } else segment.push({ fraction: k / n, elevation });
+  }
+  if (segment.length) segments.push(segment);
+  return segments;
+}
+
 export interface SkyChart {
   el: HTMLCanvasElement;
   /** New 30-day paths and terrain. `southern` puts north in the middle, where the Earth is seen from the south. */
@@ -63,21 +81,19 @@ export function createSkyChart(): SkyChart {
 
     // Terrain: everything under the published horizon profile hides the sky.
     if (horizon) {
-      const n = horizon.horizonElevationDeg.length;
-      ctx.beginPath();
-      ctx.moveTo(x0, yBottom);
-      for (let x = x0; x <= x1; x++) {
-        const az = (((centerAz - 180 + ((x - x0) / (x1 - x0)) * 360) % 360) + 360) % 360;
-        const value = horizon.horizonElevationDeg[Math.round(az / horizon.azimuthStepDeg) % n] ?? 0;
-        ctx.lineTo(x, py(value));
+      for (const segment of terrainSegments(horizon, centerAz)) {
+        const x = (fraction: number): number => x0 + fraction * (x1 - x0);
+        ctx.beginPath();
+        ctx.moveTo(x(segment[0].fraction), yBottom);
+        for (const point of segment) ctx.lineTo(x(point.fraction), py(point.elevation));
+        ctx.lineTo(x(segment[segment.length - 1].fraction), yBottom);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(160,168,186,0.3)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(210,216,230,0.65)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-      ctx.lineTo(x1, yBottom);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(160,168,186,0.3)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(210,216,230,0.65)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
     } else {
       ctx.fillStyle = "rgba(160,168,186,0.14)";
       ctx.fillRect(x0, py(0), x1 - x0, yBottom - py(0));

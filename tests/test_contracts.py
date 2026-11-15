@@ -109,7 +109,7 @@ def test_truncated_gap_is_lower_bound():
 
 def fake_scenario(sid, value, status='not_evaluated'):
     return {'scenarioId': sid, 'kernelSetId': 'k', 'modelLevel': 'geometric', 'coverageStatus': 'covered',
-            'request': {'analysisDurationS': parameter(100, 's'), 'computeStepS': parameter(60, 's')},
+            'request': {'analysisDurationS': parameter(100, 's'), 'computeStepS': parameter(60, 's'), 'observerHeightM': parameter(2, 'm')},
             'metrics': [{'metricId': 'x', 'value': value, 'unit': '1', 'quality': 'complete'}],
             'evaluation': {'nominal': {'status': status}}}
 
