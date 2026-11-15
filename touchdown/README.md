@@ -31,6 +31,12 @@ Other commands:
 
 The local service `python -m lunar_data.server` (see `AI_GUIDE.md`) can serve `dist/` too. Its AI assistant has no panel in this interface.
 
+## Vercel hosting
+
+Import the GitHub repository with **Root Directory** set to `touchdown`, Node.js **24.x**, and **Include source files outside of the Root Directory in the Build Step** enabled. The build needs `../data/processed/v1`; see the [Vercel monorepo documentation](https://vercel.com/docs/monorepos/monorepo-faq).
+
+`vercel.json` installs the locked dependencies with `npm ci`, runs the unit tests and production build, then publishes `dist/`. Connect the production branch to `main` for automatic deployments. No environment variables or Python service are needed for this static interface. The committed Starship GLB and Moon textures are included in the build; Git LFS source models in `assets/3d/source/` are not needed.
+
 ## What you see
 
 The tool answers one question: **where to land, and when**, judged on **lighting** (is the Sun up at the site) and **communication** (is the Earth in view, so a direct link is possible). There is one interface for everyone: plain words and days first, the scientific details folded at the end of each site sheet.

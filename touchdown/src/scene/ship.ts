@@ -25,31 +25,31 @@ export function hullYaw(base: THREE.Quaternion, shipPosition: THREE.Vector3, cam
 
 /**
  * Builds a ship from the loaded model. The model keeps its own proportions.
- * Only the two materials are restyled: bare steel and dark heat shield.
+ * Preserve the model's materials, including its markings.
  */
 export function createShipRig(model: THREE.Object3D, envMap: THREE.Texture, lightPower: number, plumeGain = 1): ShipRig {
   const body = model.clone(true);
-  const steel = new THREE.MeshStandardMaterial({
-    color: 0xd4d8de,
-    metalness: 0.62,
-    roughness: 0.4,
-    envMap,
-    envMapIntensity: 1.25,
-    side: THREE.DoubleSide,
-  });
-  const shield = new THREE.MeshStandardMaterial({
-    color: 0x0c0c0f,
-    metalness: 0.15,
-    roughness: 0.78,
-    envMap,
-    envMapIntensity: 0.5,
-    side: THREE.DoubleSide,
-  });
+  const materials: THREE.MeshStandardMaterial[] = [];
+  const clonedMaterials = new Map<THREE.Material, THREE.Material>();
+  const copyMaterial = (material: THREE.Material): THREE.Material => {
+    let copy = clonedMaterials.get(material);
+    if (!copy) {
+      copy = material.clone();
+      if (copy instanceof THREE.MeshStandardMaterial) {
+        copy.envMap = envMap;
+        copy.envMapIntensity = 1;
+        materials.push(copy);
+      }
+      clonedMaterials.set(material, copy);
+    }
+    return copy;
+  };
   body.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh) return;
-    const name = (mesh.material as THREE.Material).name;
-    mesh.material = name === "Protection thermique" ? shield : steel;
+    mesh.material = Array.isArray(mesh.material)
+      ? mesh.material.map(copyMaterial)
+      : copyMaterial(mesh.material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
   });
@@ -75,8 +75,7 @@ export function createShipRig(model: THREE.Object3D, envMap: THREE.Texture, ligh
       engineLight.intensity = lightPower * throttle;
     },
     setSurroundings(level) {
-      steel.envMapIntensity = 1.25 * level;
-      shield.envMapIntensity = 0.5 * level;
+      for (const material of materials) material.envMapIntensity = level;
     },
   };
 }

@@ -3,11 +3,13 @@ import { DEG, enuBasis, latLonToUnit, type Vec3 } from "../data/astro";
 import type { Site } from "../data/dataset";
 import { arcPoint, clamp01, descentRadius, easeInOutCubic, HOLD_RADIUS, mix, smoothstep } from "../flight/timeline";
 import { createMoonMaterial, type MoonMaterial } from "./moonMaterial";
+import { siteHeading, turnHeading } from "./selectionHeading";
 import { createShipRig, hullYaw, type ShipRig } from "./ship";
 import { createEarth, createStars, createSun, type Earth, type SkyBody, type Stars } from "./sky";
 
 const toV3 = (a: Vec3): THREE.Vector3 => new THREE.Vector3(a[0], a[1], a[2]);
 const UP = new THREE.Vector3(0, 1, 0);
+const CRUISE_NOSE = new THREE.Vector3(0.74, 0.5, -0.62).normalize();
 
 /** Scene distances are in Moon radii. Ship size here is for the picture only. */
 const SHIP_CRUISE_SIZE = 0.1;
@@ -76,6 +78,9 @@ export class OrbitScene {
   private focusSite: Site | null = null;
   /** 0 = ship at its cruise place, 1 = ship small, beside the selected site. Eased every frame. */
   private shipFocus = 0;
+  private readonly overviewNose = CRUISE_NOSE.clone();
+  private overviewDt = 0;
+  private snapHeading = false;
   /** Where the user turned the overview camera, in degrees from the default view. */
   private turnLon = 0;
   private turnLat = 0;
@@ -188,11 +193,13 @@ export class OrbitScene {
   }
 
   advanceBlend(dt: number): void {
+    this.overviewDt = dt;
     if (this.blendK < 1) this.blendK = Math.min(1, this.blendK + dt / BLEND_SECONDS);
   }
 
   /** Aims the focus view at a site. `snap` skips the camera move (used behind a fade). */
   beginFocus(site: Site, snap: boolean): void {
+    this.snapHeading = snap;
     this.focusSite = site;
     this.siteDir = toV3(latLonToUnit(site.latDeg, site.lonDeg));
     this.reticle.position.copy(this.siteDir).multiplyScalar(1.003);
@@ -222,7 +229,7 @@ export class OrbitScene {
     this.setReticle(this.blendK, timeS);
   }
 
-  /** Ship fixed in the camera frame, bottom-left, nose toward the Moon. e = 0 far, 1 near. */
+  /** Ship beside the camera, turning toward the selected point. e = 0 far, 1 near. */
   private placeCruiseShip(e: number, timeS: number, focus: number): void {
     this.shipFocus += (focus - this.shipFocus) * 0.07;
     const f = this.shipFocus;
@@ -240,7 +247,12 @@ export class OrbitScene {
     }
     local.y += Math.sin(timeS * 0.5) * 0.0025;
     this.rig.root.position.copy(local).applyMatrix4(cam.matrixWorld);
-    const nose = new THREE.Vector3(0.74, 0.5, -0.62).normalize().transformDirection(cam.matrixWorld);
+    const heading = focus ? siteHeading(local, this.reticle.position, cam) : CRUISE_NOSE;
+    if (this.snapHeading) {
+      if (heading.lengthSq() > 1e-12) this.overviewNose.copy(heading);
+      this.snapHeading = false;
+    } else turnHeading(this.overviewNose, heading, this.overviewDt);
+    const nose = this.overviewNose.clone().transformDirection(cam.matrixWorld);
     this.rig.root.quaternion.setFromUnitVectors(UP, nose);
     this.rig.root.rotateY(hullYaw(this.rig.root.quaternion, this.rig.root.position, cam.position) + 0.5 + Math.sin(timeS * 0.11) * 0.3);
     this.rig.root.scale.setScalar((SHIP_CRUISE_SIZE * mix(1, 0.42, f) * mix(1, 0.55, a)) / this.rig.height);

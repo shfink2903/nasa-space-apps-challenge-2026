@@ -21,8 +21,8 @@ export const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3);
 export const HOLD_RADIUS = 1.1;
 export const ORBIT_TOUCH_RADIUS = 1.035;
 
-export const DESCENT_SECONDS = 6.5;
-export const FINAL_SECONDS = 11;
+export const DESCENT_SECONDS = 2.5;
+export const FINAL_SECONDS = 6;
 
 /** A longer swing around the Moon gets a little more time. */
 export function transferSeconds(angleRad: number): number {
