@@ -1,0 +1,1042 @@
+{
+  "startedAt": "2026-11-15T10:38:33.506Z",
+  "pass": true,
+  "requests": 1,
+  "errors": [],
+  "scope": "One real OpenRouter question through the production Touchdown browser and local API; scientific v1 unchanged",
+  "result": {
+    "budget": {
+      "calls": 2,
+      "inputAllowanceMethod": "utf8_bytes_plus_framing",
+      "limitUsd": "0.03282344",
+      "observedCostReason": null,
+      "observedCostUsd": "0.000334976",
+      "reservedUpperEstimateUsd": "0.01196776"
+    },
+    "cached": false,
+    "datasetVersion": "v1",
+    "evidence": [
+      {
+        "comparison": {
+          "comparisonId": "comparison_97de0dd2b14f",
+          "coverageStatus": "covered",
+          "excluded": [],
+          "exploredCount": 2,
+          "limits": [
+            "Best only among explored scenarios and declared criteria; no mission feasibility guarantee."
+          ],
+          "method": {
+            "criteria": [
+              {
+                "direction": "max",
+                "metricId": "sun.anyDisk.fraction",
+                "origin": "team_default_hackathon"
+              },
+              {
+                "direction": "max",
+                "metricId": "earth.anyDisk.fraction",
+                "origin": "team_default_hackathon"
+              },
+              {
+                "direction": "min",
+                "metricId": "sun.anyDisk.longestGapH",
+                "origin": "team_default_hackathon"
+              },
+              {
+                "direction": "max",
+                "metricId": "overlap.sunAny_earthAny.fraction",
+                "origin": "team_default_hackathon"
+              }
+            ],
+            "priority": [
+              "earth.anyDisk.fraction"
+            ],
+            "type": "pareto",
+            "weights": null
+          },
+          "modelLevel": "lola",
+          "nonDominatedScenarioIds": [
+            "sp_s8600_20261201_30d_h2m_lola_d8450ada"
+          ],
+          "rankByScenarioId": {
+            "sp_s8600_20261201_30d_h2m_lola_d8450ada": 1,
+            "sp_s8600_20261208_30d_h2m_lola_4c1bd88e": 1
+          },
+          "ranking": [
+            "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+            "sp_s8600_20261208_30d_h2m_lola_4c1bd88e"
+          ],
+          "recommendation": null,
+          "recommendationReason": {
+            "code": "descriptive_pareto_only",
+            "detail": null
+          },
+          "returnedCount": 1,
+          "scenarioIds": [
+            "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+            "sp_s8600_20261208_30d_h2m_lola_4c1bd88e"
+          ],
+          "schemaVersion": "1.0.0",
+          "unrankedScenarioIds": [],
+          "validationStatus": "not_validated",
+          "verdicts": {
+            "sp_s8600_20261201_30d_h2m_lola_d8450ada": {
+              "constraints": [
+                {
+                  "constraint": {
+                    "metricId": "sun.anyDisk.longestGapH",
+                    "op": "<=",
+                    "origin": "user",
+                    "unit": "h",
+                    "value": 360
+                  },
+                  "fragile": null,
+                  "fragileReason": {
+                    "code": "convergence_error_not_quantified",
+                    "detail": null
+                  },
+                  "reason": null,
+                  "status": "pass",
+                  "value": 269.140625
+                }
+              ],
+              "status": "pass"
+            },
+            "sp_s8600_20261208_30d_h2m_lola_4c1bd88e": {
+              "constraints": [
+                {
+                  "constraint": {
+                    "metricId": "sun.anyDisk.longestGapH",
+                    "op": "<=",
+                    "origin": "user",
+                    "unit": "h",
+                    "value": 360
+                  },
+                  "fragile": null,
+                  "fragileReason": {
+                    "code": "convergence_error_not_quantified",
+                    "detail": null
+                  },
+                  "reason": null,
+                  "status": "pass",
+                  "value": 269.140625
+                }
+              ],
+              "status": "pass"
+            }
+          }
+        },
+        "evidenceId": "comparison_be161156412143f0227f",
+        "kind": "comparison"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_8174243877dee4d0dd51",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.6094949001736111
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_af9e829c7dc92ada5ab8",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.3546321614583333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_8a6b0161150d2045a53d",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.longestGapH",
+          "quality": "complete",
+          "reason": null,
+          "truncatedByMissingData": false,
+          "truncatedEnd": false,
+          "truncatedStart": false,
+          "unit": "h",
+          "value": 269.140625
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_a7922d08404f4f235339",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.5960847077546296
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_0d5fdd2eb710c342358a",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "earth.anyDisk.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.3546321614583333
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_e766258c9101257fab28",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "sun.anyDisk.longestGapH",
+          "quality": "complete",
+          "reason": null,
+          "truncatedByMissingData": false,
+          "truncatedEnd": false,
+          "truncatedStart": false,
+          "unit": "h",
+          "value": 269.140625
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_84d6e22988d29ec09c1e",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "overlap.sunAny_earthAny.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.030662977430555554
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evidenceId": "metric_8da8b078efa9d730b13a",
+        "kind": "metric",
+        "metric": {
+          "denominatorS": 2592000,
+          "metricId": "overlap.sunAny_earthAny.fraction",
+          "quality": "complete",
+          "reason": null,
+          "unit": "1",
+          "value": 0.030662977430555554
+        },
+        "modelLevel": "lola",
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      }
+    ],
+    "explanationStatus": "available",
+    "finishedAt": "2026-11-15T10:39:05.236641Z",
+    "generations": [
+      {
+        "generatedAt": "2026-11-15T10:38:59.762172Z",
+        "id": "gen-1794739124-bP18FBb301qtOzaJekbR",
+        "parameters": {
+          "maxOutputTokens": 1600,
+          "provider": {
+            "allow_fallbacks": false,
+            "max_price": {
+              "completion": 0.5,
+              "prompt": 0.12
+            },
+            "require_parameters": true
+          },
+          "reasoning": {
+            "enabled": false
+          },
+          "toolChoice": {
+            "function": {
+              "name": "compare"
+            },
+            "type": "function"
+          }
+        },
+        "provider": "Sail Research",
+        "requestedModel": "deepseek/deepseek-v4.1-flash-1017",
+        "returnedModel": "deepseek/deepseek-v4.1-flash-1017",
+        "usage": {
+          "completion_tokens": 85,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 0.00021324,
+          "cost_details": {
+            "upstream_inference_completions_cost": 9.18e-06,
+            "upstream_inference_cost": 0.00021324,
+            "upstream_inference_prompt_cost": 0.00020406
+          },
+          "is_byok": false,
+          "prompt_tokens": 10203,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 10288
+        }
+      },
+      {
+        "generatedAt": "2026-11-15T10:39:05.235130Z",
+        "id": "gen-1794739139-DAoqRjPFdlTtfpNco9AN",
+        "parameters": {
+          "maxOutputTokens": 1600,
+          "provider": {
+            "allow_fallbacks": false,
+            "max_price": {
+              "completion": 0.5,
+              "prompt": 0.12
+            },
+            "require_parameters": true
+          },
+          "reasoning": {
+            "enabled": false
+          },
+          "toolChoice": "auto"
+        },
+        "provider": "Sail Research",
+        "requestedModel": "deepseek/deepseek-v4.1-flash-1017",
+        "returnedModel": "deepseek/deepseek-v4.1-flash-1017",
+        "usage": {
+          "completion_tokens": 149,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 0.000121736,
+          "cost_details": {
+            "upstream_inference_completions_cost": 1.6092e-05,
+            "upstream_inference_cost": 0.000121736,
+            "upstream_inference_prompt_cost": 0.000105644
+          },
+          "is_byok": false,
+          "prompt_tokens": 12271,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 10752,
+            "video_tokens": 0
+          },
+          "total_tokens": 12420
+        }
+      }
+    ],
+    "limits": [
+      "Mathematical kernel coverage is not a validated physical error bound.",
+      "LT+S correction at lunar center, then site parallax; no atmospheric refraction.",
+      "An out-and-back event shorter than the compute step can escape detection.",
+      "Visibility does not establish electrical power, a radio link or mission feasibility.",
+      "UTC future leap seconds are held at the last known LSK value.",
+      "Preliminary interpolated LOLA product; relief beyond rMaxKm not modeled.",
+      "Local slope, roughness and landing hazards not evaluated.",
+      "Composite: fine DEM through 150 km, wider DEM beyond; fixed fine-DEM observer altitude.",
+      "Horizon held constant across each disk; varying masks flagged, not resolved.",
+      "Terrain convergence must be checked separately before declaring N1 validated.",
+      "Annual vectors interpolated to exact UTC grid (offset <= 2 ms); events recomputed directly.",
+      "Visibilité ≠ puissance électrique, liaison radio ou faisabilité de mission."
+    ],
+    "locale": "fr",
+    "message": "Voici les compromis parmi les scénarios explorés, selon les critères déclarés.",
+    "questions": [],
+    "rendering": "deterministic_from_verified_evidence; no model-authored physical values or prose",
+    "requestId": "answer_eb70a9dc6a88cbfd7813",
+    "scenarios": [
+      {
+        "coverageStatus": "covered",
+        "evaluation": {
+          "nominal": {
+            "constraints": [],
+            "status": "not_evaluated"
+          },
+          "prudent": {
+            "constraints": [],
+            "reason": {
+              "code": "margins_not_provided",
+              "detail": null
+            },
+            "status": "not_evaluated"
+          },
+          "prudentMetrics": null
+        },
+        "limits": [
+          "Mathematical kernel coverage is not a validated physical error bound.",
+          "LT+S correction at lunar center, then site parallax; no atmospheric refraction.",
+          "An out-and-back event shorter than the compute step can escape detection.",
+          "Visibility does not establish electrical power, a radio link or mission feasibility.",
+          "UTC future leap seconds are held at the last known LSK value.",
+          "Preliminary interpolated LOLA product; relief beyond rMaxKm not modeled.",
+          "Local slope, roughness and landing hazards not evaluated.",
+          "Composite: fine DEM through 150 km, wider DEM beyond; fixed fine-DEM observer altitude.",
+          "Horizon held constant across each disk; varying masks flagged, not resolved.",
+          "Terrain convergence must be checked separately before declaring N1 validated.",
+          "Annual vectors interpolated to exact UTC grid (offset <= 2 ms); events recomputed directly."
+        ],
+        "modelLevel": "lola",
+        "notEvaluated": [
+          {
+            "capability": "electricalPower",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "thermalBalance",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "battery",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "radioLink",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "earthStation",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "relay",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "landingSafety",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "resources",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "exactSolarOccultations",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "transferTrajectory",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          }
+        ],
+        "provenance": {
+          "catalogueSources": [
+            {
+              "accessed": "2026-11-14",
+              "id": "data_plan_6.2",
+              "primarySource": false,
+              "title": "Team data plan §6.2",
+              "url": "https://github.com/shfink2903/nasa-space-apps-challenge-2026/blob/5bcf2bf/data.md"
+            }
+          ],
+          "parameters": {
+            "earthRadiusKm": {
+              "origin": "source:data_plan_8.1",
+              "unit": "km",
+              "value": 6378.137
+            },
+            "moonRadiusKm": {
+              "origin": "source:pck00011",
+              "unit": "km",
+              "value": 1737.4
+            },
+            "sunRadiusKm": {
+              "origin": "source:data_plan_8.1",
+              "unit": "km",
+              "value": 695700
+            }
+          },
+          "sources": [
+            {
+              "announcedSizeBytes": 5257,
+              "extent": null,
+              "format": "tls",
+              "frame": "see kernel comments",
+              "id": "naif0012",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Fri, 15 Jul 2016 00:00:37 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "naif0012.tls",
+              "receivedSizeBytes": 5257,
+              "retrievedAt": "2026-11-14T14:04:28.313878Z",
+              "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls"
+            },
+            {
+              "announcedSizeBytes": 131226,
+              "extent": null,
+              "format": "tpc",
+              "frame": "see kernel comments",
+              "id": "pck00011",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Tue, 27 Dec 2022 16:28:50 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "pck00011.tpc",
+              "receivedSizeBytes": 131226,
+              "retrievedAt": "2026-11-14T14:04:29.745825Z",
+              "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc"
+            },
+            {
+              "announcedSizeBytes": 32726016,
+              "extent": null,
+              "format": "bsp",
+              "frame": "see kernel comments",
+              "id": "de440s",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Mon, 21 Dec 2020 19:39:26 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "de440s.bsp",
+              "receivedSizeBytes": 32726016,
+              "retrievedAt": "2026-11-14T14:04:41.320269Z",
+              "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp"
+            },
+            {
+              "announcedSizeBytes": 12863488,
+              "extent": null,
+              "format": "bpc",
+              "frame": "see kernel comments",
+              "id": "moon_pa_de440_200625",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Sat, 26 Jun 2021 01:49:57 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "moon_pa_de440_200625.bpc",
+              "receivedSizeBytes": 12863488,
+              "retrievedAt": "2026-11-14T14:04:46.853763Z",
+              "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/moon_pa_de440_200625.bpc"
+            },
+            {
+              "announcedSizeBytes": 19478,
+              "extent": null,
+              "format": "tf",
+              "frame": "see kernel comments",
+              "id": "moon_de440_250416",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Wed, 16 Apr 2025 12:47:17 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "moon_de440_250416.tf",
+              "receivedSizeBytes": 19478,
+              "retrievedAt": "2026-11-14T14:04:47.710425Z",
+              "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/moon_de440_250416.tf"
+            },
+            {
+              "announcedSizeBytes": 115520000,
+              "extent": "south polar stereographic",
+              "format": "img",
+              "frame": "MOON_ME / DE421 MER",
+              "id": "ldem_80s_80m",
+              "invalidValue": null,
+              "label": "ldem_80s_80m.lbl",
+              "lastModified": "Thu, 06 Jul 2017 13:48:41 GMT",
+              "organization": "NASA PDS Geosciences",
+              "product": "ldem_80s_80m.img",
+              "receivedSizeBytes": 115520000,
+              "retrievedAt": "2026-11-14T14:07:42.377434Z",
+              "sha256": "e6591eeea35402ca5e124ca00f5bf0774381a2d4fa919144b455d82b8ff65fdc",
+              "units": "DN × 0.5 m above 1737400 m sphere",
+              "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_80m.img"
+            },
+            {
+              "announcedSizeBytes": 116250752,
+              "extent": "south polar stereographic",
+              "format": "img",
+              "frame": "MOON_ME / DE421 MER",
+              "id": "ldem_75s_120m",
+              "invalidValue": null,
+              "label": "ldem_75s_120m.lbl",
+              "lastModified": "Thu, 06 Jul 2017 13:36:41 GMT",
+              "organization": "NASA PDS Geosciences",
+              "product": "ldem_75s_120m.img",
+              "receivedSizeBytes": 116250752,
+              "retrievedAt": "2026-11-14T14:08:54.320459Z",
+              "sha256": "ae3afc3c75c33d43666ca06c83ca08f0b12ef03b7d36d2d791d972730794391b",
+              "units": "DN × 0.5 m above 1737400 m sphere",
+              "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_120m.img"
+            }
+          ]
+        },
+        "request": {
+          "analysisDurationS": {
+            "origin": "team_default_hackathon",
+            "unit": "s",
+            "value": 2592000
+          },
+          "computeStepS": {
+            "origin": "team_default_hackathon",
+            "unit": "s",
+            "value": 60
+          },
+          "diskConvention": [
+            "anyDisk",
+            "fullDisk"
+          ],
+          "displayStepS": {
+            "origin": "team_default_hackathon",
+            "unit": "s",
+            "value": 600
+          },
+          "hardConstraints": [],
+          "missionMargins": null,
+          "observerHeightM": {
+            "origin": "team_default_hackathon",
+            "unit": "m",
+            "value": 2
+          },
+          "position": {
+            "frame": "MOON_ME",
+            "latDeg": -86,
+            "latitudeType": "planetocentric",
+            "lonDeg": 0,
+            "origin": "team_default_hackathon"
+          },
+          "preferences": [],
+          "resourceRequirement": null,
+          "siteId": "sp_s8600",
+          "surfaceStartUtc": {
+            "origin": "team_default_hackathon",
+            "unit": "UTC",
+            "value": "2026-12-01T00:00:00Z"
+          }
+        },
+        "scenarioId": "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      },
+      {
+        "coverageStatus": "covered",
+        "evaluation": {
+          "nominal": {
+            "constraints": [],
+            "status": "not_evaluated"
+          },
+          "prudent": {
+            "constraints": [],
+            "reason": {
+              "code": "margins_not_provided",
+              "detail": null
+            },
+            "status": "not_evaluated"
+          },
+          "prudentMetrics": null
+        },
+        "limits": [
+          "Mathematical kernel coverage is not a validated physical error bound.",
+          "LT+S correction at lunar center, then site parallax; no atmospheric refraction.",
+          "An out-and-back event shorter than the compute step can escape detection.",
+          "Visibility does not establish electrical power, a radio link or mission feasibility.",
+          "UTC future leap seconds are held at the last known LSK value.",
+          "Preliminary interpolated LOLA product; relief beyond rMaxKm not modeled.",
+          "Local slope, roughness and landing hazards not evaluated.",
+          "Composite: fine DEM through 150 km, wider DEM beyond; fixed fine-DEM observer altitude.",
+          "Horizon held constant across each disk; varying masks flagged, not resolved.",
+          "Terrain convergence must be checked separately before declaring N1 validated.",
+          "Annual vectors interpolated to exact UTC grid (offset <= 2 ms); events recomputed directly."
+        ],
+        "modelLevel": "lola",
+        "notEvaluated": [
+          {
+            "capability": "electricalPower",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "thermalBalance",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "battery",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "radioLink",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "earthStation",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "relay",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "landingSafety",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "resources",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "exactSolarOccultations",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          },
+          {
+            "capability": "transferTrajectory",
+            "reason": {
+              "code": "not_modeled",
+              "detail": null
+            }
+          }
+        ],
+        "provenance": {
+          "catalogueSources": [
+            {
+              "accessed": "2026-11-14",
+              "id": "data_plan_6.2",
+              "primarySource": false,
+              "title": "Team data plan §6.2",
+              "url": "https://github.com/shfink2903/nasa-space-apps-challenge-2026/blob/5bcf2bf/data.md"
+            }
+          ],
+          "parameters": {
+            "earthRadiusKm": {
+              "origin": "source:data_plan_8.1",
+              "unit": "km",
+              "value": 6378.137
+            },
+            "moonRadiusKm": {
+              "origin": "source:pck00011",
+              "unit": "km",
+              "value": 1737.4
+            },
+            "sunRadiusKm": {
+              "origin": "source:data_plan_8.1",
+              "unit": "km",
+              "value": 695700
+            }
+          },
+          "sources": [
+            {
+              "announcedSizeBytes": 5257,
+              "extent": null,
+              "format": "tls",
+              "frame": "see kernel comments",
+              "id": "naif0012",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Fri, 15 Jul 2016 00:00:37 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "naif0012.tls",
+              "receivedSizeBytes": 5257,
+              "retrievedAt": "2026-11-14T14:04:28.313878Z",
+              "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls"
+            },
+            {
+              "announcedSizeBytes": 131226,
+              "extent": null,
+              "format": "tpc",
+              "frame": "see kernel comments",
+              "id": "pck00011",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Tue, 27 Dec 2022 16:28:50 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "pck00011.tpc",
+              "receivedSizeBytes": 131226,
+              "retrievedAt": "2026-11-14T14:04:29.745825Z",
+              "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc"
+            },
+            {
+              "announcedSizeBytes": 32726016,
+              "extent": null,
+              "format": "bsp",
+              "frame": "see kernel comments",
+              "id": "de440s",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Mon, 21 Dec 2020 19:39:26 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "de440s.bsp",
+              "receivedSizeBytes": 32726016,
+              "retrievedAt": "2026-11-14T14:04:41.320269Z",
+              "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp"
+            },
+            {
+              "announcedSizeBytes": 12863488,
+              "extent": null,
+              "format": "bpc",
+              "frame": "see kernel comments",
+              "id": "moon_pa_de440_200625",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Sat, 26 Jun 2021 01:49:57 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "moon_pa_de440_200625.bpc",
+              "receivedSizeBytes": 12863488,
+              "retrievedAt": "2026-11-14T14:04:46.853763Z",
+              "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/moon_pa_de440_200625.bpc"
+            },
+            {
+              "announcedSizeBytes": 19478,
+              "extent": null,
+              "format": "tf",
+              "frame": "see kernel comments",
+              "id": "moon_de440_250416",
+              "invalidValue": null,
+              "label": null,
+              "lastModified": "Wed, 16 Apr 2025 12:47:17 GMT",
+              "organization": "NASA/JPL NAIF",
+              "product": "moon_de440_250416.tf",
+              "receivedSizeBytes": 19478,
+              "retrievedAt": "2026-11-14T14:04:47.710425Z",
+              "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768",
+              "units": "SPICE kernel native units",
+              "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/moon_de440_250416.tf"
+            },
+            {
+              "announcedSizeBytes": 115520000,
+              "extent": "south polar stereographic",
+              "format": "img",
+              "frame": "MOON_ME / DE421 MER",
+              "id": "ldem_80s_80m",
+              "invalidValue": null,
+              "label": "ldem_80s_80m.lbl",
+              "lastModified": "Thu, 06 Jul 2017 13:48:41 GMT",
+              "organization": "NASA PDS Geosciences",
+              "product": "ldem_80s_80m.img",
+              "receivedSizeBytes": 115520000,
+              "retrievedAt": "2026-11-14T14:07:42.377434Z",
+              "sha256": "e6591eeea35402ca5e124ca00f5bf0774381a2d4fa919144b455d82b8ff65fdc",
+              "units": "DN × 0.5 m above 1737400 m sphere",
+              "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_80s_80m.img"
+            },
+            {
+              "announcedSizeBytes": 116250752,
+              "extent": "south polar stereographic",
+              "format": "img",
+              "frame": "MOON_ME / DE421 MER",
+              "id": "ldem_75s_120m",
+              "invalidValue": null,
+              "label": "ldem_75s_120m.lbl",
+              "lastModified": "Thu, 06 Jul 2017 13:36:41 GMT",
+              "organization": "NASA PDS Geosciences",
+              "product": "ldem_75s_120m.img",
+              "receivedSizeBytes": 116250752,
+              "retrievedAt": "2026-11-14T14:08:54.320459Z",
+              "sha256": "ae3afc3c75c33d43666ca06c83ca08f0b12ef03b7d36d2d791d972730794391b",
+              "units": "DN × 0.5 m above 1737400 m sphere",
+              "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ldem_75s_120m.img"
+            }
+          ]
+        },
+        "request": {
+          "analysisDurationS": {
+            "origin": "team_default_hackathon",
+            "unit": "s",
+            "value": 2592000
+          },
+          "computeStepS": {
+            "origin": "team_default_hackathon",
+            "unit": "s",
+            "value": 60
+          },
+          "diskConvention": [
+            "anyDisk",
+            "fullDisk"
+          ],
+          "displayStepS": {
+            "origin": "team_default_hackathon",
+            "unit": "s",
+            "value": 600
+          },
+          "hardConstraints": [],
+          "missionMargins": null,
+          "observerHeightM": {
+            "origin": "team_default_hackathon",
+            "unit": "m",
+            "value": 2
+          },
+          "position": {
+            "frame": "MOON_ME",
+            "latDeg": -86,
+            "latitudeType": "planetocentric",
+            "lonDeg": 0,
+            "origin": "team_default_hackathon"
+          },
+          "preferences": [],
+          "resourceRequirement": null,
+          "siteId": "sp_s8600",
+          "surfaceStartUtc": {
+            "origin": "team_default_hackathon",
+            "unit": "UTC",
+            "value": "2026-12-08T00:00:00Z"
+          }
+        },
+        "scenarioId": "sp_s8600_20261208_30d_h2m_lola_4c1bd88e",
+        "siteId": "sp_s8600",
+        "validationStatus": "not_validated"
+      }
+    ],
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-11-15T10:38:44.542106Z",
+    "status": "answered",
+    "summaryKey": "scenario_comparison",
+    "toolTrace": [
+      {
+        "argumentHash": "ee3533ecc6b09b6e0554d1bb5c12dfa99993dc0850d9c31fa2baed39970dfb88",
+        "callId": "call_resp_01a1dec9-ba8d-7ef6-8cb7-49436f7ed686_0",
+        "resultHash": "3fd3522a24a9a66ea60651058c5c2d33f150e63a9385df79fdad8aa4b2528351",
+        "status": "ok",
+        "tool": "compare"
+      }
+    ],
+    "validationTrace": []
+  },
+  "request": {
+    "message": "Compare exactement les deux scénarios sélectionnés. Appelle compare avec les deux scenarioIds sélectionnés. Cite le verdict de comparaison, les fractions de Soleil et de Terre, et la plus longue nuit. Respecte la priorité et le seuil fournis ; précise les limites du modèle expérimental.",
+    "locale": "fr",
+    "context": {
+      "scenarioIds": [
+        "sp_s8600_20261201_30d_h2m_lola_d8450ada",
+        "sp_s8600_20261208_30d_h2m_lola_4c1bd88e"
+      ],
+      "priority": [
+        "earth.anyDisk.fraction"
+      ]
+    },
+    "constraints": [
+      {
+        "metricId": "sun.anyDisk.longestGapH",
+        "op": "<=",
+        "value": 360,
+        "unit": "h",
+        "origin": "user"
+      }
+    ]
+  },
+  "finishedAt": "2026-11-15T10:39:05.252Z",
+  "qualification": {
+    "questionCount": 1,
+    "attempts": 4,
+    "providerRequestsIncludingFailedAttempts": 5,
+    "authorizedLimitUsd": "0.05",
+    "cumulativeReservedUpperEstimateUsd": "0.02914432",
+    "totalBilledCostUsd": null,
+    "totalBilledCostReason": "Three HTTP 400 attempts provided no usage record; no assumption that these were free.",
+    "successfulAttemptReportedCostUsd": "0.000334976",
+    "scope": "One real two-date comparison through production Touchdown, same configured model, no provider or model fallback."
+  }
+}

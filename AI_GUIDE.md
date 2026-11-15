@@ -74,6 +74,25 @@ selection or threshold cannot supply a current verdict. Sensitivity evidence
 states its fixed v1 analysis period: 30 days from 2026-12-01; it does not inherit
 the date currently selected in Touchdown.
 
+Forced tool turns (`required` or a named tool) carry tool argument schemas but no
+final-message `response_format`. Turns allowing a final message (`auto`/`none`)
+carry the strict final schema. Tool arguments and final answers remain validated
+by the server. This separation passed the real Touchdown comparison flow through
+Sail Research on 2026-11-15, after that route rejected the combined forced-tool
+and final-message format.
+
+With tools, DeepSeek V4-family requests explicitly disable thinking throughout
+the loop: its API documents forced tool choices as incompatible with thinking.
+Other model families, including R1, retain their previous payloads. See
+[DeepSeek tool choices](https://api-docs.deepseek.com/api/create-chat-completion/)
+and [OpenRouter reasoning controls](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens).
+
+HTTP failures expose bounded, allowlisted diagnostics with the configured key
+redacted; raw bodies, headers and URLs are not returned. An attempted call without
+a provider cost record makes the aggregate observed cost unknown, including a
+failed attempt followed by a successful retry. A local zero counter is not a
+provider receipt.
+
 The service preserves assistant tool-call and reasoning state during each model
 loop. Conversation history consists of user text and service-generated summaries;
 clients cannot submit system messages. Sessions expire after inactivity, are
@@ -158,7 +177,7 @@ Offline tests do not establish current endpoint availability or live provider
 compatibility.
 
 See [audit correction verification](docs/validation/touchdown-audit-fixes-2026-11-15.md)
-for this branch's acquired checks and the separately pending live-provider check. The
+for this branch's acquired checks, live-provider result and cost limitations. The
 [14 November planner report](docs/validation/touchdown-south-pole-planner-v1.md)
 and older provider reports are historical evidence, not a pass for later code.
 

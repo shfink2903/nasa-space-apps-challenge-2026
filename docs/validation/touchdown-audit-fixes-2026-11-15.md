@@ -3,7 +3,7 @@
 Branche : `codex/data-pipeline-audit-fixes`. Application : `touchdown/`.
 
 Ce rapport distingue les corrections présentes dans le code, les contrôles
-effectivement exécutés et le test fournisseur réel non exécuté. Il ne
+effectivement exécutés et leurs limites. Il ne
 constitue pas une validation physique des résultats lunaires.
 
 ## Périmètre et conservation de v1
@@ -168,13 +168,13 @@ dernier chiffre arrondi sur la distance solaire après interpolation annuelle.
 
 | Contrôle | Résultat |
 |---|---|
-| Suite Python complète, `pytest -q -p no:cacheprovider` | **182 réussis**, 59,79 s ; aucun échec ou test ignoré. Cache Geometry temporaire ; écritures v1/raw/interim et réseau externe bloqués par le harnais. Zéro tentative d'écriture protégée. |
+| Suite Python complète, `pytest -q -p no:cacheprovider` | **213 réussis**, 70,61 s ; aucun échec ou test ignoré. Cache Geometry temporaire ; écritures v1/raw/interim et réseau externe bloqués par le harnais. Zéro tentative d'écriture protégée. |
 | Touchdown, `npm test` | **98 réussis**, 11 fichiers de tests. |
 | Touchdown, `npm run build` | TypeScript et Vite réussis ; **4 013 fichiers** du manifeste vérifiés et copiés, **1 872 copies gzip** pour le navigateur. |
 | Vérificateur renforcé sur v1 | **4 013 fichiers / 1 872 scénarios acceptés**, contrôle exhaustif réel en 43,61 s ; inclus également dans la suite Python finale. |
 | Inventaire et SHA-256 v1 avant/après | **4 015 fichiers identiques**, manifeste et `.DS_Store` compris ; zéro ajout, suppression ou changement de contenu. |
 | E2E du build stable, `npm run test:e2e` | **28 contrôles réussis** dans Chrome ; zéro erreur JavaScript non interceptée, zéro requête de données échouée. API Python réelle, transport du modèle simulé. |
-| Appel OpenRouter réel sur cette révision | **Non exécuté** : contrôle automatique d'approbation a refusé l'envoi des scénarios au fournisseur et le coût externe sans autorisation plus explicite. Aucun appel payant de cette qualification effectué. |
+| Parcours OpenRouter réel | **Réussi après correction de compatibilité**, modèle `deepseek/deepseek-v4.1-flash-1017`, fournisseur Sail Research. Appel `compare` réel, contraintes et deux dates exactes, preuve validée, deux lignes affichées dans Touchdown. |
 
 Empreinte SHA-256 inchangée du manifeste :
 `175bc0048f3fefb50fdba02dc87f768644af18f7333b2d8aa9c665c9342a7b92`.
@@ -197,12 +197,46 @@ reproduites puis rejetées par les contrôles corrigés ; aucun autre P1/P2 iden
 dans les correctifs relus. Cela ne constitue pas une preuve d'absence universelle
 de défauts.
 
-Le test live préparé est `node touchdown/scripts/check-live-browser.mjs` : une
+Le test live est `node touchdown/scripts/check-live-browser.mjs` : une
 question, deux scénarios LOLA du point `sp_s8600` (1er et 8 décembre 2026, 2 m),
 priorité Terre et nuit maximale 360 h, plafond conservateur de 0,05 USD. Les
-scénarios sélectionnés et leurs preuves seraient transmis au modèle OpenRouter
-configuré. Ce test attend une autorisation explicite ; les anciens rapports ne
-démontrent pas la compatibilité du code corrigé avec les endpoints actuels.
+scénarios sélectionnés et leurs preuves ont été transmis au modèle configuré
+après autorisation explicite de l'utilisateur. Le contrôle automatique avait
+initialement bloqué cette étape ; l'autorisation obtenue a permis son exécution.
+
+### Compatibilité OpenRouter vérifiée en conditions réelles
+
+La même question a fait l'objet de **quatre tentatives**, avec un plafond restant
+diminué à chaque fois. Les trois premières ont reçu HTTP 400 avant génération,
+sans relevé de coût. Le diagnostic disponible ne précisait pas la cause interne.
+La désactivation explicite du thinking DeepSeek V4, documentée pour les outils
+forcés, n'a pas suffi seule. La séparation du schéma de réponse finale et du tour
+d'outil forcé a ensuite permis le succès sur **le même fournisseur Sail Research**.
+Aucun changement du modèle, du fournisseur configuré ou de `.env` n'a été requis.
+
+Les tours `required`/outil nommé n'envoient plus `response_format` ; leurs arguments
+restent validés par le schéma de l'outil. Les tours `auto`/`none` conservent le schéma
+final strict et toutes les preuves finales sont revalidées côté serveur. DeepSeek
+V4 utilise `reasoning.enabled=false` avec outils ; R1 et les autres familles ne
+changent pas. Les erreurs HTTP fournissent désormais un diagnostic borné et
+expurgé de la clé ; une absence de relevé fournisseur ne devient plus un coût nul.
+
+Calcul des réservations cumulées :
+`3 × 0,00572552 + 0,01196776 = 0,02914432 USD < 0,05 USD`.
+Le dernier essai comprend **deux appels fournisseur** et rapporte
+**0,000334976 USD**. La facturation totale des quatre tentatives ne peut pas être
+confirmée : les trois HTTP 400 n'ont pas fourni de relevé. Leurs réservations ont
+été conservées dans le calcul de plafond, sans supposer leur gratuité.
+
+Preuves : [essai réussi et budget cumulé](touchdown-audit-live-2026-11-15.json),
+[essai 1](touchdown-audit-live-attempt-1-2026-11-15.json),
+[essai 2](touchdown-audit-live-attempt-2-2026-11-15.json),
+[essai 3](touchdown-audit-live-attempt-3-2026-11-15.json).
+Références protocolaires :
+[choix d'outil DeepSeek](https://api-docs.deepseek.com/api/create-chat-completion/),
+[contrôle du raisonnement OpenRouter](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens).
+Ce succès qualifie le parcours et l'endpoint observés ; il ne garantit pas toutes
+les futures routes, questions ou disponibilités du fournisseur.
 
 Le service [serve_e2e.py](../../scripts/serve_e2e.py) remplace uniquement le transport
 du modèle pour les tests navigateur hors fournisseur. Un appel simulé réussi ne

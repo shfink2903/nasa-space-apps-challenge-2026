@@ -8,9 +8,11 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const output = new URL("../.cache/live-browser-report.json", import.meta.url);
+const limitUsd = process.env.LIVE_TEST_LIMIT_USD ?? "0.05";
+if (!/^0\.\d+$/.test(limitUsd) || Number(limitUsd) <= 0 || Number(limitUsd) > 0.05) throw new Error("LIVE_TEST_LIMIT_USD must be positive and at most 0.05");
 const server = spawn(`${root}.venv/bin/python`, ["-B", "-m", "lunar_data.server", "--port", "0", "--dataset", "touchdown/dist/data/v1"], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, LUNAR_AI_MAX_COST_USD: "0.05", LUNAR_AI_HOURLY_COST_USD: "0.05" },
+  env: { ...process.env, LUNAR_AI_MAX_COST_USD: limitUsd, LUNAR_AI_HOURLY_COST_USD: limitUsd },
 });
 let browser;
 const report = { startedAt: new Date().toISOString(), pass: false, requests: 0, errors: [], scope: "One real OpenRouter question through the production Touchdown browser and local API; scientific v1 unchanged" };

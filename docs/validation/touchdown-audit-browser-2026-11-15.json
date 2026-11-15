@@ -1,6 +1,6 @@
 {
-  "base": "http://127.0.0.1:64688",
-  "startedAt": "2026-11-15T10:18:30.665Z",
+  "base": "http://127.0.0.1:49607",
+  "startedAt": "2026-11-15T10:40:11.167Z",
   "checks": [
     "Boot: 5 south-pole sites (3 candidates, 2 references) and 52 start dates, no flight needed to see numbers",
     "sp_s8950: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started",
@@ -34,8 +34,9 @@
   "errors": [],
   "failedDataRequests": [],
   "pass": true,
-  "finishedAt": "2026-11-15T10:20:29.899Z",
+  "finishedAt": "2026-11-15T10:42:25.895Z",
   "provider": "offline-test-double",
   "backend": "production lunar_data.server and comparison engine",
-  "liveProviderVerified": false
+  "liveProviderVerifiedInThisReport": false,
+  "separateLiveReport": "touchdown-audit-live-2026-11-15.json"
 }

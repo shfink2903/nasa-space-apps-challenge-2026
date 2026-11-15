@@ -229,7 +229,8 @@ class Agent:
                 generation = {"id": response.get("id"), "requestedModel": self.config.model, "returnedModel": response.get("model"),
                               "provider": response.get("provider", "not_provided"), "usage": response.get("usage"),
                               "generatedAt": utc_now(), "parameters": {"toolChoice": choice, "maxOutputTokens": self.config.max_output_tokens,
-                                                                       "provider": payload["provider"]}}
+                                                                       "provider": payload["provider"],
+                                                                       **({"reasoning": deepcopy(payload["reasoning"])} if "reasoning" in payload else {})}}
                 generations.append(generation)
                 entry = response["choices"][0]
                 assistant = entry.get("message")

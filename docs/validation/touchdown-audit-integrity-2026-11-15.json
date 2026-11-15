@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-15T10:21:29.109581+00:00",
+  "generatedAt": "2026-11-15T10:43:30.816516+00:00",
   "branch": "codex/data-pipeline-audit-fixes",
   "root": "data/processed/v1",
   "fileCountBefore": 4015,
@@ -12,15 +12,23 @@
   "method": "Exact relative file set and SHA-256 of every file, including manifest.json and .DS_Store, compared with snapshot from before any task edits.",
   "scientificStatus": "Unchanged: original T9 failed; LOLA experimental; v1 scenarios not_validated.",
   "tests": {
-    "pythonPassed": 182,
+    "pythonPassed": 213,
     "touchdownPassed": 98,
     "browserChecksPassed": 28,
     "typescript": "passed",
     "build": "passed"
   },
   "liveProvider": {
-    "status": "not_executed_pending_explicit_approval",
-    "requestsMade": 0,
-    "reason": "Automatic approval review rejected external payload and cost without explicit authorization."
+    "status": "passed",
+    "model": "deepseek/deepseek-v4.1-flash-1017",
+    "provider": "Sail Research",
+    "questionCount": 1,
+    "attempts": 4,
+    "httpRequestsIncludingFailedAttempts": 5,
+    "authorizedLimitUsd": "0.05",
+    "cumulativeReservedUpperEstimateUsd": "0.02914432",
+    "successfulAttemptReportedCostUsd": "0.000334976",
+    "totalBilledCostUsd": null,
+    "totalBilledCostReason": "The three HTTP 400 attempts returned no provider usage record."
   }
 }
