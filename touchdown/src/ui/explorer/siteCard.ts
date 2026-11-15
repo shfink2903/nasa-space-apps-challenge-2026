@@ -1,8 +1,9 @@
 import { createHorizonPanorama } from "../../charts/horizonPanorama";
-import { sampleSeries, type DiskState } from "../../data/dataset";
+import type { DiskState } from "../../data/dataset";
 import { groupOf } from "../../planner/catalog";
-import { nextEvent, type Body } from "../../planner/clock";
-import { checkRequirements, CRITERION_METRIC, verdict } from "../../planner/ranking";
+import { nextEvent, sampleScenario, type Body } from "../../planner/clock";
+import { isLowerBound } from "../../planner/metrics";
+import { CRITERION_METRIC } from "../../planner/ranking";
 import { bundleFor, focusSite, metricsFor, modelFor, rankingFor } from "../../planner/select";
 import type { Ui } from "../context";
 import { h, icon } from "../dom";
@@ -90,7 +91,7 @@ export function createSiteCard(ui: Ui): HTMLElement {
 
   // Identity, 30-day numbers, rank and verdict: change with the site, the date, the mast or the rules.
   ui.watch(
-    (s) => [s.focusId, s.date, s.heightM, s.scope, s.criterion, s.requirements, s.compareIds, s.dataVersion],
+    (s) => [s.focusId, s.date, s.heightM, s.scope, s.criterion, s.requirements, s.comparisons, s.dataVersion],
     (s) => {
       const site = focusSite(s);
       title.textContent = fmt.site(site);
@@ -120,11 +121,11 @@ export function createSiteCard(ui: Ui): HTMLElement {
       bothShare.row.classList.toggle("is-key", CRITERION_METRIC[s.criterion] === "bothShare");
       sunShare.row.classList.toggle("is-key", CRITERION_METRIC[s.criterion] === "sunShare");
       earthShare.row.classList.toggle("is-key", CRITERION_METRIC[s.criterion] === "earthShare");
-      night.textContent = fmt.gap(m?.sunGapH ?? null);
-      blackout.textContent = fmt.gap(m?.earthGapH ?? null);
+      night.textContent = `${m && isLowerBound(m, "sunGapH") ? "≥ " : ""}${fmt.gap(m?.sunGapH ?? null)}`;
+      blackout.textContent = `${m && isLowerBound(m, "earthGapH") ? "≥ " : ""}${fmt.gap(m?.earthGapH ?? null)}`;
 
-      const results = m ? checkRequirements(m, s.requirements) : [];
-      const v = m ? verdict(results) : "unknown";
+      const results = m ? ranking.checks[m.scenarioId] ?? [] : [];
+      const v = m ? ranking.verdicts[m.scenarioId] ?? (Object.values(s.requirements).every((x) => x === null) ? "none" : "unknown") : "unknown";
       verdictChip.textContent = t.verdict[v];
       verdictChip.dataset.verdict = v;
       const failed = results.filter((r) => r.ok === false);
@@ -139,7 +140,7 @@ export function createSiteCard(ui: Ui): HTMLElement {
             .join(" · ")}`
         : "";
 
-      const inCompare = s.compareIds.includes(site.id);
+      const inCompare = s.comparisons.some((item) => item.siteId === site.id && item.date === s.date);
       compare.replaceChildren(icon(inCompare ? "check" : "plus"), t.addCompare);
       compare.title = inCompare ? t.removeCompare : t.addCompare;
       compare.classList.toggle("is-on", inCompare);
@@ -148,42 +149,58 @@ export function createSiteCard(ui: Ui): HTMLElement {
 
   // Live values: change with the time slider.
   ui.watch(
-    (s) => [s.focusId, s.date, s.heightM, s.scope, s.index, s.phase, s.dataVersion],
+    (s) => [s.focusId, s.date, s.heightM, s.scope, s.index, s.phase, s.sceneStatus, s.dataVersion],
     (s) => {
       const site = focusSite(s);
       const bundle = bundleFor(s, resources, site);
       card.classList.toggle("is-loading", !bundle);
-      if (!bundle) return;
-      const sample = sampleSeries(bundle.series, s.index);
+      if (!bundle) {
+        land.disabled = true;
+        sunrise.hidden = true;
+        landHelp.hidden = false;
+        landHelp.textContent = t.loadingSite;
+        for (const body of [sun, earth]) {
+          body.value.textContent = fmt.elevation(null);
+          body.state.textContent = t.state.unknown;
+          body.countdown.textContent = t.loadingSite;
+          body.status.replaceChildren(icon("help"), t.state.unknown);
+          body.row.classList.remove("is-off");
+        }
+        return;
+      }
+      const sample = sampleScenario(bundle.series, bundle.scenario, s.index);
       const stateText = (state: DiskState): string => (state === null ? t.state.unknown : t.state[state]);
 
       for (const [name, ui_, el, state] of [
         ["sun", sun, sample.sunElDeg, sample.sunState],
         ["earth", earth, sample.earthElDeg, sample.earthState],
       ] as const) {
-        const visible = (state ?? 0) > 0;
+        const visible = state !== null && state > 0;
         ui_.value.textContent = fmt.elevation(el);
         ui_.state.textContent = stateText(state);
-        ui_.row.classList.toggle("is-off", !visible);
-        const ev = nextEvent(bundle.scenario, name, sample.tMs);
+        ui_.row.classList.toggle("is-off", state === 0);
+        ui_.row.dataset.visibility = state === null ? "unknown" : String(state);
+        const ev = state === null ? null : nextEvent(bundle.scenario, name, sample.tMs);
         const left = ev ? fmt.duration(Date.parse(ev.tUtc) - sample.tMs) : "";
-        ui_.countdown.textContent = ev ? (ev.type === "set" ? t.setIn(left) : t.riseIn(left)) : visible ? t.noSetInPeriod : t.noRiseInPeriod;
+        ui_.countdown.textContent = state === null ? t.visibilityUnknown : ev ? (ev.type === "set" ? t.setIn(left) : t.riseIn(left)) : visible ? t.noSetInPeriod : t.noRiseInPeriod;
         ui_.status.replaceChildren(
-          icon(visible ? "check" : "cross"),
-          name === "sun" ? (visible ? t.powerYes : t.powerNo) : visible ? t.linkYes : t.linkNo,
+          icon(state === null ? "help" : visible ? "check" : "cross"),
+          state === null ? t.state.unknown : name === "sun" ? (visible ? t.powerYes : t.powerNo) : visible ? t.linkYes : t.linkNo,
         );
         ui_.status.title = name === "sun" ? t.power : t.link;
       }
 
-      const dark = (sample.sunState ?? 0) === 0;
+      const dark = sample.sunState === 0;
+      const unknown = sample.sunState === null;
+      const sceneReady = s.sceneStatus === "ready";
       const flying = s.phase !== "cruise" && s.phase !== "focus";
-      land.disabled = dark || flying;
-      land.querySelector("span")!.textContent = dark ? t.landBlocked : t.land;
-      land.classList.toggle("is-blocked", dark);
+      land.disabled = !sceneReady || dark || unknown || flying;
+      land.querySelector("span")!.textContent = unknown ? t.landUnknown : dark ? t.landBlocked : t.land;
+      land.classList.toggle("is-blocked", dark || unknown || !sceneReady);
       const sunriseEvent = dark ? nextEvent(bundle.scenario, "sun", sample.tMs) : null;
-      landHelp.hidden = !dark || flying;
-      landHelp.textContent = sunriseEvent ? t.landBlockedHelp : t.noSunInPeriod;
-      sunrise.hidden = !sunriseEvent || flying;
+      landHelp.hidden = (sceneReady && !dark && !unknown) || flying;
+      landHelp.textContent = !sceneReady ? (s.sceneStatus === "loading" ? t.sceneLoading : t.sceneUnavailable) : unknown ? t.visibilityUnknown : sunriseEvent ? t.landBlockedHelp : t.noSunInPeriod;
+      sunrise.hidden = sunriseEvent?.type !== "rise" || flying;
 
       panorama.update({
         profileDeg: bundle.horizon?.horizonElevationDeg ?? null,

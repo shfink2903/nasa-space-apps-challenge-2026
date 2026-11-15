@@ -1,17 +1,37 @@
 // End-to-end check of the production build (dist/) in a real browser.
-// Usage: npm run build, serve dist/ on port 4180 with any static server, then npm run test:e2e.
+// Usage: npm run build && npm run test:e2e. Starts the real local API with an offline model test double.
 // Every expected number is read from the built dataset files, never typed here.
-import { chromium, expect } from "@playwright/test";
+import { chromium, expect as baseExpect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import { checkPlanner } from "./check-planner-browser.mjs";
+import { checkResilience } from "./check-resilience.mjs";
+const expect = baseExpect.configure({ timeout: 30000 });
 
-const base = process.env.PREVIEW_URL ?? "http://127.0.0.1:4180";
+let server;
+async function startServer() {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+  server = spawn(process.env.PYTHON ?? `${root}.venv/bin/python`, ["-B", "scripts/serve_e2e.py"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  let stderr = "";
+  server.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-4000); });
+  const lines = createInterface({ input: server.stdout });
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Test server start timed out: ${stderr}`)), 30000);
+    server.once("error", (error) => { clearTimeout(timer); reject(error); });
+    server.once("exit", (code) => { clearTimeout(timer); reject(new Error(`Test server exited (${code}): ${stderr}`)); });
+    lines.once("line", (line) => { clearTimeout(timer); resolve(JSON.parse(line).url); });
+  });
+}
+const base = process.env.PREVIEW_URL ?? await startServer();
 const data = new URL("../dist/data/v1/", import.meta.url);
 const output = new URL("../.cache/", import.meta.url);
 const json = async (path) => JSON.parse(await readFile(new URL(path, data), "utf8"));
 const { sites } = await json("sites.json");
 const report = { base, startedAt: new Date().toISOString(), checks: [], errors: [], failedDataRequests: [], pass: false };
+report.checks.push = (...checks) => { checks.forEach((check) => console.log(`PASS ${check}`)); return Array.prototype.push.apply(report.checks, checks); };
 await mkdir(output, { recursive: true });
 
 const n1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -26,7 +46,7 @@ const browser = await chromium.launch({
   channel: "chrome",
   headless: true,
   args: ["--enable-webgl", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-});
+}).catch((error) => { server?.kill("SIGTERM"); throw error; });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   await page.addInitScript(() => window.localStorage.setItem("touchdown.locale", "fr"));
@@ -38,6 +58,7 @@ try {
   await expect(page.locator("#loader")).toHaveCount(0, { timeout: 90000 });
   await expect(page.locator(".sites .site-row")).toHaveCount(5);
   await expect(page.locator("#start-date option")).toHaveCount(52);
+  await expect(page.getByTestId("scene-status")).toHaveAttribute("data-status", "ready", { timeout: 90000 });
   report.checks.push("Boot: 5 south-pole sites (3 candidates, 2 references) and 52 start dates, no flight needed to see numbers");
 
   const select = (site) => page.locator(".sites .site-main", { hasText: siteName(site) }).click();
@@ -117,12 +138,20 @@ try {
   await page.screenshot({ path: fileURLToPath(new URL("build-mobile.png", output)) });
   report.checks.push("Mobile width: both tabs fit the viewport");
 
+  await page.close();
+  await checkPlanner(browser, base, report, output, { json, sites });
+  await checkResilience(browser, base, report, output);
+
   expect(report.errors).toEqual([]);
   expect(report.failedDataRequests).toEqual([]);
   report.pass = true;
+} catch (error) {
+  report.failure = error.message;
+  throw error;
 } finally {
   report.finishedAt = new Date().toISOString();
   await writeFile(new URL("build-browser-report.json", output), JSON.stringify(report, null, 2) + "\n");
   await browser.close();
+  server?.kill("SIGTERM");
 }
 console.log(JSON.stringify(report, null, 2));

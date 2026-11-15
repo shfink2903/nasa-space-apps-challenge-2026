@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Scenario, Sweep } from "../src/data/dataset";
 import { nextEvent, splitDuration, windowAt } from "../src/planner/clock";
-import { readMetrics, type SiteMetrics } from "../src/planner/metrics";
+import { METRIC_IDS, readMetrics, type MetricKey, type SiteMetrics } from "../src/planner/metrics";
 import { checkRequirements, paretoFront, rankSites, verdict } from "../src/planner/ranking";
 
 const DATA = resolve(__dirname, "../../data/processed/v1");
@@ -21,6 +21,7 @@ const row = (siteId: string, values: Partial<SiteMetrics>): SiteMetrics => ({
   scenarioId: `${siteId}-scenario`,
   comparable: true,
   darkGapCut: "000",
+  published: Object.fromEntries(Object.entries(values).filter(([key, value]) => key in METRIC_IDS && typeof value === "number").map(([key, value]) => [key, { metricId: METRIC_IDS[key as MetricKey], value, quality: "complete", unit: key.endsWith("H") ? "h" : "1" }])),
   sunShare: null,
   sunFullShare: null,
   sunGapH: null,
@@ -113,6 +114,22 @@ describe("requirements", () => {
     const missing = checkRequirements(row("b", { sunShare: 0.9 }), { minSunShare: 0.5, minEarthShare: 0.5, maxDarkH: null });
     expect(missing.map((r) => r.ok)).toEqual([true, null]);
     expect(verdict(missing)).toBe("unknown");
+  });
+
+  it("does not turn a published truncated night into a passing upper bound", () => {
+    const s = json<Scenario>("scenarios/sp_s8600_20270713_30d_h2m_lola_8f574ad2.json");
+    const m = readMetrics(s.siteId, s.scenarioId, s.metrics);
+    expect(m.published.sunGapH?.truncatedStart).toBe(true);
+    expect(m.sunGapH).toBeCloseTo(206.91341145833334);
+    expect(verdict(checkRequirements(m, { minSunShare: .25, minEarthShare: .25, maxDarkH: 360 }))).toBe("unknown");
+    expect(verdict(checkRequirements(m, { minSunShare: null, minEarthShare: null, maxDarkH: 200 }))).toBe("fail");
+  });
+
+  it("keeps partial and unknown numeric metrics unknown", () => {
+    for (const quality of ["partial", "unknown"]) {
+      const m = readMetrics("a", "b", [{ metricId: "sun.anyDisk.fraction", unit: "1", value: .8, quality }]);
+      expect(verdict(checkRequirements(m, { minSunShare: .5, minEarthShare: null, maxDarkH: null }))).toBe("unknown");
+    }
   });
 });
 

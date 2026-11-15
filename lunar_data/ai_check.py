@@ -16,6 +16,8 @@ def run(report_path, dataset_path="data/processed/v1"):
     app=Application(dataset,config)
     sid=next(s for s in dataset.index["scenarioIds"] if s.startswith("apollo11_20261201_30d_h2m_geometric_"))
     context={"scenarioId":sid}
+    far_sid=next(s for s in dataset.index["scenarioIds"] if s.startswith("change4_20261201_30d_h2m_geometric_"))
+    comparison_context={"scenarioIds":[sid,far_sid],"priority":["earth.anyDisk.fraction"]}
     cases=[]
     def execute(name,body,expected_tools=(),status="answered"):
         result=app.chat(body)
@@ -27,7 +29,7 @@ def run(report_path, dataset_path="data/processed/v1"):
         print(canonical({"case":name,"pass":passed,"tools":sorted(used),"status":result["status"],"reason":result.get("reason")}),flush=True)
         return result
     execute("scenario",{"message":"Analyse la visibilité du Soleil et de la Terre du scénario sélectionné. Cite les fractions anyDisk.","context":context},["get_scenario"])
-    comparison=execute("comparison",{"message":"Compare Apollo 11 et Chang’e 4 avec la même date, durée, hauteur et le modèle géométrique de ma sélection. Lis les deux scénarios puis appelle compare. Cite la comparaison et les fractions de visibilité terrestre.","context":context},["get_scenario","compare"])
+    comparison=execute("comparison",{"message":"Compare Apollo 11 et Chang’e 4 avec la même date, durée, hauteur et le modèle géométrique de ma sélection. Appelle compare. Cite la comparaison et les fractions de visibilité terrestre.","context":comparison_context},["compare"])
     proof=next((p["comparison"] for p in comparison["evidence"] if p["kind"]=="comparison"),None)
     if proof:
         execute("evidence_followup",{"message":f"Appelle get_evidence avec comparisonId={proof['comparisonId']}. Cite la comparaison et les fractions de visibilité de la Terre dans ce paquet de preuves.",
@@ -35,7 +37,7 @@ def run(report_path, dataset_path="data/processed/v1"):
     else:
         cases.append({"name":"evidence_followup","pass":False,"reason":"no accepted comparison available"})
     execute("user_constraints",{"message":"Évalue et compare Apollo 11 et Chang’e 4 pour le critère utilisateur fourni, avec les mêmes date, durée, hauteur et modèle géométrique de ma sélection. Cite le verdict de comparaison.",
-                                "context":context,"constraints":[{"metricId":"earth.anyDisk.fraction","op":">=","value":1,"unit":"1","origin":"user"}]},["get_scenario","compare"])
+                                "context":comparison_context,"constraints":[{"metricId":"earth.anyDisk.fraction","op":">=","value":1,"unit":"1","origin":"user"}]},["compare"])
     execute("sensitivity",{"message":"Montre la sensibilité autour de sp_s8950 à la hauteur de 2 mètres avec get_sensitivity. Cite les plages de fraction de visibilité du Soleil et de la Terre."},["get_sensitivity"])
     execute("clarification",{"message":"Je veux comparer des sites lunaires mais je n’ai pas choisi de date, durée ni hauteur. Quelles informations te faut-il ?"},["list_sites"],"needs_clarification")
     execute("missing_data",{"message":"Lis Apollo 11 depuis 2035-01-01T00:00:00Z, sur 30 jours, hauteur 2 mètres, modèle géométrique. Ces données sont-elles dans le lot ?"},["get_scenario"],"insufficient_data")

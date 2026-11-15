@@ -1,5 +1,5 @@
 import { groupOf, scopeSites } from "../../planner/catalog";
-import { checkRequirements, CRITERION_METRIC, verdict, type Criterion } from "../../planner/ranking";
+import { CRITERION_METRIC, type Criterion } from "../../planner/ranking";
 import { rankedOrder, rankingFor, siteById } from "../../planner/select";
 import type { Ui } from "../context";
 import { h, icon } from "../dom";
@@ -33,7 +33,7 @@ export function createSiteList(ui: Ui): HTMLElement {
   );
 
   ui.watch(
-    (s) => [s.sites, s.scope, s.criterion, s.date, s.heightM, s.requirements, s.focusId, s.hoverId, s.compareIds, s.dataVersion],
+    (s) => [s.sites, s.scope, s.criterion, s.date, s.heightM, s.requirements, s.focusId, s.hoverId, s.comparisons, s.dataVersion],
     (s) => {
       criterion.value = s.criterion;
       for (const x of scope) x.b.classList.toggle("is-on", x.value === s.scope);
@@ -50,8 +50,8 @@ export function createSiteList(ui: Ui): HTMLElement {
           const row = ranking.rows.find((r) => r.metrics.siteId === id);
           const m = metrics.get(id);
           const value = m?.[key] ?? null;
-          const v = m ? verdict(checkRequirements(m, s.requirements)) : "none";
-          const inCompare = s.compareIds.includes(id);
+          const v = m ? ranking.verdicts[m.scenarioId] ?? "unknown" : "none";
+          const inCompare = s.comparisons.some((c) => c.siteId === id && c.date === s.date);
           const add = h(
             "button",
             { class: `row-compare ${inCompare ? "is-on" : ""}`, type: "button", "aria-label": inCompare ? t.removeCompare : t.addCompare, title: inCompare ? t.removeCompare : t.addCompare, "aria-pressed": inCompare },

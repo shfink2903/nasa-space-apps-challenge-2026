@@ -2,7 +2,7 @@ import { createElevationChart } from "../../charts/elevationChart";
 import { profileAt } from "../../charts/horizonPanorama";
 import { COLORS } from "../../charts/theme";
 import { createWindowStrips } from "../../charts/windowStrips";
-import { sampleSeries } from "../../data/dataset";
+import { sampleScenario } from "../../planner/clock";
 import type { Bundle } from "../../data/resources";
 import { bundleFor, focusSite } from "../../planner/select";
 import type { Ui } from "../context";
@@ -109,9 +109,18 @@ export function createTimePanel(ui: Ui): HTMLElement {
     (s) => {
       const bundle = bundleFor(s, resources, focusSite(s));
       panel.classList.toggle("is-loading", !bundle);
-      if (!bundle) return;
+      range.disabled = !bundle;
+      play.disabled = !bundle;
+      chart.el.hidden = !bundle;
+      strips.el.hidden = !bundle;
+      if (!bundle) {
+        clock.textContent = "--:--";
+        date.textContent = t.loadingSite;
+        offset.textContent = "";
+        return;
+      }
       const { series, scenario } = bundle;
-      const sample = sampleSeries(series, s.index);
+      const sample = sampleScenario(series, scenario, s.index);
       const t0 = Date.parse(series.t0Utc);
       clock.textContent = fmt.clock(sample.tMs);
       date.textContent = fmt.day(sample.tMs);

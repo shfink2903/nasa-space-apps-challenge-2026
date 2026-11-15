@@ -89,7 +89,10 @@ export function checkRequirements(metrics: SiteMetrics, requirements: Requiremen
     if (limit === null) continue;
     const metric = REQUIREMENT_METRIC[key];
     const value = metrics[metric];
-    const ok = value === null ? null : key === "maxDarkH" ? value <= limit : value >= limit;
+    const published = metrics.published[metric];
+    const unknown = value === null || !published || published.quality === "unknown" || published.quality === "partial";
+    const truncated = key === "maxDarkH" && published && (published.truncatedStart || published.truncatedEnd || published.truncatedByMissingData);
+    const ok = unknown ? null : key === "maxDarkH" ? value! > limit ? false : truncated ? null : true : value! >= limit;
     results.push({ key, metric, limit, value, ok });
   }
   return results;

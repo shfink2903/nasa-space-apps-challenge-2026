@@ -6,10 +6,11 @@ import "./style.css";
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { availableDates, loadSites, sampleSeries, type Site } from "./data/dataset";
+import { availableDates, loadSites, type Site } from "./data/dataset";
 import { Resources, type Bundle } from "./data/resources";
 import { initialLocale, saveLocale, strings } from "./i18n";
 import { groupOf, isPolar, orderedSites, scopeSites } from "./planner/catalog";
+import { sampleScenario, visibilityState } from "./planner/clock";
 import { bundleFor, focusSite, rankingFor, siteById } from "./planner/select";
 import { Director } from "./scene/director";
 import { OrbitScene } from "./scene/orbitScene";
@@ -61,7 +62,6 @@ async function boot(): Promise<void> {
   const locale = initialLocale();
   document.documentElement.lang = locale;
   $("loader-text").textContent = strings(locale).loading;
-  const stage = new Stage(canvas);
 
   // --- Data: the catalogue first. Everything else loads when a view asks for it. ---
   const sites = orderedSites(await loadSites());
@@ -75,10 +75,10 @@ async function boot(): Promise<void> {
     heightM: 2,
     scope: "polar",
     criterion: "balanced",
-    // Example limits. The user can change or turn off each one.
-    requirements: { minSunShare: 0.25, minEarthShare: 0.25, maxDarkH: 360 },
+    requirements: { minSunShare: null, minEarthShare: null, maxDarkH: null },
     focusId: sites.find((s) => s.id === FIRST_SITE)?.id ?? sites[0].id,
-    compareIds: [],
+    comparisons: [],
+    sceneStatus: "loading",
     hoverId: null,
     index: 0,
     playing: false,
@@ -91,21 +91,13 @@ async function boot(): Promise<void> {
   });
   const resources = new Resources(() => store.set({ dataVersion: store.get().dataVersion + 1 }));
 
-  // --- Assets and scenes. ---
-  const fill = $("loader-fill");
-  const manager = new THREE.LoadingManager();
-  manager.onProgress = (_url, loaded, total) => (fill.style.width = `${Math.round((loaded / total) * 100)}%`);
-  const small = Math.min(window.screen.width, window.screen.height) < 800 || stage.maxTextureSize < 8192;
-  const [moonColor, moonSlope, earth, gltf] = await Promise.all([
-    loadTexture(manager, small ? "/textures/moon_color_4k.jpg" : "/textures/moon_color_8k.jpg", true),
-    loadTexture(manager, "/textures/moon_slope_4k.jpg", false),
-    loadTexture(manager, "/textures/earth_2k.jpg", true).catch(() => null),
-    new GLTFLoader(manager).loadAsync("/models/starship.glb"),
-  ]);
-  const hullEnv = createHullEnvironment(stage.renderer);
-  const orbit = new OrbitScene({ moonColor, moonSlope, earth, ship: gltf.scene, hullEnv });
-  const surface = new SurfaceScene({ earth, ship: gltf.scene, hullEnv }, canvas);
-  const director = new Director(stage, orbit, surface, veil, (phase) => store.set({ phase }));
+  // Scientific data and controls do not depend on WebGL or the illustrative assets.
+  let stage: Stage | null = null;
+  let orbit: OrbitScene | null = null;
+  let surface: SurfaceScene | null = null;
+  let director: Director | null = null;
+  canvas.style.visibility = "hidden";
+  pinLayer.style.visibility = "hidden";
 
   /** The site and data that light the 3D view. Kept while the next choice loads, so the picture never goes blank. */
   let light: { site: Site; bundle: Bundle } | null = null;
@@ -130,18 +122,40 @@ async function boot(): Promise<void> {
       userPicked = true;
       const scope = state.scope === "polar" && !isPolar(site) ? "all" : state.scope;
       store.set({ focusId: id, hoverId: null, scope });
-      director.focus(site);
-      pendingLand = state.autoFlight ? id : null;
+      director?.focus(site);
+      pendingLand = state.autoFlight && state.sceneStatus === "ready" ? id : null;
     },
     hover: (id) => {
       if (store.get().hoverId !== id) store.set({ hoverId: id });
     },
     toggleCompare(id) {
-      const { compareIds } = store.get();
+      const { comparisons, date } = store.get();
       userPicked = true;
-      if (compareIds.includes(id)) store.set({ compareIds: compareIds.filter((x) => x !== id) });
-      else if (compareIds.length >= MAX_COMPARE) showToast(strings(store.get().locale).compareMax);
-      else store.set({ compareIds: [...compareIds, id] });
+      if (comparisons.some((x) => x.siteId === id && x.date === date)) store.set({ comparisons: comparisons.filter((x) => x.siteId !== id || x.date !== date) });
+      else actions.addComparison(id, date);
+    },
+    addComparison(siteId, date) {
+      const s = store.get();
+      userPicked = true;
+      const selectedDate = date ?? [s.date, ...s.dates].find((candidate) => !s.comparisons.some((x) => x.siteId === siteId && x.date === candidate));
+      if (!siteById(s, siteId) || !selectedDate || !s.dates.includes(selectedDate) || s.comparisons.some((x) => x.siteId === siteId && x.date === selectedDate)) return;
+      if (s.comparisons.length >= MAX_COMPARE) showToast(strings(s.locale).compareMax);
+      else store.set({ comparisons: [...s.comparisons, { siteId, date: selectedDate }] });
+    },
+    setComparisonDate(index, date) {
+      const s = store.get();
+      const item = s.comparisons[index];
+      userPicked = true;
+      if (!item || !s.dates.includes(date)) return;
+      if (s.comparisons.some((x, i) => i !== index && x.siteId === item.siteId && x.date === date)) {
+        store.set({ comparisons: [...s.comparisons] });
+        return;
+      }
+      store.set({ comparisons: s.comparisons.map((x, i) => i === index ? { ...x, date } : x) });
+    },
+    removeComparison(index) {
+      userPicked = true;
+      store.set({ comparisons: store.get().comparisons.filter((_x, i) => i !== index) });
     },
     setDate: (date) => store.set({ date }),
     shiftDate(weeks) {
@@ -155,7 +169,7 @@ async function boot(): Promise<void> {
       if (scope === s.scope) return;
       const allowed = scopeSites(s.sites, scope);
       const stay = allowed.some((x) => x.id === s.focusId);
-      store.set({ scope, compareIds: s.compareIds.filter((id) => allowed.some((x) => x.id === id)) });
+      store.set({ scope, comparisons: s.comparisons.filter((item) => allowed.some((x) => x.id === item.siteId)) });
       if (!stay) actions.selectSite(allowed[0].id);
     },
     setCriterion: (criterion) => store.set({ criterion }),
@@ -165,7 +179,8 @@ async function boot(): Promise<void> {
       store.set({ index });
     },
     setTime(tMs) {
-      const series = light?.bundle.series;
+      const s = store.get();
+      const series = bundleFor(s, resources, focusSite(s))?.series;
       if (!series) return;
       const index = (tMs - Date.parse(series.t0Utc)) / (series.stepS * 1000);
       actions.setIndex(Math.min(series.n - 1, Math.max(0, index)));
@@ -176,15 +191,16 @@ async function boot(): Promise<void> {
       store.set({ playing: !s.playing, index: !s.playing && s.index >= end ? 0 : s.index });
     },
     setSpeed: (speedH) => store.set({ speedH }),
-    setAutoFlight: (autoFlight) => store.set({ autoFlight }),
+    setAutoFlight: (autoFlight) => store.set({ autoFlight: autoFlight && store.get().sceneStatus === "ready" }),
     land() {
       const s = store.get();
       const site = focusSite(s);
       const bundle = bundleFor(s, resources, site);
-      if (!bundle || (s.phase !== "cruise" && s.phase !== "focus")) return;
-      // No Sun, no landing: the ship would arrive without power.
-      if ((sampleSeries(bundle.series, s.index).sunState ?? 0) === 0) {
-        showToast(strings(s.locale).landBlocked);
+      if (!bundle || !director || s.sceneStatus !== "ready" || (s.phase !== "cruise" && s.phase !== "focus")) return;
+      // This animation uses a visibility rule; it does not assess energy or landing safety.
+      const sunState = sampleScenario(bundle.series, bundle.scenario, s.index).sunState;
+      if (sunState === null || sunState === 0) {
+        showToast(sunState === null ? strings(s.locale).landUnknown : strings(s.locale).landBlocked);
         return;
       }
       if (s.tab !== "explorer") store.set({ tab: "explorer" });
@@ -194,19 +210,16 @@ async function boot(): Promise<void> {
       const s = store.get();
       const bundle = bundleFor(s, resources, focusSite(s));
       if (!bundle) return;
-      const from = sampleSeries(bundle.series, s.index).tMs;
+      const from = sampleScenario(bundle.series, bundle.scenario, s.index).tMs;
       const sunrise = bundle.scenario.events
         .filter((e) => e.body === "sun" && e.convention === "anyDisk" && e.type === "rise" && Date.parse(e.tUtc) > from)
         .sort((a, b) => Date.parse(a.tUtc) - Date.parse(b.tUtc))[0];
       if (!sunrise) return;
-      // One display step after the event, so the published state already shows the Sun.
-      const step = bundle.series.stepS * 1000;
-      const index = Math.ceil((Date.parse(sunrise.tUtc) - Date.parse(bundle.series.t0Utc)) / step) + 1;
-      actions.setIndex(Math.min(bundle.series.n - 1, index));
+      actions.setTime(Date.parse(sunrise.tUtc));
     },
-    skip: () => director.skip(),
-    back: () => director.focus(focusSite(store.get())),
-    overview: () => director.overview(),
+    skip: () => director?.skip(),
+    back: () => director?.focus(focusSite(store.get())),
+    overview: () => director?.overview(),
     setAssistant: (assistantOpen) => store.set({ assistantOpen }),
     setGuide: (guideOpen) => store.set({ guideOpen }),
   };
@@ -224,7 +237,7 @@ async function boot(): Promise<void> {
     document.documentElement.lang = s.locale;
     document.title = `${t.brand} — ${t.tagline}`;
     canvas.setAttribute("aria-label", t.tabExplorer);
-    surface.setCompassLetters(t.compass);
+    surface?.setCompassLetters(t.compass);
     ui = createUi(store, actions, resources, t, fmt);
 
     root.replaceChildren(
@@ -265,6 +278,8 @@ async function boot(): Promise<void> {
     );
   }
   mountUi();
+  loader.classList.add("is-done");
+  window.setTimeout(() => loader.remove(), 900);
 
   // First results: show the best site and compare the top three, unless the user already chose.
   store.subscribe((s) => {
@@ -274,7 +289,7 @@ async function boot(): Promise<void> {
     userPicked = true;
     // The best candidate, compared with the other candidates.
     const best = ranking.rows[0].metrics.siteId;
-    store.set({ focusId: best, compareIds: ranking.rows.slice(0, MAX_COMPARE).map((r) => r.metrics.siteId) });
+    store.set({ focusId: best, comparisons: ranking.rows.slice(0, MAX_COMPARE).map((r) => ({ siteId: r.metrics.siteId, date: s.date })) });
   });
 
   // --- Input. ---
@@ -283,7 +298,7 @@ async function boot(): Promise<void> {
     (event) => {
       if (store.get().phase !== "cruise") return;
       event.preventDefault();
-      director.approach(event.deltaY * 0.0006);
+      director?.approach(event.deltaY * 0.0006);
     },
     { passive: false },
   );
@@ -292,7 +307,7 @@ async function boot(): Promise<void> {
   window.addEventListener("pointerup", () => (dragY = null));
   canvas.addEventListener("pointermove", (e) => {
     if (dragY === null || store.get().phase !== "cruise") return;
-    director.approach((dragY - e.clientY) * 0.002);
+    director?.approach((dragY - e.clientY) * 0.002);
     dragY = e.clientY;
   });
   window.addEventListener("keydown", (event) => {
@@ -315,12 +330,11 @@ async function boot(): Promise<void> {
   });
   canvas.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();
-    showToast(strings(store.get().locale).contextLost);
+    disableScene();
   });
-  canvas.addEventListener("webglcontextrestored", () => window.location.reload());
 
   // Development hook: lets a test freeze time and inspect one moment of a shot.
-  const debug = { store, actions, director, resources, timeScale: 1 };
+  const debug = { store, actions, get director() { return director; }, resources, timeScale: 1 };
   if (import.meta.env.DEV) (window as unknown as { __touchdown: typeof debug }).__touchdown = debug;
 
   // --- Frame loop. ---
@@ -342,23 +356,15 @@ async function boot(): Promise<void> {
       const sameSite = light?.site.id === site.id;
       light = { site, bundle };
       // A new mast height or model changes the terrain profile under a landed ship.
-      if (sameSite) director.setHorizon(bundle.horizon);
+      if (sameSite) director?.setHorizon(bundle.horizon);
       if (first && !userScrubbed) {
         // Open on a sunlit moment of the first site, when there is one.
-        const lit = bundle.series.sunState.findIndex((state) => state === 2);
-        if (lit > 0) store.set({ index: lit });
-      }
-      if (!compiled) {
-        // Build the ground once now, so the first landing does not wait for shader compilation.
-        compiled = true;
-        surface.prepare(site, null, sampleSeries(bundle.series, 0));
-        stage.renderer.compile(surface.scene, surface.camera);
-        loader.classList.add("is-done");
-        window.setTimeout(() => loader.remove(), 900);
+        const lit = bundle.scenario.windows["sun.fullDisk"]?.find((w) => visibilityState(bundle.scenario, "sun", Date.parse(w.startUtc)) === 2);
+        if (lit) actions.setTime(Date.parse(lit.startUtc));
       }
       s = store.get();
     }
-    if (!light) return;
+    if (!light || !bundle) return;
 
     if (s.playing) {
       const end = light.bundle.series.n - 1;
@@ -370,9 +376,26 @@ async function boot(): Promise<void> {
       pendingLand = null;
       actions.land();
     }
-    if (s.tab !== "explorer") return; // the 3D view is hidden: no need to draw it
+    if (s.tab !== "explorer" || !director || !stage || !surface || !orbit || s.sceneStatus !== "ready") return;
+    if (!compiled) {
+      try {
+        surface.prepare(light.site, null, sampleScenario(light.bundle.series, light.bundle.scenario, 0));
+        stage.renderer.compile(surface.scene, surface.camera);
+        compiled = true;
+      } catch (error) {
+        console.warn("3D preparation unavailable", error);
+        disableScene();
+        return;
+      }
+    }
 
-    director.update(dt, timeS, sampleSeries(light.bundle.series, s.index), light.site, realDt);
+    try {
+      director.update(dt, timeS, sampleScenario(light.bundle.series, light.bundle.scenario, s.index), light.site, realDt);
+    } catch (error) {
+      console.warn("3D rendering unavailable", error);
+      disableScene();
+      return;
+    }
 
     const showPins = s.phase === "cruise" || s.phase === "focus";
     pinLayer.classList.toggle("is-hidden", !showPins);
@@ -387,7 +410,7 @@ async function boot(): Promise<void> {
       if (on) pin.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`;
     }
     const t = strings(s.locale);
-    const sample = sampleSeries(light.bundle.series, s.index);
+    const sample = sampleScenario(light.bundle.series, light.bundle.scenario, s.index);
     const beams = orbit.projectBeams(width, height);
     for (const [name, point, on, textOn, textOff] of [
       ["sun", beams.sun, (sample.sunState ?? 0) > 0, t.beamSunOn, t.beamSunOff],
@@ -403,6 +426,50 @@ async function boot(): Promise<void> {
     }
   };
   requestAnimationFrame(frame);
+
+  function disableScene(): void {
+    const previousStage = stage;
+    stage = null;
+    director = null;
+    canvas.style.visibility = "hidden";
+    pinLayer.style.visibility = "hidden";
+    veil.style.opacity = "0";
+    pendingLand = null;
+    store.set({ sceneStatus: "unavailable", phase: "cruise", autoFlight: false, tab: "data" });
+    showToast(strings(store.get().locale).sceneUnavailable);
+    try {
+      previousStage?.dispose();
+    } catch (error) {
+      console.warn("3D cleanup unavailable", error);
+    }
+  }
+
+  async function initializeScene(): Promise<void> {
+    try {
+      stage = new Stage(canvas);
+      const manager = new THREE.LoadingManager();
+      const small = Math.min(window.screen.width, window.screen.height) < 800 || stage.maxTextureSize < 8192;
+      const [moonColor, moonSlope, earth, gltf] = await Promise.all([
+        loadTexture(manager, small ? "/textures/moon_color_4k.jpg" : "/textures/moon_color_8k.jpg", true),
+        loadTexture(manager, "/textures/moon_slope_4k.jpg", false),
+        loadTexture(manager, "/textures/earth_2k.jpg", true).catch(() => null),
+        new GLTFLoader(manager).loadAsync("/models/starship.glb"),
+      ]);
+      if (store.get().sceneStatus === "unavailable" || !stage) return;
+      const hullEnv = createHullEnvironment(stage.renderer);
+      orbit = new OrbitScene({ moonColor, moonSlope, earth, ship: gltf.scene, hullEnv });
+      surface = new SurfaceScene({ earth, ship: gltf.scene, hullEnv }, canvas);
+      surface.setCompassLetters(strings(store.get().locale).compass);
+      director = new Director(stage, orbit, surface, veil, (phase) => store.set({ phase }));
+      canvas.style.visibility = "";
+      pinLayer.style.visibility = "";
+      store.set({ sceneStatus: "ready" });
+    } catch (error) {
+      console.warn("3D assets or WebGL unavailable; data remains accessible", error);
+      disableScene();
+    }
+  }
+  void initializeScene();
 }
 
 boot().catch((err) => {

@@ -69,10 +69,14 @@ export interface Scenario {
   modelLevel: string;
   profileId: string | null;
   validationStatus: string;
+  coverageStatus?: "covered" | "partial" | "outside";
+  processingStatus?: "complete" | "partial" | "failed";
   events: ScenarioEvent[];
   metrics: Metric[];
   /** Keys: "sun.anyDisk", "sun.fullDisk", "earth.anyDisk", "earth.fullDisk". */
   windows: Record<string, TimeWindow[]>;
+  /** Intervals with usable data, distinct from intervals where a body is visible. */
+  analysableWindows?: Record<string, TimeWindow[]>;
   /** Sun and Earth both visible (any part of each disc). */
   overlapWindows: TimeWindow[];
   limits: string[];

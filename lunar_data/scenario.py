@@ -91,10 +91,19 @@ def compute(geometry, site, request, engine_version, dataset_version, profile=No
         prudent, prudent_metrics = deepcopy(nominal), deepcopy(rows)
     else:
         prudent_results = calculate_results(margins["angleDeg"]["value"])
+        time_margin = margins["timeS"]["value"]
         for result in prudent_results.values():
-            result["visible"] = erode(result["visible"], margins["timeS"]["value"])
-            # Eroded windows need their own set times, never the nominal events.
-            result["events"] = [{"type": "set", "t": b} for a, b in result["visible"]]
+            windows_before_margin = result["visible"]
+            result["visible"] = erode(windows_before_margin, time_margin)
+            # Shift only detected sets belonging to surviving windows. An end
+            # caused by the analysis boundary or missing data is not a sunset.
+            surviving_ends = {b for a, b in windows_before_margin if b - a > 2 * time_margin}
+            result["events"] = [
+                {**event, "t": event["t"] - time_margin,
+                 "bracket": [t - time_margin for t in event["bracket"]]}
+                for event in result["events"]
+                if event["type"] == "set" and event["t"] in surviving_ends
+            ]
         prudent_metrics, _ = metrics(prudent_results, bg, ets)
         prudent = evaluate(prudent_metrics, request["hardConstraints"])
     limits = [

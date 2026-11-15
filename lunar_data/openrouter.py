@@ -103,6 +103,7 @@ class Budget:
         self.observed = Decimal(0)
         self.usage_missing = False
         self.calls = 0
+        self.recorded_calls = 0
 
     def reserve(self, payload):
         text = canonical({k: payload[k] for k in ("messages", "tools", "response_format") if k in payload})
@@ -123,18 +124,21 @@ class Budget:
         return amount
 
     def record(self, response):
-        cost = response.get("usage", {}).get("cost")
+        usage = response.get("usage")
+        cost = usage.get("cost") if isinstance(usage, dict) else None
         if cost is None:
             self.usage_missing = True
         else:
             self.observed += decimal(cost, "usage.cost")
-            if self.observed > self.config.max_cost_usd:
-                raise DataError("reported_cost_exceeded", "usage.cost")
+        self.recorded_calls += 1
+        if self.observed > self.config.max_cost_usd:
+            raise DataError("reported_cost_exceeded", "usage.cost")
 
     def report(self):
+        usage_missing = self.usage_missing or self.recorded_calls != self.calls
         return {"calls": self.calls, "reservedUpperEstimateUsd": str(self.reserved),
-                "observedCostUsd": None if self.usage_missing else str(self.observed),
-                "observedCostReason": "provider_usage_missing" if self.usage_missing else None,
+                "observedCostUsd": None if usage_missing else str(self.observed),
+                "observedCostReason": "provider_usage_missing" if usage_missing else None,
                 "limitUsd": str(self.config.max_cost_usd), "inputAllowanceMethod": "utf8_bytes_plus_framing"}
 
 
@@ -144,16 +148,77 @@ class OpenRouter:
         self.opener = opener or urllib.request.urlopen
         self.sleeper = sleeper
 
+    def _http_error_detail(self, error):
+        """Expose bounded diagnostic fields, never raw bodies, headers or URLs."""
+        detail = {"status": error.code}
+
+        def clean(value, limit):
+            if not isinstance(value, str):
+                return None
+            if self.config.api_key:
+                value = value.replace(self.config.api_key, "[REDACTED]")
+            return "".join(c for c in value if c.isprintable())[:limit]
+
+        def fields(value):
+            if not isinstance(value, dict):
+                return {}
+            result = {}
+            message = clean(value.get("message"), 500)
+            if message:
+                result["message"] = message
+            code = value.get("code")
+            if isinstance(code, int) and not isinstance(code, bool) and -1_000_000_000 <= code <= 1_000_000_000:
+                result["code"] = code
+            elif isinstance(code, str):
+                result["code"] = clean(code, 100)
+            return result
+
+        try:
+            raw = error.read(16385)
+            if len(raw) > 16384:
+                return detail
+            body = json.loads(raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError(x)))
+            reported = body.get("error") if isinstance(body, dict) else None
+            detail.update(fields(reported))
+            metadata = reported.get("metadata") if isinstance(reported, dict) else None
+            if isinstance(metadata, dict):
+                provider = clean(metadata.get("provider_name"), 120)
+                if provider:
+                    detail["provider_name"] = provider
+                provider_raw = metadata.get("raw")
+                if isinstance(provider_raw, str):
+                    try:
+                        provider_body = json.loads(provider_raw, parse_constant=lambda x: (_ for _ in ()).throw(ValueError(x)))
+                    except (ValueError, TypeError, RecursionError):
+                        provider_body = None
+                    provider_error = fields(provider_body.get("error") if isinstance(provider_body, dict) else None)
+                    if provider_error:
+                        detail["provider_error"] = provider_error
+        except (OSError, ValueError, TypeError, AttributeError, RecursionError):
+            pass
+        return detail
+
     def payload(self, messages, tools, response_schema, tool_choice="auto"):
         provider = {"require_parameters": True, "allow_fallbacks": False,
                     "max_price": {"prompt": float(self.config.prompt_price_cap_per_million),
                                   "completion": float(self.config.completion_price_cap_per_million)}}
         if self.config.provider:
             provider["only"] = [self.config.provider]
-        return {"model": self.config.model, "messages": messages, "tools": tools, "tool_choice": tool_choice,
-                "provider": provider, "temperature": 0, "max_tokens": self.config.max_output_tokens,
-                "response_format": {"type": "json_schema", "json_schema": {"name": "lunar_answer", "strict": True, "schema": response_schema}},
-                "usage": {"include": True}}
+        payload = {"model": self.config.model, "messages": messages, "tools": tools, "tool_choice": tool_choice,
+                   "provider": provider, "temperature": 0, "max_tokens": self.config.max_output_tokens,
+                   "usage": {"include": True}}
+        if tool_choice != "required" and not isinstance(tool_choice, dict):
+            # Forced-tool turns produce arguments checked against the tool's
+            # schema. Apply the final-answer schema only when text is permitted.
+            payload["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "lunar_answer", "strict": True, "schema": response_schema}}
+        if tools and self.config.model.startswith("deepseek/deepseek-v4"):
+            # V4 enables thinking by default, which rejects required/named tool
+            # choices. Keep one explicit mode throughout this tool loop. This
+            # does not apply to R1 or other reasoning-only model families.
+            # https://api-docs.deepseek.com/api/create-chat-completion/
+            payload["reasoning"] = {"enabled": False}
+        return payload
 
     def complete(self, payload, budget):
         if not self.config.ready:
@@ -175,6 +240,7 @@ class OpenRouter:
                 budget.record(result)
                 return result
             except urllib.error.HTTPError as exc:
+                budget.usage_missing = True
                 if exc.code in (429, 503) and attempt < self.config.max_retries:
                     try:
                         retry_after = max(0., float(exc.headers.get("Retry-After", "1")))
@@ -183,8 +249,9 @@ class OpenRouter:
                     if retry_after <= 3:
                         self.sleeper(retry_after)
                         continue
-                raise DataError("provider_http_error", "OpenRouter", {"status": exc.code}) from None
+                raise DataError("provider_http_error", "OpenRouter", self._http_error_detail(exc)) from None
             except (TimeoutError, OSError, ValueError, KeyError) as exc:
+                budget.usage_missing = True
                 # Ambiguous network failures are not retried: the first call may be billed.
                 raise DataError("provider_unavailable", "OpenRouter", type(exc).__name__) from None
         raise AssertionError("unreachable")
