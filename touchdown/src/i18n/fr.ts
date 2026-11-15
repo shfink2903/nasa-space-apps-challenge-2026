@@ -214,6 +214,9 @@ export const fr = {
 
   // Guide
   guideTitle: "Comment lire cet outil",
+  teachTitle: "En classe : pourquoi le pôle Sud est-il si difficile ?",
+  teachText: "L'axe de la Lune n'est incliné que de 1,5°. À Apollo 11, près de l'équateur, le Soleil monte haut et la Terre reste immobile dans le ciel. Au pôle, le Soleil rase l'horizon : une colline peut le cacher des jours, et la Terre monte et descend avec la libration.",
+  teachButton: "Comparer le pôle Sud et Apollo 11",
   guideSteps: [
     { title: "Choisissez un candidat", text: "Liste à droite ou point sur le globe. Les conditions s'affichent tout de suite." },
     { title: "Bougez le temps", text: "Le curseur déplace le Soleil et la Terre. Les bandes montrent quand ils sont visibles." },

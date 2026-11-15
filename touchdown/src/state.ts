@@ -95,4 +95,6 @@ export interface Actions {
   setGuide(open: boolean): void;
   /** Copies a link that opens on the current scenario. */
   share(): void;
+  /** Teaching shortcut: the south pole next to Apollo 11, side by side. */
+  showPoleVsApollo(): void;
 }

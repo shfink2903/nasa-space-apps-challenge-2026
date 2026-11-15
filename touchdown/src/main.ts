@@ -236,6 +236,14 @@ async function boot(): Promise<void> {
     overview: () => director.overview(),
     setAssistant: (assistantOpen) => store.set({ assistantOpen }),
     setGuide: (guideOpen) => store.set({ guideOpen }),
+    showPoleVsApollo() {
+      userPicked = true;
+      const ids = ["sp_s8600", "apollo11"].filter((id) => siteById(store.get(), id));
+      store.set({ scope: "all", compareIds: ids, focusId: ids[0] ?? store.get().focusId, tab: "data", guideOpen: false });
+      // Let the tab draw, then bring the side-by-side section into view.
+      // The table grows while the 13 sites load: scroll again once it has settled.
+      for (const delay of [60, 900]) window.setTimeout(() => document.getElementById("sec-compare")?.scrollIntoView({ block: "start" }), delay);
+    },
     async share() {
       const t = strings(store.get().locale);
       const url = `${window.location.href.split("#")[0]}${encodeState(store.get())}`;

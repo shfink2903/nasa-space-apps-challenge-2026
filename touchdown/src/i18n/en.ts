@@ -208,6 +208,9 @@ export const en: Strings = {
   close: "Close",
 
   guideTitle: "How to read this tool",
+  teachTitle: "For a class: why is the south pole so hard?",
+  teachText: "The Moon's axis is tilted only 1.5°. At Apollo 11, near the equator, the Sun climbs high and the Earth stays put in the sky. At the pole the Sun skims the horizon, so a hill can hide it for days, and the Earth bobs up and down with the libration.",
+  teachButton: "Compare the south pole with Apollo 11",
   guideSteps: [
     { title: "Pick a candidate", text: "Use the list on the right or a dot on the globe. Conditions show at once." },
     { title: "Move time", text: "The slider moves the Sun and the Earth. The bands show when each is visible." },
