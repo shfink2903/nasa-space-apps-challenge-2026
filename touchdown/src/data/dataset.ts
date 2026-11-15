@@ -4,7 +4,8 @@
  */
 import { lerpAngleDeg } from "./astro";
 
-export const DATA_BASE = "/data/v1";
+/** Relative to the page in a build ("./"), "/" in dev: works at a domain root and under a sub-path. */
+export const DATA_BASE = `${import.meta.env?.BASE_URL ?? "/"}data/v1`;
 
 export type SiteStatus = "historical" | "study_point";
 /** 0 = not visible, 1 = partly visible, 2 = fully visible, null = unknown. */

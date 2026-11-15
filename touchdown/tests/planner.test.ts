@@ -21,6 +21,8 @@ const row = (siteId: string, values: Partial<SiteMetrics>): SiteMetrics => ({
   scenarioId: `${siteId}-scenario`,
   comparable: true,
   darkGapCut: "000",
+  sunGapAtLeast: false,
+  earthGapAtLeast: false,
   sunShare: null,
   sunFullShare: null,
   sunGapH: null,
@@ -113,6 +115,30 @@ describe("requirements", () => {
     const missing = checkRequirements(row("b", { sunShare: 0.9 }), { minSunShare: 0.5, minEarthShare: 0.5, maxDarkH: null });
     expect(missing.map((r) => r.ok)).toEqual([true, null]);
     expect(verdict(missing)).toBe("unknown");
+  });
+});
+
+describe("longest night cut by the edge of the period", () => {
+  const cut = row("c", { sunShare: 0.5, sunGapH: 224, sunGapAtLeast: true });
+
+  it("is a lower bound: under the limit the check cannot conclude", () => {
+    const [r] = checkRequirements(cut, { minSunShare: null, minEarthShare: null, maxDarkH: 360 });
+    expect(r.ok).toBeNull();
+    expect(r.atLeast).toBe(true);
+    expect(verdict([r])).toBe("unknown");
+  });
+
+  it("over the limit it surely fails", () => {
+    const [r] = checkRequirements(cut, { minSunShare: null, minEarthShare: null, maxDarkH: 200 });
+    expect(r.ok).toBe(false);
+  });
+
+  it("is read from the published truncation flags", () => {
+    const all = [...byScenario.values()];
+    const flagged = all.filter((m) => m.sunGapAtLeast);
+    expect(flagged.length).toBeGreaterThan(0);
+    for (const m of flagged) expect(m.darkGapCut).not.toBe("000");
+    for (const m of all.filter((x) => !x.sunGapAtLeast)) expect(m.darkGapCut).toBe("000");
   });
 });
 

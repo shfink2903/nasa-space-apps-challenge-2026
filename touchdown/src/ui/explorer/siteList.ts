@@ -33,8 +33,12 @@ export function createSiteList(ui: Ui): HTMLElement {
   );
 
   ui.watch(
-    (s) => [s.sites, s.scope, s.criterion, s.date, s.heightM, s.requirements, s.focusId, s.hoverId, s.compareIds, s.dataVersion],
+    (s) => [s.sites, s.scope, s.criterion, s.date, s.heightM, s.requirements, s.focusId, s.compareIds, s.dataVersion],
     (s) => {
+      // Keep keyboard focus on the same row after the rebuild.
+      const active = document.activeElement as HTMLElement | null;
+      const focusedId = active && body.contains(active) ? (active.closest("[data-site]") as HTMLElement | null)?.dataset.site : undefined;
+      const focusedCompare = active?.classList.contains("row-compare") ?? false;
       criterion.value = s.criterion;
       for (const x of scope) x.b.classList.toggle("is-on", x.value === s.scope);
       const ranking = rankingFor(s, resources);
@@ -76,12 +80,20 @@ export function createSiteList(ui: Ui): HTMLElement {
             h("span", { class: "site-value" }, fmt.percent(value), h("i", { class: "dot", "data-verdict": v, title: t.verdict[v] })),
           );
           main.addEventListener("click", () => actions.selectSite(id));
-          const el = h("div", { class: `site-row group-${groupOf(site)} ${id === s.focusId ? "is-selected" : ""} ${id === s.hoverId ? "is-hover" : ""}` }, main, add);
+          const el = h("div", { class: `site-row group-${groupOf(site)} ${id === s.focusId ? "is-selected" : ""} ${id === s.hoverId ? "is-hover" : ""}`, "data-site": id }, main, add);
           el.addEventListener("pointerenter", () => actions.hover(id));
           el.addEventListener("pointerleave", () => actions.hover(null));
           return id === firstReference ? [h("h3", { class: "group-title", text: t.references }), el] : [el];
         }),
       );
+      if (focusedId) body.querySelector<HTMLElement>(`[data-site="${focusedId}"] ${focusedCompare ? ".row-compare" : ".site-main"}`)?.focus();
+    },
+  );
+  // Hover only moves a class: rebuilding the list on hover lost clicks.
+  ui.watch(
+    (s) => [s.hoverId],
+    (s) => {
+      for (const row of body.querySelectorAll<HTMLElement>("[data-site]")) row.classList.toggle("is-hover", row.dataset.site === s.hoverId);
     },
   );
   return panel;

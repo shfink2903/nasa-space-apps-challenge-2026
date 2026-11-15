@@ -220,7 +220,7 @@ export function createAssistant(ui: Ui): HTMLElement {
       const m = metricsFor(s, resources, site);
       if (m) {
         lines.push(`${t.over30}: ${t.sunShare.toLowerCase()} ${fmt.percent(m.sunShare)}, ${t.earthShare.toLowerCase()} ${fmt.percent(m.earthShare)}, ${t.bothShare.toLowerCase()} ${fmt.percent(m.bothShare)}.`);
-        lines.push(`${t.longestNight}: ${fmt.gap(m.sunGapH)}. ${t.longestBlackout}: ${fmt.gap(m.earthGapH)}.`);
+        lines.push(`${t.longestNight}: ${fmt.gap(m.sunGapH, m.sunGapAtLeast)}. ${t.longestBlackout}: ${fmt.gap(m.earthGapH, m.earthGapAtLeast)}.`);
         lines.push(t.verdict[verdict(checkRequirements(m, s.requirements))]);
       }
       summary.replaceChildren(...lines.map((line) => h("li", { text: line })));

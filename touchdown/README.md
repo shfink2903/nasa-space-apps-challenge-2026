@@ -43,6 +43,8 @@ Optional AI assistant: start the local service from the repository root with `py
 - Side by side: 2 or 3 sites with live countdowns, their numbers, their visibility windows on one time axis, and their Sun and Earth elevation curves.
 - When to land: one row per site, 52 weekly start dates, coloured by the chosen share. Click a cell to pick the date.
 - A small move changes everything: the 5 x 5 grid (1 km spacing) around each candidate.
+- Any coordinates: type a latitude and longitude (or pick IM-2, Chang'e-7 candidate, Luna-25) for a quick look without terrain.
+- Energy (team estimate): sunlight on a vertical Sun-facing panel in kWh/m² over 30 days, and the battery for a 100 W load through the longest night. A longest night cut by the edge of the period is shown as "≥" and gives an "unknown" verdict.
 - Method and limits: validation status and the limits published with the scenarios, in their original text.
 
 ## What is real and what is not
@@ -70,7 +72,8 @@ Limits to keep in mind:
 
 - All scenarios are marked `not_validated` in the dataset. The terrain model is a preliminary product.
 - "Visible" means above the local horizon. It does not prove electrical power or a radio link.
-- The candidates are the three study points of the team. Free coordinates are not possible in the browser: the computation needs ephemerides and terrain data.
+- The candidates are the three study points of the team (the 86° S point sits near the Malapert massif).
+- Any coordinates: computed in the browser on a smooth sphere from a published geometric series (terrain ignored, shares from 600 s samples). A test checks that it gives back the published series of all 13 sites within 0.002°. LOLA terrain for a new point still needs the Python pipeline (`compute_custom_point`).
 
 ## How it is built
 

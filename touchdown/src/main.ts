@@ -10,7 +10,7 @@ import { availableDates, loadSites, sampleSeries, type Site } from "./data/datas
 import { Resources, type Bundle } from "./data/resources";
 import { initialLocale, saveLocale, strings } from "./i18n";
 import { groupOf, isPolar, orderedSites, scopeSites } from "./planner/catalog";
-import { bundleFor, focusSite, rankingFor, siteById } from "./planner/select";
+import { bundleFor, focusSite, rankingFor, scenarioIdFor, siteById } from "./planner/select";
 import { Director } from "./scene/director";
 import { OrbitScene } from "./scene/orbitScene";
 import { Stage } from "./scene/renderer";
@@ -29,7 +29,10 @@ import { createFormat } from "./ui/format";
 import { createGuide } from "./ui/guide";
 import { createTopBar } from "./ui/topbar";
 
-const FIRST_SITE = "sp_s8950";
+// Open on the sunniest study point (near Malapert massif): a first screen that shows a workable site.
+const FIRST_SITE = "sp_s8600";
+/** Base of the static assets: "./" in a build, "/" in dev. */
+const ASSETS = import.meta.env?.BASE_URL ?? "/";
 const STEPS_PER_HOUR = 6; // the display series has one step per 600 s
 const MAX_COMPARE = 3;
 
@@ -61,7 +64,13 @@ async function boot(): Promise<void> {
   const locale = initialLocale();
   document.documentElement.lang = locale;
   $("loader-text").textContent = strings(locale).loading;
-  const stage = new Stage(canvas);
+  let stage: Stage;
+  try {
+    stage = new Stage(canvas);
+  } catch (error) {
+    // Without WebGL the 3D view cannot start. Say so plainly instead of blaming the dataset.
+    throw Object.assign(new Error("webgl"), { cause: error, webgl: true });
+  }
 
   // --- Data: the catalogue first. Everything else loads when a view asks for it. ---
   const sites = orderedSites(await loadSites());
@@ -97,10 +106,10 @@ async function boot(): Promise<void> {
   manager.onProgress = (_url, loaded, total) => (fill.style.width = `${Math.round((loaded / total) * 100)}%`);
   const small = Math.min(window.screen.width, window.screen.height) < 800 || stage.maxTextureSize < 8192;
   const [moonColor, moonSlope, earth, gltf] = await Promise.all([
-    loadTexture(manager, small ? "/textures/moon_color_4k.jpg" : "/textures/moon_color_8k.jpg", true),
-    loadTexture(manager, "/textures/moon_slope_4k.jpg", false),
-    loadTexture(manager, "/textures/earth_2k.jpg", true).catch(() => null),
-    new GLTFLoader(manager).loadAsync("/models/starship.glb"),
+    loadTexture(manager, small ? `${ASSETS}textures/moon_color_4k.jpg` : `${ASSETS}textures/moon_color_8k.jpg`, true),
+    loadTexture(manager, `${ASSETS}textures/moon_slope_4k.jpg`, false),
+    loadTexture(manager, `${ASSETS}textures/earth_2k.jpg`, true).catch(() => null),
+    new GLTFLoader(manager).loadAsync(`${ASSETS}models/starship.glb`),
   ]);
   const hullEnv = createHullEnvironment(stage.renderer);
   const orbit = new OrbitScene({ moonColor, moonSlope, earth, ship: gltf.scene, hullEnv });
@@ -272,9 +281,8 @@ async function boot(): Promise<void> {
     const ranking = rankingFor(s, resources);
     if (!ranking.complete || ranking.rows.length === 0) return;
     userPicked = true;
-    // The best candidate, compared with the other candidates.
-    const best = ranking.rows[0].metrics.siteId;
-    store.set({ focusId: best, compareIds: ranking.rows.slice(0, MAX_COMPARE).map((r) => r.metrics.siteId) });
+    // The candidates side by side. The focus stays on the opening site, which meets the example requirements.
+    store.set({ compareIds: ranking.rows.slice(0, MAX_COMPARE).map((r) => r.metrics.siteId) });
   });
 
   // --- Input. ---
@@ -337,6 +345,11 @@ async function boot(): Promise<void> {
     let s = store.get();
     const site = focusSite(s);
     const bundle = bundleFor(s, resources, site);
+    const scenarioId = scenarioIdFor(s, site);
+    if (!light && !bundle && scenarioId && resources.bundleFailed(scenarioId)) {
+      // The first site could not load, even after retries: say it and offer a retry instead of a frozen loader.
+      showLoadError(strings(s.locale), () => resources.retryFailed());
+    }
     if (bundle && light?.bundle !== bundle) {
       const first = light === null;
       const sameSite = light?.site.id === site.id;
@@ -405,8 +418,28 @@ async function boot(): Promise<void> {
   requestAnimationFrame(frame);
 }
 
+/** Readable error on the loader, with a retry button when a retry can help. */
+function showLoadError(t: ReturnType<typeof strings>, retry?: () => void, message = t.loadError): void {
+  if (loader.classList.contains("is-error")) return;
+  $("loader-text").textContent = message;
+  loader.classList.add("is-error");
+  if (!retry) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "button loader-retry";
+  button.textContent = t.retry;
+  button.addEventListener("click", () => {
+    button.remove();
+    loader.classList.remove("is-error");
+    $("loader-text").textContent = t.loading;
+    retry();
+  });
+  $("loader-text").after(button);
+}
+
 boot().catch((err) => {
   console.error(err);
-  $("loader-text").textContent = strings(initialLocale()).loadError;
-  loader.classList.add("is-error");
+  const t = strings(initialLocale());
+  if ((err as { webgl?: boolean }).webgl) showLoadError(t, undefined, t.noWebgl);
+  else showLoadError(t, () => window.location.reload());
 });

@@ -51,6 +51,8 @@ function serveDataset(): Plugin {
 }
 
 export default defineConfig({
+  // Relative asset paths: the build works at a domain root and under a sub-path (GitHub Pages project site).
+  base: "./",
   plugins: [serveDataset()],
   // The optional AI service (python -m lunar_data.server) listens on 8001. Without it the app still works.
   server: { host: "127.0.0.1", port: 5180, strictPort: true, proxy: { "/api": "http://127.0.0.1:8001" } },

@@ -9,6 +9,8 @@ Read CHALLENGE.md for any informations about the challenge itself.
 Detailed DATA plan (French, documentation only): [data.md](data.md).
 Executable DATA pipeline and offline reader: [DATA_PIPELINE.md](DATA_PIPELINE.md).
 
+Submission kit (project page text, 30 s video script, checklist, deployment): [SUBMISSION.md](SUBMISSION.md). Audit of 15 November: [docs/audit/AUDIT-2026-11-15.md](docs/audit/AUDIT-2026-11-15.md).
+
 ## Our challenge
 
 **Lunar Landing Site Navigator** (difficulty: Advanced / Intermediate; subjects: Human Exploration, Moon, Software, Space Exploration)

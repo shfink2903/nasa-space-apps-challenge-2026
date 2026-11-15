@@ -1,7 +1,7 @@
 :root {
   --ink: #eef1f6;
   --muted: #8b93a6;
-  --faint: #5d6477;
+  --faint: #7a8296; /* 5:1 on --solid (WCAG AA for small text) */
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.16);
   --glass: rgba(9, 12, 19, 0.66);
@@ -391,6 +391,22 @@ body[data-tab="explorer"] .data-view {
   background: rgba(255, 143, 122, 0.12);
   color: var(--bad);
 }
+.tag-good {
+  background: rgba(123, 224, 181, 0.12);
+  color: var(--both);
+}
+p.tag {
+  display: block;
+  padding: 6px 10px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.limits-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 12px;
+}
 .tag-pareto,
 .pareto {
   background: rgba(123, 224, 181, 0.14);
@@ -778,6 +794,9 @@ input[type="range"] {
 .verdict-why {
   color: var(--bad);
   font-size: 11.5px;
+}
+.verdict-why.is-note {
+  color: var(--muted);
 }
 .site-card .chart-panorama {
   height: 150px;
@@ -1680,7 +1699,8 @@ input[type="range"] {
 
 @media (max-width: 980px) {
   .data-grid {
-    grid-template-columns: 1fr;
+    /* minmax(0, …): the wide ranking table must scroll inside its card, not widen the page. */
+    grid-template-columns: minmax(0, 1fr);
   }
   /* The scene stays behind. The panels scroll over its lower part. */
   .explorer {
@@ -1689,8 +1709,13 @@ input[type="range"] {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    pointer-events: auto !important;
+    /* Taps on the empty top part go through to the globe, its pins and the ground view. */
+    pointer-events: none !important;
     background: linear-gradient(transparent 30vh, rgba(4, 6, 10, 0.85) 52vh);
+  }
+  .explorer > *,
+  .explorer .rail > * {
+    pointer-events: auto;
   }
   .rail {
     position: static;
@@ -1743,6 +1768,16 @@ input[type="range"] {
   .stepper {
     min-width: 240px;
   }
+  /* Keep the language switch inside a 390 px screen. */
+  .topbar-right {
+    gap: 2px;
+  }
+  .topbar-right .segment {
+    padding: 0 7px;
+  }
+  .topbar {
+    padding-inline: 8px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1751,5 +1786,59 @@ input[type="range"] {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+.loader-retry {
+  margin-top: 14px;
+  pointer-events: auto;
+}
+
+/* Any coordinates (Compare tab) */
+.custom-presets {
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.custom-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.custom-form .field {
+  flex: 1 1 160px;
+  max-width: 240px;
+}
+.coord-input {
+  padding-right: 10px;
+  background-image: none;
+  cursor: text;
+  font-family: var(--mono);
+}
+.custom-result {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+.custom-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  column-gap: 24px;
+}
+.custom-facts .section-title {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 430px) {
+  /* Narrow phones: the logo gives way so the tabs and the language switch fit. */
+  .topbar .brand {
+    display: none;
+  }
+  .topbar {
+    grid-template-columns: 1fr auto;
+  }
+  .tab {
+    padding: 0 7px;
+    font-size: 12px;
   }
 }

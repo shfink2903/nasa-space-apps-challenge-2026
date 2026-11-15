@@ -30,6 +30,20 @@ interface Entry<T> {
   failed?: boolean;
 }
 
+/** A slow or filtered network can drop one request: try again before giving up. */
+const RETRY_DELAYS_MS = [800, 2500];
+
+async function withRetry<T>(load: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await load();
+    } catch (error) {
+      if (attempt >= RETRY_DELAYS_MS.length) throw error;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
 export class Resources {
   private readonly cache = new Map<string, Entry<unknown>>();
   private notifyQueued = false;
@@ -52,9 +66,15 @@ export class Resources {
     });
   }
 
-  /** True when the download of this scenario failed. */
+  /** True when the download of this scenario failed, after the retries. */
   bundleFailed(scenarioId: string): boolean {
     return this.cache.get(`bundle:${scenarioId}`)?.failed === true;
+  }
+
+  /** Forget the failed downloads, so the next request starts them again. */
+  retryFailed(): void {
+    for (const [key, entry] of this.cache) if (entry.failed) this.cache.delete(key);
+    this.notify();
   }
 
   private get<T>(key: string, load: () => Promise<T>): T | undefined {
@@ -63,7 +83,7 @@ export class Resources {
       entry = {};
       this.cache.set(key, entry);
       const target = entry;
-      load().then(
+      withRetry(load).then(
         (value) => {
           target.value = value;
           this.notify();

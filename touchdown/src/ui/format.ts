@@ -16,8 +16,8 @@ export interface Format {
   elevation(deg: number | null): string;
   /** Fraction 0..1 to "23.1 %". */
   percent(fraction: number | null): string;
-  /** Hours as "536 h (22.3 d)", or just hours under two days. */
-  gap(hours: number | null): string;
+  /** Hours as "536 h (22.3 d)", or just hours under two days. "≥" first when the value is a lower bound. */
+  gap(hours: number | null, atLeast?: boolean): string;
   hours(hours: number | null): string;
   duration(ms: number): string;
   number(value: number, digits?: number): string;
@@ -52,10 +52,11 @@ export function createFormat(t: Strings): Format {
     elevation: (deg) => (deg === null ? "—" : `${deg < 0 ? "−" : "+"}${n1.format(Math.abs(deg))}°`),
     percent: (fraction) => (fraction === null ? "—" : `${n1.format(fraction * 100)} %`),
     hours: (hours) => (hours === null ? "—" : t.hours(n0.format(hours))),
-    gap: (hours) => {
+    gap: (hours, atLeast = false) => {
       if (hours === null) return "—";
       const h = t.hours(n0.format(hours));
-      return hours >= 48 ? `${h} · ${t.days(n1.format(hours / 24))}` : h;
+      const text = hours >= 48 ? `${h} · ${t.days(n1.format(hours / 24))}` : h;
+      return atLeast ? `≥ ${text}` : text;
     },
     duration: (ms) => {
       const d = splitDuration(ms);
@@ -64,6 +65,9 @@ export function createFormat(t: Strings): Format {
     number,
     coords: (latDeg, lonDeg) =>
       `${n2.format(Math.abs(latDeg))}° ${latDeg >= 0 ? t.north : t.south} · ${n2.format(Math.abs(lonDeg))}° ${lonDeg >= 0 ? t.east : t.west}`,
-    site: (site) => (site.status === "study_point" ? `${t.studyPoint} ${n1.format(Math.abs(site.latDeg))}° ${t.south}` : site.name.split(" – ")[0]),
+    site: (site) =>
+      site.status === "study_point"
+        ? `${t.studyPoint} ${n1.format(Math.abs(site.latDeg))}° ${t.south}${t.places[site.id] ? ` · ${t.places[site.id]}` : ""}`
+        : site.name.split(" – ")[0],
   };
 }

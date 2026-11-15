@@ -1,3 +1,4 @@
+import { batteryKWh, DEFAULT_SURVIVAL_LOAD_W, incidentEnergyKWhM2 } from "../../planner/power";
 import { createCalendarHeatmap } from "../../charts/calendarHeatmap";
 import { createElevationChart } from "../../charts/elevationChart";
 import { createSensitivityGrid } from "../../charts/sensitivityGrid";
@@ -12,6 +13,7 @@ import { bundleFor, focusSite, modelFor, rankedOrder, rankingFor, siteById } fro
 import type { AppState } from "../../state";
 import type { Ui } from "../context";
 import { h, icon } from "../dom";
+import { customPoint } from "./customPoint";
 
 /** One colour per compared site, in the order they were picked. */
 const SITE_COLORS = ["#ffd08a", "#8fe3c4", "#c9a6ff"];
@@ -160,9 +162,9 @@ function rankingTable(ui: Ui): HTMLElement {
             ),
             cellBar(m.bothShare, "both", key === "bothShare"),
             cellBar(m.sunShare, "sun", key === "sunShare"),
-            h("td", { class: "cell-num", text: fmt.gap(m.sunGapH) }),
+            h("td", { class: "cell-num", text: fmt.gap(m.sunGapH, m.sunGapAtLeast) }),
             cellBar(m.earthShare, "earth", key === "earthShare"),
-            h("td", { class: "cell-num", text: fmt.gap(m.earthGapH) }),
+            h("td", { class: "cell-num", text: fmt.gap(m.earthGapH, m.earthGapAtLeast) }),
             h("td", { class: "cell-num", text: fmt.elevation(m.sunMaxElDeg) }),
             h("td", null, h("span", { class: "verdict", "data-verdict": v, title: t.verdict[v], text: t.verdictShort[v] })),
             h("td", { class: "cell-check" }, check),
@@ -245,7 +247,8 @@ function requirements(ui: Ui): HTMLElement {
             bestIndex = i;
           }
         });
-        if (bestIndex >= 0 && s.dates[bestIndex]) lines.push(t.briefDateTip(fmt.site(site), fmt.startDateShort(s.dates[bestIndex]), fmt.percent(bestValue)));
+        // A best date only means something when the value is not zero everywhere.
+        if (bestIndex >= 0 && bestValue > 0 && s.dates[bestIndex]) lines.push(t.briefDateTip(fmt.site(site), fmt.startDateShort(s.dates[bestIndex]), fmt.percent(bestValue)));
       }
       brief.replaceChildren(...lines.map((line) => h("li", { text: line })));
     },
@@ -272,8 +275,10 @@ function compare(ui: Ui): HTMLElement {
   const card = section(t.compareTitle, null, hint, columns, legend, strips, charts);
 
   ui.watch(
-    (s) => [s.compareIds, s.date, s.heightM, s.scope, s.criterion, s.requirements, s.index, s.dataVersion],
+    (s) => [s.tab, s.compareIds, s.date, s.heightM, s.scope, s.criterion, s.requirements, s.index, s.dataVersion],
     (s) => {
+      // Hidden behind the 3D tab: skip the rebuild (it ran on every frame while playing).
+      if (s.tab !== "data") return;
       const picked = s.compareIds.map((id) => siteById(s, id)).filter((x): x is Site => x !== undefined);
       hint.hidden = picked.length >= 2;
       const ranking = rankingFor(s, resources);
@@ -326,9 +331,17 @@ function compare(ui: Ui): HTMLElement {
             fact(t.bothShare, fmt.percent(m?.bothShare ?? null), key === "bothShare"),
             fact(t.sunShare, fmt.percent(m?.sunShare ?? null), key === "sunShare"),
             fact(t.earthShare, fmt.percent(m?.earthShare ?? null), key === "earthShare"),
-            fact(t.longestNight, fmt.gap(m?.sunGapH ?? null)),
-            fact(t.longestBlackout, fmt.gap(m?.earthGapH ?? null)),
+            fact(t.longestNight, fmt.gap(m?.sunGapH ?? null, m?.sunGapAtLeast)),
+            fact(t.longestBlackout, fmt.gap(m?.earthGapH ?? null, m?.earthGapAtLeast)),
             fact(t.sunMaxEl, fmt.elevation(m?.sunMaxElDeg ?? null)),
+            fact(t.energyLabel, (() => {
+              const kwh = m ? incidentEnergyKWhM2(m) : null;
+              return kwh === null ? "—" : `${fmt.number(kwh, 0)} kWh/m²`;
+            })()),
+            fact(t.batteryLabel(fmt.number(DEFAULT_SURVIVAL_LOAD_W, 0)), (() => {
+              const bat = batteryKWh(m?.sunGapH ?? null);
+              return bat === null ? "—" : `${m?.sunGapAtLeast ? "≥ " : ""}${t.kwh(fmt.number(bat, 1))}`;
+            })()),
             h("div", { class: "fact fact-verdict" }, h("span", { text: t.requirements }), h("span", { class: "verdict", "data-verdict": v, text: t.verdict[v] })),
           );
         }),
@@ -500,10 +513,10 @@ function method(ui: Ui): HTMLElement {
   return section(
     t.methodTitle,
     null,
+    h("p", { class: "tag tag-good", text: t.horizonsCheck }),
     h("div", { class: "method" }, ...t.methodBody.map((p) => h("p", { text: p }))),
     status,
-    h("h3", { class: "section-title", text: t.limitsTitle }),
-    limits,
+    h("details", { class: "limits-details" }, h("summary", { text: t.limitsDetails }), h("h3", { class: "section-title", text: t.limitsTitle }), limits),
     h("p", { class: "note", text: t.sources }),
   );
 }
@@ -517,6 +530,7 @@ export function createDataView(ui: Ui): HTMLElement {
     toolbar(ui),
     h("div", { class: "data-grid" }, rankingTable(ui), requirements(ui)),
     compare(ui),
+    customPoint(ui, section),
     calendar(ui),
     sensitivity(ui),
     method(ui),

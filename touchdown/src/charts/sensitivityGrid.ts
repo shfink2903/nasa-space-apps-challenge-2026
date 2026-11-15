@@ -157,6 +157,9 @@ export function createSensitivityGrid(): SensitivityGrid {
     props = p;
     matrix = gridMatrix(p.cells);
     best = bestCell(p.cells);
+    // When every known cell has the same value (for example 0 % everywhere), no cell stands out.
+    const known = p.cells.map((c) => c.value).filter((v): v is number => v !== null && Number.isFinite(v));
+    if (known.length && Math.min(...known) === Math.max(...known)) best = null;
     title.textContent = p.title;
     north.textContent = `${p.labels.north} ↑`;
     scaleLabel.textContent = p.labels.scale;

@@ -29,6 +29,12 @@ export type SiteMetrics = {
   comparable: boolean;
   /** Which edges of the period cut the longest dark gap. Gaps cut in different ways are not compared. */
   darkGapCut: string;
+  /**
+   * True when the longest gap touches an edge of the 30-day period (or missing data):
+   * the published value is then only a lower bound, the real gap can be longer.
+   */
+  sunGapAtLeast: boolean;
+  earthGapAtLeast: boolean;
 } & Record<MetricKey, number | null>;
 
 /** The criteria of the dataset comparisons (comparisons/*.json, method.criteria). */
@@ -49,6 +55,9 @@ export function readMetrics(siteId: string, scenarioId: string, metrics: Metric[
   });
   const gap = find("sunGapH");
   out.darkGapCut = [gap?.truncatedStart, gap?.truncatedEnd, gap?.truncatedByMissingData].map((f) => (f ? "1" : "0")).join("");
+  const cut = (m: Metric | undefined): boolean => Boolean(m?.truncatedStart || m?.truncatedEnd || m?.truncatedByMissingData);
+  out.sunGapAtLeast = cut(gap);
+  out.earthGapAtLeast = cut(find("earthGapH"));
   return out;
 }
 

@@ -2,6 +2,7 @@ import { createHorizonPanorama } from "../../charts/horizonPanorama";
 import { sampleSeries, type DiskState } from "../../data/dataset";
 import { groupOf } from "../../planner/catalog";
 import { nextEvent, type Body } from "../../planner/clock";
+import { batteryKWh, DEFAULT_SURVIVAL_LOAD_W, incidentEnergyKWhM2, meanPowerWM2 } from "../../planner/power";
 import { checkRequirements, CRITERION_METRIC, verdict } from "../../planner/ranking";
 import { bundleFor, focusSite, metricsFor, modelFor, rankingFor } from "../../planner/select";
 import type { Ui } from "../context";
@@ -50,6 +51,8 @@ export function createSiteCard(ui: Ui): HTMLElement {
   const bothShare = bar(t.bothShare, "both");
   const night = h("b");
   const blackout = h("b");
+  const energy = h("b");
+  const battery = h("b");
   const verdictChip = h("span", { class: "verdict" });
   const verdictWhy = h("p", { class: "verdict-why" });
 
@@ -79,6 +82,9 @@ export function createSiteCard(ui: Ui): HTMLElement {
     bothShare.row,
     h("div", { class: "fact" }, h("span", { text: t.longestNight }), night),
     h("div", { class: "fact" }, h("span", { text: t.longestBlackout }), blackout),
+    h("h3", { class: "section-title", text: t.powerTitle }),
+    h("div", { class: "fact", title: t.energyHelp }, h("span", { text: t.energyLabel }), energy),
+    h("div", { class: "fact", title: t.batteryHelp }, h("span", { text: t.batteryLabel(fmt.number(DEFAULT_SURVIVAL_LOAD_W, 0)) }), battery),
     h("div", { class: "fact fact-verdict" }, h("span", { text: t.requirements }), verdictChip),
     verdictWhy,
     h("h3", { class: "section-title", text: t.localSky }),
@@ -120,15 +126,22 @@ export function createSiteCard(ui: Ui): HTMLElement {
       bothShare.row.classList.toggle("is-key", CRITERION_METRIC[s.criterion] === "bothShare");
       sunShare.row.classList.toggle("is-key", CRITERION_METRIC[s.criterion] === "sunShare");
       earthShare.row.classList.toggle("is-key", CRITERION_METRIC[s.criterion] === "earthShare");
-      night.textContent = fmt.gap(m?.sunGapH ?? null);
-      blackout.textContent = fmt.gap(m?.earthGapH ?? null);
+      night.textContent = fmt.gap(m?.sunGapH ?? null, m?.sunGapAtLeast);
+      blackout.textContent = fmt.gap(m?.earthGapH ?? null, m?.earthGapAtLeast);
+      const kwh = m ? incidentEnergyKWhM2(m) : null;
+      const w = meanPowerWM2(kwh);
+      energy.textContent = kwh === null || w === null ? "—" : t.energyValue(fmt.number(kwh, 0), fmt.number(w, 0));
+      const bat = batteryKWh(m?.sunGapH ?? null);
+      battery.textContent = bat === null ? "—" : `${m?.sunGapAtLeast ? "≥ " : ""}${t.kwh(fmt.number(bat, 1))}`;
 
       const results = m ? checkRequirements(m, s.requirements) : [];
       const v = m ? verdict(results) : "unknown";
       verdictChip.textContent = t.verdict[v];
       verdictChip.dataset.verdict = v;
       const failed = results.filter((r) => r.ok === false);
-      verdictWhy.hidden = failed.length === 0;
+      const cutUnknown = failed.length === 0 && results.some((r) => r.ok === null && r.atLeast);
+      verdictWhy.hidden = failed.length === 0 && !cutUnknown;
+      verdictWhy.classList.toggle("is-note", cutUnknown);
       verdictWhy.textContent = failed.length
         ? `${t.failBecause} ${failed
             .map((r) =>
@@ -137,7 +150,9 @@ export function createSiteCard(ui: Ui): HTMLElement {
                 : `${(r.key === "minSunShare" ? t.sunShare : t.earthShare).toLowerCase()} ${fmt.percent(r.value)} < ${fmt.percent(r.limit)}`,
             )
             .join(" · ")}`
-        : "";
+        : cutUnknown
+          ? t.gapCutNote
+          : "";
 
       const inCompare = s.compareIds.includes(site.id);
       compare.replaceChildren(icon(inCompare ? "check" : "plus"), t.addCompare);
@@ -182,7 +197,9 @@ export function createSiteCard(ui: Ui): HTMLElement {
       land.classList.toggle("is-blocked", dark);
       const sunriseEvent = dark ? nextEvent(bundle.scenario, "sun", sample.tMs) : null;
       landHelp.hidden = !dark || flying;
-      landHelp.textContent = sunriseEvent ? t.landBlockedHelp : t.noSunInPeriod;
+      // "No Sun at all" only when the Sun is never visible in the period; otherwise it already set for good.
+      const neverSun = !bundle.series.sunState.some((x) => (x ?? 0) > 0);
+      landHelp.textContent = sunriseEvent ? t.landBlockedHelp : neverSun ? t.noSunInPeriod : t.noRiseInPeriod;
       sunrise.hidden = !sunriseEvent || flying;
 
       panorama.update({

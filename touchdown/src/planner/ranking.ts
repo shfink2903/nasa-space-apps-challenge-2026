@@ -71,8 +71,10 @@ export interface RequirementResult {
   metric: MetricKey;
   limit: number;
   value: number | null;
-  /** Null when the metric was not published: the check cannot be made. */
+  /** Null when the check cannot be made: metric not published, or a lower bound that is still under the limit. */
   ok: boolean | null;
+  /** True when the value is a lower bound (gap cut by the edge of the period). */
+  atLeast: boolean;
 }
 
 const REQUIREMENT_METRIC: Record<RequirementKey, MetricKey> = {
@@ -89,8 +91,14 @@ export function checkRequirements(metrics: SiteMetrics, requirements: Requiremen
     if (limit === null) continue;
     const metric = REQUIREMENT_METRIC[key];
     const value = metrics[metric];
-    const ok = value === null ? null : key === "maxDarkH" ? value <= limit : value >= limit;
-    results.push({ key, metric, limit, value, ok });
+    const atLeast = key === "maxDarkH" && metrics.sunGapAtLeast;
+    let ok: boolean | null;
+    if (value === null) ok = null;
+    else if (key === "maxDarkH") {
+      // A cut gap is a lower bound: above the limit it surely fails, under it nothing can be said.
+      ok = value > limit ? false : atLeast ? null : true;
+    } else ok = value >= limit;
+    results.push({ key, metric, limit, value, ok, atLeast });
   }
   return results;
 }
