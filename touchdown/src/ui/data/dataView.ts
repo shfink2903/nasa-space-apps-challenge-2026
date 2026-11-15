@@ -315,7 +315,11 @@ function compare(ui: Ui): HTMLElement {
           const remove = h("button", { class: "icon-button", type: "button", "aria-label": t.removeCompare, title: t.removeCompare }, icon("cross"));
           remove.addEventListener("click", () => actions.toggleCompare(site.id));
           const open = h("button", { class: "link-button compare-name", type: "button", text: fmt.site(site) });
-          open.addEventListener("click", () => actions.selectSite(site.id));
+          open.title = t.view3d;
+          open.addEventListener("click", () => {
+            actions.selectSite(site.id);
+            actions.setTab("explorer");
+          });
           const now = h("div", { class: "compare-now" });
           if (bundle) {
             const sample = sampleSeries(bundle.series, s.index);
@@ -335,7 +339,7 @@ function compare(ui: Ui): HTMLElement {
                     "div",
                     { class: "now-text" },
                     h("strong", { text: bodyName === "sun" ? t.sun : t.earth }),
-                    h("span", { class: "now-countdown", text: ev ? (ev.type === "set" ? t.setIn(left) : t.riseIn(left)) : visible ? t.noSetInPeriod : t.noRiseInPeriod }),
+                    h("span", { class: "now-countdown", text: ev ? `${ev.type === "set" ? t.setAt(fmt.stamp(Date.parse(ev.tUtc))) : t.riseAt(fmt.stamp(Date.parse(ev.tUtc)))} · ${t.inDuration(left)}` : visible ? t.noSetInPeriod : t.noRiseInPeriod }),
                   ),
                   h("div", { class: "now-side" }, h("span", { class: "now-value", text: fmt.elevation(el) })),
                 ),
@@ -566,9 +570,10 @@ export function createDataView(ui: Ui): HTMLElement {
   };
   const parts: [keyof typeof t.sections, HTMLElement][] = [
     ["ranking", h("div", { class: "data-grid" }, rankingTable(ui), requirements(ui))],
+    // The calendar answers "our date slipped": right under the ranking.
+    ["calendar", calendar(ui)],
     ["compare", compare(ui)],
     ["custom", customPoint(ui, section)],
-    ["calendar", calendar(ui)],
     ["grid", sensitivity(ui)],
     ["method", method(ui)],
   ];

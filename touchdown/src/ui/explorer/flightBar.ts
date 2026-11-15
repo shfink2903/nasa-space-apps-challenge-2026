@@ -24,11 +24,26 @@ export function createFlightBar(ui: Ui): HTMLElement {
   back.addEventListener("click", () => actions.back());
   overview.addEventListener("click", () => actions.overview());
   auto.addEventListener("change", () => actions.setAutoFlight(auto.checked));
+  // Three ways in, one per kind of visitor. Shown on the overview only.
+  const quick = h(
+    "div",
+    { class: "quick-questions" },
+    ...([
+      [t.quickSlip, () => actions.goToSection("calendar")],
+      [t.quickSunset, () => actions.selectSite(ui.store.get().focusId)],
+      [t.quickWhy, () => actions.setGuide(true)],
+    ] as const).map(([label, run]) => {
+      const b = h("button", { class: "chip-button", type: "button", text: label });
+      b.addEventListener("click", run);
+      return b;
+    }),
+  );
 
   const bar = h(
     "section",
     { class: "flight-bar", "aria-live": "polite" },
     h("div", { class: "flight-head" }, kicker, title, text),
+    quick,
     stepper,
     h("div", { class: "flight-actions" }, overview, skip, back, autoLabel),
   );
@@ -52,6 +67,7 @@ export function createFlightBar(ui: Ui): HTMLElement {
       back.hidden = !flying;
       overview.hidden = s.phase !== "focus";
       autoLabel.hidden = flying;
+      quick.hidden = s.phase !== "cruise";
       auto.checked = s.autoFlight;
     },
   );

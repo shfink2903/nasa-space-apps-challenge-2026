@@ -58,8 +58,8 @@ try {
     await expect(page.locator(".site-card .share-sun b")).toHaveText(percent(metric(scenario.metrics, "sun.anyDisk.fraction")));
     await expect(page.locator(".site-card .share-earth b")).toHaveText(percent(metric(scenario.metrics, "earth.anyDisk.fraction")));
     await expect(page.locator(".site-card .share-both b")).toHaveText(percent(metric(scenario.metrics, "overlap.sunAny_earthAny.fraction")));
-    await expect(page.locator(".site-card .now-sun .now-countdown")).toHaveText(/Coucher dans|Lever dans|Pas de (coucher|lever)/);
-    await expect(page.locator(".site-card .now-earth .now-countdown")).toHaveText(/Coucher dans|Lever dans|Pas de (coucher|lever)/);
+    await expect(page.locator(".site-card .now-sun .now-countdown")).toHaveText(/Se (couche|lève) le .+ UTC · dans|Pas de (coucher|lever)/);
+    await expect(page.locator(".site-card .now-earth .now-countdown")).toHaveText(/Se (couche|lève) le .+ UTC · dans|Pas de (coucher|lever)/);
     await expect(page.locator("body")).toHaveAttribute("data-phase", /cruise|focus/);
     report.checks.push(`${id}: Sun and Earth elevation at sample 2160, Sun, Earth and Sun+Earth shares match the dataset; countdowns shown; no flight started`);
   }
@@ -68,7 +68,7 @@ try {
   const dark = sites.find((s) => s.id === "sp_s8800");
   await select(dark);
   await expect(page.locator(".site-card .button-primary")).toBeDisabled();
-  await expect(page.locator(".site-card .button-primary")).toContainText("refusé");
+  await expect(page.locator(".site-card .button-primary")).toContainText("pas d'atterrissage");
   report.checks.push("sp_s8800 (0 % Sun): landing refused");
 
   // 3. A sunlit site can: the landing runs (instant with reduced motion) and ends on the ground.

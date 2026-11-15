@@ -73,7 +73,8 @@ All Sun and Earth positions come from NASA/JPL DE440 ephemerides and are checked
 **The problem.** At the lunar south pole the Sun and the Earth never rise high. They skim the horizon, so one hill can cut power or contact for days, and a move of 1 km or one week can change everything. Tools such as Quickmap, Moon Trek and JPL Horizons have the data, but comparing site and date combinations means switching between expert interfaces. When a launch slips, teams need answers fast.
 
 **What Touchdown does**
-- **Pick a site and see it at once.** Sun and Earth elevation at the chosen time, whether each is visible, and a countdown to the next set or rise. A 360° sky panorama with the terrain skyline. A 3D view with beams toward the Sun and the Earth, and a ground view with a compass.
+- **Pick a site and see it at once.** Sun and Earth elevation at the chosen time and whether each is visible. The next set or rise is given as an absolute UTC time with a countdown, for example "Sets 14 Dec 01:45 UTC · in 12 d 4 h". The azimuth, the terrain horizon in that direction and the margin explain why a body is hidden, for example "terrain +19.8° · margin −18.4°". A 360° sky panorama shows the terrain skyline.
+- **3D views.** The 3D view opens on the south pole, lit by the real Sun direction at the chosen time, with a polar grid. Beams point toward the Sun and the Earth, and a ground view has a compass.
 - **Time.** A 30-day timeline with visibility bands for Sun, Earth and both together, plus elevation curves with the terrain horizon in their direction. Click, drag or press Play. Mast height 2 m or 10 m.
 - **Rank and screen.** Rank sites by "Sun + Earth together", "Sun" or "Earth". Set three mission limits and see which sites meet them and why. A Pareto badge marks non-dominated sites.
 - **Side by side.** Two or three sites with live countdowns and their windows on a shared time axis.
@@ -81,7 +82,15 @@ All Sun and Earth positions come from NASA/JPL DE440 ephemerides and are checked
 - **A small move changes everything.** A 5 × 5 grid at 1 km spacing around each study point.
 - **Power and battery estimates.** Sunlight on a vertical, Sun-facing panel (kWh/m² over 30 days, mean W/m²) and the battery needed to carry a 100 W survival load through the longest night. The assumptions are stated on screen.
 - **Any coordinates.** Type a latitude and longitude, or pick IM-2 Athena, the Chang'e-7 candidate site or the Luna-25 planned site. Sun and Earth are recomputed in the browser for the chosen date. This mode ignores terrain and is labelled as such.
-- **For every audience.** French and English, a 4-step guide, and plain-language labels. A rule-based summary is always on. An optional AI assistant answers only from the published numbers and cites them.
+- **Fast to use.**
+  - Three one-click questions on the opening screen: "Launch slipped: which week still works?", "When does the Sun set here?", "Why is the south pole so hard?".
+  - Sticky section links in the Compare tab.
+  - Share button: the address keeps the exact scenario (site, date, height, time, limits, compared sites), so a link reopens it.
+  - CSV downloads of the ranking and of the 52-week table.
+- **For a class.** A two-step lesson:
+  - On a smooth Moon, the 88° S point gets plenty of Sun, but never higher than +3°; Apollo 11 gets +88°.
+  - With the real LOLA terrain, the same point gets 0 % Sun all year. Terrain decides everything at the pole.
+- **For every audience.** French and English, a guide, and plain-language labels. A rule-based summary is always on. An optional AI assistant answers only from the published numbers and cites them.
 
 **How it works**
 1. A Python pipeline (`lunar_data/`) computes Sun and Earth azimuth and elevation with NASA/JPL SPICE kernels (DE440, Moon PA frame), with light-time and aberration corrections.
@@ -140,8 +149,8 @@ Record the live app at 1920 × 1080. Keep text large and the cursor slow. End on
 | Time | Screen | Voice / subtitle |
 |---|---|---|
 | 0–4 s | 3D Moon from below the south pole, Sun beam skimming the horizon | "At the Moon's south pole, the Sun barely rises. One hill can cut power for days." |
-| 4–10 s | Click the Malapert study point: countdowns, 360° skyline with Sun and Earth | "Touchdown shows the Sun and Earth on the real NASA LOLA horizon — and how long until they set." |
-| 10–16 s | Compare tab: ranking, then the 52-week calendar; click another week | "Launch slipped a week? Compare sites and dates in seconds." |
+| 4–10 s | Click the 88° S point: "Sun +1.4° · terrain +19.8° · margin −18.4°", then Malapert with "Sets 14 Dec 01:45 UTC" | "Touchdown shows the Sun and Earth on the real NASA LOLA horizon, and exactly when they set." |
+| 10–16 s | Click "Launch slipped: which week still works?": 52-week calendar, click a week, press Share | "Launch slipped? Compare sites and dates in seconds, and share the exact scenario." |
 | 16–21 s | 1 km grid: 61 % → 79.5 % | "Move one kilometre, gain twenty points of sunlight." |
 | 21–26 s | Energy and battery facts, then "Any coordinates" with IM-2 | "Energy, battery size, any coordinates, in your browser." |
 | 26–30 s | Green "checked against JPL Horizons" badge, then title card with URL and team name | "Validated against JPL Horizons. Touchdown — True Larpers, Paris." |

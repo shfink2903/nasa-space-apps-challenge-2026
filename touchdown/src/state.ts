@@ -95,6 +95,11 @@ export interface Actions {
   setGuide(open: boolean): void;
   /** Copies a link that opens on the current scenario. */
   share(): void;
-  /** Teaching shortcut: the south pole next to Apollo 11, side by side. */
-  showPoleVsApollo(): void;
+  /**
+   * Teaching shortcut, in two steps. 1: a pole point next to Apollo 11 on a smooth Moon (low Sun, but plenty of it).
+   * 2: the same with real LOLA terrain, where the pole point loses all its Sun.
+   */
+  showPoleVsApollo(step: 1 | 2): void;
+  /** Opens the Compare tab on one of its sections ("calendar", "ranking"…). */
+  goToSection(key: string): void;
 }

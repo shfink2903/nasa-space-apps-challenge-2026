@@ -50,6 +50,7 @@ export function createAssistant(ui: Ui): HTMLElement {
   const close = h("button", { class: "icon-button", type: "button", "aria-label": t.close, title: t.close }, icon("cross"));
   close.addEventListener("click", () => actions.setAssistant(false));
 
+  const liveTitle = h("h3", { class: "section-title", text: t.aiLive });
   const drawer = h(
     "aside",
     { class: "panel assistant", "aria-label": t.aiTitle, hidden: true },
@@ -57,7 +58,7 @@ export function createAssistant(ui: Ui): HTMLElement {
     h("h3", { class: "section-title", text: t.aiAuto }),
     summary,
     h("p", { class: "note", text: t.aiAutoNote }),
-    h("h3", { class: "section-title", text: t.aiLive }),
+    liveTitle,
     status,
     log,
     form,
@@ -75,10 +76,15 @@ export function createAssistant(ui: Ui): HTMLElement {
       const health = res.ok ? ((await res.json()) as { ai?: { configured?: boolean; model?: string } }) : null;
       if (!health?.ai) throw new Error("no service");
       form.hidden = !health.ai.configured;
+      liveTitle.hidden = false;
+      status.hidden = false;
       status.textContent = health.ai.configured ? (health.ai.model ?? "") : t.aiNotConfigured;
     } catch {
+      // Static hosting: no AI service. Show only what works, with one quiet line.
       form.hidden = true;
+      liveTitle.hidden = true;
       status.textContent = t.aiOffline;
+      status.classList.add("note");
     }
   }
 

@@ -395,6 +395,10 @@ body[data-tab="explorer"] .data-view {
   background: rgba(123, 224, 181, 0.12);
   color: var(--both);
 }
+p.tag,
+.data-card .tag-warn {
+  white-space: normal;
+}
 p.tag {
   display: block;
   padding: 6px 10px;
@@ -1231,7 +1235,10 @@ input[type="range"] {
 }
 .data-sticky {
   position: sticky;
-  top: 0;
+  /* Cancel the 20 px top padding of the scroll area, so nothing shows above the bar. */
+  top: -20px;
+  padding-top: 20px;
+  margin-top: -6px;
   z-index: 4;
   margin: 14px 0;
   padding-bottom: 8px;
@@ -1887,6 +1894,13 @@ input[type="range"] {
 }
 
 @media (max-width: 430px) {
+  /* The assistant summary repeats the site card; on a phone its button gives way to the language switch. */
+  .topbar-right .button-quiet[aria-label="Assistant"] {
+    display: none;
+  }
+  .flight-bar .switch {
+    display: none;
+  }
   /* Narrow phones: the logo gives way so the tabs and the language switch fit. */
   .topbar .brand {
     display: none;
@@ -1914,4 +1928,27 @@ input[type="range"] {
 }
 .data-card:has(.card-action) .data-head {
   padding-right: 84px;
+}
+
+.teach-steps {
+  display: grid;
+  gap: 8px;
+}
+
+.now-terrain {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.quick-questions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.quick-questions[hidden] {
+  display: none;
 }

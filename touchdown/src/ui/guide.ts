@@ -6,8 +6,11 @@ export function createGuide(ui: Ui): HTMLElement {
   const { t, actions } = ui;
   const close = h("button", { class: "icon-button", type: "button", "aria-label": t.close, title: t.close }, icon("cross"));
   close.addEventListener("click", () => actions.setGuide(false));
-  const teach = h("button", { class: "button button-primary", type: "button" }, icon("sun"), h("span", { text: t.teachButton }));
-  teach.addEventListener("click", () => actions.showPoleVsApollo());
+  const step1 = h("button", { class: "button button-primary", type: "button" }, icon("sun"), h("span", { text: t.teachButton }));
+  const step2 = h("button", { class: "button", type: "button" }, icon("target"), h("span", { text: t.teachButton2 }));
+  step1.addEventListener("click", () => actions.showPoleVsApollo(1));
+  step2.addEventListener("click", () => actions.showPoleVsApollo(2));
+  const teach = h("div", { class: "teach-steps" }, h("p", { class: "note", text: t.teachStep1 }), step1, h("p", { class: "note", text: t.teachStep2 }), step2);
   const panel = h(
     "aside",
     { class: "panel guide", "aria-label": t.guideTitle, hidden: true },

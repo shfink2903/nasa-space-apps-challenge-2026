@@ -1,4 +1,4 @@
-import { createHorizonPanorama } from "../../charts/horizonPanorama";
+import { createHorizonPanorama, profileAt } from "../../charts/horizonPanorama";
 import { sampleSeries, type DiskState } from "../../data/dataset";
 import { groupOf } from "../../planner/catalog";
 import { nextEvent, type Body } from "../../planner/clock";
@@ -27,15 +27,16 @@ export function createSiteCard(ui: Ui): HTMLElement {
     const value = h("span", { class: "now-value" });
     const state = h("small");
     const countdown = h("span", { class: "now-countdown" });
+    const terrain = h("span", { class: "now-terrain" });
     const status = h("span", { class: "status" });
     const row = h(
       "div",
       { class: `now-row now-${name}` },
       h("span", { class: "now-icon" }, icon(name === "sun" ? "sun" : "earth")),
-      h("div", { class: "now-text" }, h("strong", { text: name === "sun" ? t.sun : t.earth }), state, countdown),
+      h("div", { class: "now-text" }, h("strong", { text: name === "sun" ? t.sun : t.earth }), state, countdown, terrain),
       h("div", { class: "now-side" }, value, status),
     );
-    return { row, value, state, countdown, status };
+    return { row, value, state, countdown, terrain, status };
   };
   const sun = body("sun");
   const earth = body("earth");
@@ -172,9 +173,9 @@ export function createSiteCard(ui: Ui): HTMLElement {
       const sample = sampleSeries(bundle.series, s.index);
       const stateText = (state: DiskState): string => (state === null ? t.state.unknown : t.state[state]);
 
-      for (const [name, ui_, el, state] of [
-        ["sun", sun, sample.sunElDeg, sample.sunState],
-        ["earth", earth, sample.earthElDeg, sample.earthState],
+      for (const [name, ui_, el, state, az] of [
+        ["sun", sun, sample.sunElDeg, sample.sunState, sample.sunAzDeg],
+        ["earth", earth, sample.earthElDeg, sample.earthState, sample.earthAzDeg],
       ] as const) {
         const visible = (state ?? 0) > 0;
         ui_.value.textContent = fmt.elevation(el);
@@ -182,7 +183,16 @@ export function createSiteCard(ui: Ui): HTMLElement {
         ui_.row.classList.toggle("is-off", !visible);
         const ev = nextEvent(bundle.scenario, name, sample.tMs);
         const left = ev ? fmt.duration(Date.parse(ev.tUtc) - sample.tMs) : "";
-        ui_.countdown.textContent = ev ? (ev.type === "set" ? t.setIn(left) : t.riseIn(left)) : visible ? t.noSetInPeriod : t.noRiseInPeriod;
+        // Absolute UTC time first (what goes in a plan), the countdown after.
+        ui_.countdown.textContent = ev
+          ? `${ev.type === "set" ? t.setAt(fmt.stamp(Date.parse(ev.tUtc))) : t.riseAt(fmt.stamp(Date.parse(ev.tUtc)))} · ${t.inDuration(left)}`
+          : visible
+            ? t.noSetInPeriod
+            : t.noRiseInPeriod;
+        // Why it is (not) visible: the terrain horizon in that direction, from the published profile.
+        const ground = profileAt(bundle.horizon?.horizonElevationDeg, az);
+        ui_.terrain.textContent =
+          ground === null ? t.terrainNone(fmt.number(az, 0)) : t.terrainAt(fmt.number(az, 0), fmt.elevation(ground), fmt.elevation(el - ground));
         ui_.status.replaceChildren(
           icon(visible ? "check" : "cross"),
           name === "sun" ? (visible ? t.powerYes : t.powerNo) : visible ? t.linkYes : t.linkNo,
