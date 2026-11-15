@@ -1,169 +1,162 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { Scenario, Sweep } from "../src/data/dataset";
-import { nextEvent, splitDuration, windowAt } from "../src/planner/clock";
-import { METRIC_IDS, readMetrics, type MetricKey, type SiteMetrics } from "../src/planner/metrics";
-import { checkRequirements, paretoFront, rankSites, verdict } from "../src/planner/ranking";
+import {
+  bestModel,
+  indexAt,
+  metric,
+  pickScenarioId,
+  sweepValue,
+  visibilityAt,
+  type Derived,
+  type Scenario,
+  type Series,
+  type Site,
+} from "../src/data/dataset";
+import { CRITERIA, criterionById, rankSites, sitesIn, SOUTH_REGION_MAX_LAT_DEG } from "../src/data/ranking";
+import { formatDays, formatDaysShort } from "../src/ui/format";
+import { formatCriterion } from "../src/ui/bits";
 
 const DATA = resolve(__dirname, "../../data/processed/v1");
-const json = <T>(path: string): T => JSON.parse(readFileSync(resolve(DATA, path), "utf8")) as T;
+const read = <T>(path: string): T => JSON.parse(readFileSync(resolve(DATA, path), "utf8")) as T;
+const sites = read<{ sites: Site[] }>("sites.json").sites;
+const site = (id: string) => sites.find((s) => s.id === id)!;
+const scenario = (id: string) => read<Scenario>(`scenarios/${id}.json`);
+const derived = JSON.parse(readFileSync(resolve(__dirname, "../public/derived/v1.json"), "utf8")) as Derived;
+const DATE = "20261201";
 
-/** Published metrics of every scenario, from the 36 sweep files. */
-const byScenario = new Map<string, SiteMetrics>();
-for (const file of readdirSync(resolve(DATA, "sweeps"))) {
-  const sweep = json<Sweep>(`sweeps/${file}`);
-  for (const row of sweep.rows) byScenario.set(row.scenarioId, readMetrics(sweep.siteId, row.scenarioId, row.metrics));
-}
-
-const row = (siteId: string, values: Partial<SiteMetrics>): SiteMetrics => ({
-  siteId,
-  scenarioId: `${siteId}-scenario`,
-  comparable: true,
-  darkGapCut: "000",
-  published: Object.fromEntries(Object.entries(values).filter(([key, value]) => key in METRIC_IDS && typeof value === "number").map(([key, value]) => [key, { metricId: METRIC_IDS[key as MetricKey], value, quality: "complete", unit: key.endsWith("H") ? "h" : "1" }])),
-  sunShare: null,
-  sunFullShare: null,
-  sunGapH: null,
-  sunMaxElDeg: null,
-  sunMeanElDeg: null,
-  earthShare: null,
-  earthGapH: null,
-  earthMaxElDeg: null,
-  bothShare: null,
-  ...values,
-});
-
-describe("metrics", () => {
-  it("copies the published values and keeps missing ones as null", () => {
-    const sweep = json<Sweep>("sweeps/sp_s8950_h2m_lola_dates.json");
-    const first = sweep.rows[0];
-    const m = readMetrics("sp_s8950", first.scenarioId, first.metrics);
-    const published = (id: string) => first.metrics.find((x) => x.metricId === id)!.value;
-    expect(m.sunShare).toBe(published("sun.anyDisk.fraction"));
-    expect(m.earthGapH).toBe(published("earth.anyDisk.longestGapH"));
-    expect(m.bothShare).toBe(published("overlap.sunAny_earthAny.fraction"));
-    expect(readMetrics("x", "y", []).sunShare).toBeNull();
+describe("derived index is a faithful copy of the dataset", () => {
+  it("covers every sweep, comparison and sensitivity file", () => {
+    expect(Object.keys(derived.sweeps)).toHaveLength(readdirSync(resolve(DATA, "sweeps")).length);
+    expect(Object.keys(derived.comparisons)).toHaveLength(readdirSync(resolve(DATA, "comparisons")).length);
+    expect(Object.keys(derived.sensitivity)).toHaveLength(readdirSync(resolve(DATA, "sensitivity")).length);
   });
 
-  it("covers all 1,872 scenarios of the dataset", () => {
-    expect(byScenario.size).toBe(1872);
+  it("has the same 30-day metrics as the scenario files", () => {
+    for (const id of ["apollo11", "change4", "im1", "sp_s8800", "sp_s8950"]) {
+      const s = site(id);
+      for (const heightM of [2, 10]) {
+        const sc = scenario(pickScenarioId(s, DATE, heightM)!);
+        for (const metricId of derived.metricIds) expect(sweepValue(derived, s, heightM, DATE, metricId)).toBe(metric(sc, metricId));
+      }
+    }
+  });
+
+  it("copies the non-dominated set and the sensitivity ranges as published", () => {
+    for (const [key, entry] of Object.entries(derived.comparisons).slice(0, 12)) {
+      const doc = read<{ nonDominatedScenarioIds: string[]; modelLevel: string; exploredCount: number }>(`comparisons/${entry.comparisonId}.json`);
+      expect(entry.nonDominated).toEqual(doc.nonDominatedScenarioIds);
+      expect(key.endsWith(`|${doc.modelLevel}`)).toBe(true);
+      expect(entry.exploredCount).toBe(doc.exploredCount);
+    }
+    const sens = read<{ ranges: { metricId: string; min: number | null; max: number | null }[] }>("sensitivity/sp_s8600_h2m_grid1km.json");
+    for (const r of derived.sensitivity["sp_s8600|2"].ranges) {
+      const source = sens.ranges.find((x) => x.metricId === r.metricId)!;
+      expect([r.min, r.max]).toEqual([source.min, source.max]);
+    }
+    expect(derived.sensitivity["sp_s8600|2"].cells).toHaveLength(25);
+  });
+});
+
+describe("visibility from the published windows", () => {
+  const im1 = scenario(pickScenarioId(site("im1"), DATE)!);
+  const t0 = Date.parse("2026-12-01T00:00:00Z");
+
+  it("gives the exact time of the next sunset and of the next sunrise", () => {
+    const up = visibilityAt(im1, "sun.anyDisk", t0);
+    expect(up.visible).toBe(true);
+    expect(up.changeMs).toBe(Date.parse(im1.windows["sun.anyDisk"][0].endUtc));
+    const down = visibilityAt(im1, "sun.anyDisk", up.changeMs! + 1000);
+    expect(down.visible).toBe(false);
+    expect(down.changeMs).toBe(Date.parse(im1.windows["sun.anyDisk"][1].startUtc));
+  });
+
+  it("invents no set when the body stays up to the end of the analysis", () => {
+    const earth = visibilityAt(im1, "earth.anyDisk", t0 + 30 * 86400_000);
+    expect(earth).toEqual({ visible: true, changeMs: null });
+  });
+
+  it("invents no rise when the body never shows: far side Earth, polar night Sun", () => {
+    const farSide = scenario(pickScenarioId(site("change4"), DATE)!);
+    expect(visibilityAt(farSide, "earth.anyDisk", t0)).toEqual({ visible: false, changeMs: null });
+    const polar = scenario(pickScenarioId(site("sp_s8800"), DATE)!);
+    expect(metric(polar, "sun.anyDisk.fraction")).toBe(0);
+    expect(visibilityAt(polar, "sun.anyDisk", t0 + 86400_000)).toEqual({ visible: false, changeMs: null });
+  });
+
+  it("maps a time to the display index", () => {
+    const series = { t0Utc: "2026-12-01T00:00:00Z", stepS: 600, n: 4321 } as Series;
+    expect(indexAt(series, t0 + 3600_000)).toBe(6);
+    expect(indexAt(series, t0 - 1)).toBe(0);
+    expect(indexAt(series, t0 + 40 * 86400_000)).toBe(4320);
   });
 });
 
 describe("ranking", () => {
-  const rows = [
-    row("a", { bothShare: 0.2, sunShare: 0.5, earthShare: 0.3 }),
-    row("b", { bothShare: 0.4, sunShare: 0.1, earthShare: 0.9 }),
-    row("c", { bothShare: 0.4, sunShare: 0.3, earthShare: null }),
-    row("d", { sunShare: 0.3, earthShare: 0.1 }),
-  ];
-
-  it("orders on the chosen metric, shares a rank on ties and leaves missing values unranked", () => {
-    const balanced = rankSites(rows, "balanced");
-    expect(balanced.map((r) => [r.metrics.siteId, r.rank])).toEqual([["b", 1], ["c", 1], ["a", 3], ["d", null]]);
-    expect(rankSites(rows, "power").map((r) => r.metrics.siteId)).toEqual(["a", "c", "d", "b"]);
-    expect(rankSites(rows, "comms").map((r) => [r.metrics.siteId, r.rank])).toEqual([["b", 1], ["a", 2], ["d", 3], ["c", null]]);
+  it("uses the terrain model where the dataset has one", () => {
+    expect(bestModel(site("sp_s8950"))).toBe("lola");
+    expect(bestModel(site("apollo11"))).toBe("geometric");
   });
 
-  it("does not change its input", () => {
-    const before = rows.map((r) => r.siteId);
-    rankSites(rows, "power");
-    expect(rows.map((r) => r.siteId)).toEqual(before);
-  });
-});
-
-/**
- * The dataset holds 104 comparisons (52 dates x 2 models), each with its
- * non-dominated set. The planner computes the set in the browser, so it must
- * give exactly the same answer for every one of them.
- */
-describe("Pareto set", () => {
-  const files = readdirSync(resolve(DATA, "comparisons"));
-
-  it("is the same as the dataset for all 104 published comparisons", () => {
-    expect(files).toHaveLength(104);
-    for (const file of files) {
-      const c = json<{ scenarioIds: string[]; nonDominatedScenarioIds: string[] }>(`comparisons/${file}`);
-      const front = paretoFront(c.scenarioIds.map((id) => byScenario.get(id)!));
-      expect([...front].sort(), file).toEqual([...c.nonDominatedScenarioIds].sort());
+  it("orders every site by the chosen published metric, in the declared direction", () => {
+    for (const criterion of CRITERIA) {
+      const rows = rankSites(sites, derived, DATE, 2, criterion);
+      expect(rows).toHaveLength(sites.length);
+      const known = rows.filter((r) => r.value !== null).map((r) => r.value!);
+      const sorted = [...known].sort((a, b) => (criterion.direction === "max" ? b - a : a - b));
+      expect(known).toEqual(sorted);
+      expect(rows[0].rank).toBe(1);
+      for (const r of rows) expect(r.value).toBe(sweepValue(derived, r.site, 2, DATE, criterion.metricId));
     }
   });
 
-  it("keeps a scenario that cannot be compared, as the dataset does", () => {
-    const full = { sunShare: 0.5, earthShare: 0.5, sunGapH: 100, bothShare: 0.3 };
-    const worse = { sunShare: 0.4, earthShare: 0.4, sunGapH: 200, bothShare: 0.2 };
-    expect([...paretoFront([row("a", full), row("b", worse)])]).toEqual(["a-scenario"]);
-    expect([...paretoFront([row("a", full), row("b", { ...worse, comparable: false })])]).toEqual(["a-scenario", "b-scenario"]);
-    expect([...paretoFront([row("a", full), row("b", { ...worse, darkGapCut: "010" })])]).toEqual(["a-scenario", "b-scenario"]);
-  });
-});
-
-describe("requirements", () => {
-  const m = row("a", { sunShare: 0.3, earthShare: 0.4, sunGapH: 400 });
-
-  it("checks each active limit against the published metric", () => {
-    const results = checkRequirements(m, { minSunShare: 0.25, minEarthShare: 0.5, maxDarkH: 400 });
-    expect(results.map((r) => [r.key, r.ok])).toEqual([["minSunShare", true], ["minEarthShare", false], ["maxDarkH", true]]);
-    expect(verdict(results)).toBe("fail");
-    expect(verdict(checkRequirements(m, { minSunShare: 0.25, minEarthShare: null, maxDarkH: 500 }))).toBe("pass");
+  it("gives equal values the same rank and never ranks an unknown value", () => {
+    const rows = rankSites(sites, derived, DATE, 2, criterionById("overlap"));
+    const zeros = rows.filter((r) => r.value === 0);
+    expect(zeros.length).toBeGreaterThan(1);
+    expect(new Set(zeros.map((r) => r.rank)).size).toBe(1);
+    const none = rankSites(sites, derived, "19990101", 2, criterionById("sun"));
+    expect(none.every((r) => r.value === null && r.rank === null)).toBe(true);
   });
 
-  it("says so when no limit is set or a metric is missing", () => {
-    expect(verdict(checkRequirements(m, { minSunShare: null, minEarthShare: null, maxDarkH: null }))).toBe("none");
-    const missing = checkRequirements(row("b", { sunShare: 0.9 }), { minSunShare: 0.5, minEarthShare: 0.5, maxDarkH: null });
-    expect(missing.map((r) => r.ok)).toEqual([true, null]);
-    expect(verdict(missing)).toBe("unknown");
-  });
-
-  it("does not turn a published truncated night into a passing upper bound", () => {
-    const s = json<Scenario>("scenarios/sp_s8600_20270713_30d_h2m_lola_8f574ad2.json");
-    const m = readMetrics(s.siteId, s.scenarioId, s.metrics);
-    expect(m.published.sunGapH?.truncatedStart).toBe(true);
-    expect(m.sunGapH).toBeCloseTo(206.91341145833334);
-    expect(verdict(checkRequirements(m, { minSunShare: .25, minEarthShare: .25, maxDarkH: 360 }))).toBe("unknown");
-    expect(verdict(checkRequirements(m, { minSunShare: null, minEarthShare: null, maxDarkH: 200 }))).toBe("fail");
-  });
-
-  it("keeps partial and unknown numeric metrics unknown", () => {
-    for (const quality of ["partial", "unknown"]) {
-      const m = readMetrics("a", "b", [{ metricId: "sun.anyDisk.fraction", unit: "1", value: .8, quality }]);
-      expect(verdict(checkRequirements(m, { minSunShare: .5, minEarthShare: null, maxDarkH: null }))).toBe("unknown");
+  it("reads the non-dominated mark from the DATA comparison, at the row's model level", () => {
+    for (const r of rankSites(sites, derived, DATE, 2, criterionById("sun"))) {
+      const published = derived.comparisons[`${DATE}|${r.model}`].nonDominated;
+      expect(r.nonDominated).toBe(published.includes(r.scenarioId!));
     }
   });
 });
 
-describe("countdown", () => {
-  const sc = json<Scenario>("scenarios/sp_s8950_20261201_30d_h2m_lola_a0a2541a.json");
-  const t0 = Date.parse("2026-12-01T00:00:00Z");
+describe("region filter", () => {
+  it("keeps only the sites south of the shown limit, and ranks among them", () => {
+    const south = sitesIn(sites, "south");
+    expect(south.map((s) => s.id).sort()).toEqual(["chandrayaan3", "im1", "sp_s8600", "sp_s8800", "sp_s8950"]);
+    expect(south.every((s) => s.latDeg <= SOUTH_REGION_MAX_LAT_DEG)).toBe(true);
+    expect(sitesIn(sites, "all")).toHaveLength(sites.length);
+    const rows = rankSites(south, derived, DATE, 2, criterionById("overlap"));
+    expect(rows).toHaveLength(5);
+    expect(rows[0].rank).toBe(1);
+  });
+});
 
-  it("finds the next published rise or set of each body", () => {
-    const sunset = nextEvent(sc, "sun", t0)!;
-    expect(sunset.type).toBe("set");
-    expect(sunset.tUtc).toBe("2026-12-01T03:34:10.781Z");
-    expect(sc.events).toContain(sunset);
-    const earthrise = nextEvent(sc, "earth", t0)!;
-    expect(earthrise.type).toBe("rise");
-    expect(Date.parse(earthrise.tUtc)).toBeGreaterThan(t0);
-    expect(nextEvent(sc, "sun", t0 + 40 * 86_400_000)).toBeNull();
+describe("display", () => {
+  it("says a share in days, and keeps 0 and 30 for exact values only", () => {
+    expect(formatDaysShort(0)).toMatch(/^0\b/);
+    expect(formatDaysShort(1)).toMatch(/^30\b/);
+    expect(formatDaysShort(0.443)).toMatch(/^13\b/);
+    expect(formatDaysShort(0.02)).toContain("< 1");
+    expect(formatDaysShort(0.99)).toContain("> 29");
+    expect(formatDays(0.443)).toMatch(/^13 /);
+    expect(formatDays(0.02)).not.toMatch(/^0\b/);
+    expect(formatDays(0.99)).toContain("29");
   });
 
-  it("never returns a grazing or full-disc event", () => {
-    for (let d = 0; d < 30; d++) {
-      const ev = nextEvent(sc, "sun", t0 + d * 86_400_000);
-      if (ev) expect([ev.convention, ev.type === "grazing"]).toEqual(["anyDisk", false]);
-    }
-  });
-
-  it("knows whether a body is inside a published window", () => {
-    expect(windowAt(sc, "sun", t0 + 3_600_000)).not.toBeNull(); // before the 03:34 sunset
-    expect(windowAt(sc, "sun", t0 + 5 * 3_600_000)).toBeNull();
-    expect(windowAt(sc, "earth", t0)).toBeNull(); // Earth rises on 14 December
-    expect(windowAt(sc, "earth", Date.parse("2026-12-20T00:00:00Z"))).not.toBeNull();
-  });
-
-  it("splits a duration into days, hours and minutes", () => {
-    expect(splitDuration(((2 * 24 + 5) * 60 + 7) * 60_000 + 59_000)).toEqual({ days: 2, hours: 5, minutes: 7 });
-    expect(splitDuration(-5)).toEqual({ days: 0, hours: 0, minutes: 0 });
+  it("keeps the exact value on request and never shows a missing value as zero", () => {
+    const sun = criterionById("sun");
+    const night = criterionById("night");
+    expect(formatCriterion(sun, 0.4431, true)).toMatch(/44[.,]3/);
+    expect(formatCriterion(night, 401.3, true)).toMatch(/401[.,]3/);
+    expect(formatCriterion(sun, null)).toBe("—");
+    expect(formatCriterion(sun, null, true)).toBe("—");
   });
 });

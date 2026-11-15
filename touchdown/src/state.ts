@@ -1,30 +1,32 @@
-import type { Site } from "./data/dataset";
+import type { HorizonProfile, Scenario, Series, Site } from "./data/dataset";
+import type { Criteria } from "./data/mission";
+import type { Region } from "./data/ranking";
 import type { Phase } from "./flight/timeline";
-import type { Locale } from "./i18n";
-import type { Criterion, Requirements } from "./planner/ranking";
 
-export type Tab = "explorer" | "data";
-/** "polar": the five south-pole sites with the terrain model. "all": every site with the geometric model. */
-export type Scope = "polar" | "all";
-export interface ComparisonSelection { siteId: string; date: string }
+export type CompareTab = "date" | "year" | "delay";
 
 export interface AppState {
-  locale: Locale;
-  tab: Tab;
+  /** The user's mission thresholds. They decide the go / no-go answer. */
+  criteria: Criteria;
+  compareTab: CompareTab;
   sites: Site[];
   dates: string[];
-  /** Start of the 30-day period, YYYYMMDD. */
+  /** Analysis start date, YYYYMMDD. */
   date: string;
-  /** Observer height above the ground: 2 m (lander deck) or 10 m (mast). */
+  /** Selected site: the one shown in the site sheet, flown to or stood on. Null while cruising. */
+  siteId: string | null;
+  /** Observer height above the ground, in metres. The dataset publishes 2 and 10. */
   heightM: number;
-  scope: Scope;
-  criterion: Criterion;
-  requirements: Requirements;
-  /** The site everything is shown for. There is always one. */
-  focusId: string;
-  /** Explicit site/date pairs; height, duration and model are common. */
-  comparisons: ComparisonSelection[];
-  sceneStatus: "loading" | "ready" | "unavailable";
+  /** Id of the criterion that orders the site list (see data/ranking.ts). */
+  rankBy: string;
+  /** Sites shown in the ranking and the comparison: the south pole (default) or every site. */
+  region: Region;
+  /** The "Evaluate the sites" page is open (it covers the Moon). */
+  compareOpen: boolean;
+  /** The "Explore the mission" tour is running. */
+  touring: boolean;
+  /** Goes up each time a value of the free point is computed, so the panels redraw. */
+  customTick: number;
   hoverId: string | null;
   /** Fractional index in the display series (600 s steps). */
   index: number;
@@ -32,12 +34,12 @@ export interface AppState {
   /** Dataset hours per real second while playing. */
   speedH: number;
   phase: Phase;
-  /** When true, a click on a site starts the cinematic flight at once. */
-  autoFlight: boolean;
-  assistantOpen: boolean;
-  guideOpen: boolean;
-  /** Goes up each time data arrives from the network, so views draw again. */
-  dataVersion: number;
+  /** Series that drives Sun and Earth. It belongs to `lightSiteId`. */
+  series: Series | null;
+  scenario: Scenario | null;
+  /** Terrain horizon of the scenario, when the dataset has one. */
+  horizon: HorizonProfile | null;
+  lightSiteId: string | null;
 }
 
 export type Listener = (state: AppState, prev: AppState) => void;
@@ -56,7 +58,7 @@ export function createStore(initial: AppState): Store {
     set(patch) {
       const prev = state;
       state = { ...state, ...patch };
-      for (const l of [...listeners]) l(state, prev);
+      for (const l of listeners) l(state, prev);
     },
     subscribe(listener) {
       listeners.add(listener);
@@ -67,35 +69,32 @@ export function createStore(initial: AppState): Store {
 
 /** What the interface can ask the app to do. */
 export interface Actions {
-  setLocale(locale: Locale): void;
-  setTab(tab: Tab): void;
-  /** Shows a site: camera, numbers and charts. No flight unless "fly on click" is on. */
   selectSite(id: string): void;
+  /** Creates (or moves) the free point at these lunar coordinates and opens it. */
+  selectPoint(latDeg: number, lonDeg: number): void;
+  /** Creates (or moves) the free point without leaving the current page: it joins the tables. */
+  addPoint(latDeg: number, lonDeg: number): void;
+  /** Back to the home view: the whole Moon, no page, no tour. */
+  home(): void;
   hover(id: string | null): void;
-  toggleCompare(id: string): void;
-  addComparison(siteId: string, date?: string): void;
-  removeComparison(index: number): void;
-  setComparisonDate(index: number, date: string): void;
+  /** Starts the illustrative flight to the selected site. Does nothing when the Sun is not visible there. */
+  land(): void;
   setDate(date: string): void;
-  shiftDate(weeks: number): void;
   setHeight(heightM: number): void;
-  setScope(scope: Scope): void;
-  setCriterion(criterion: Criterion): void;
-  setRequirements(patch: Partial<Requirements>): void;
+  setRankBy(id: string): void;
+  setRegion(region: Region): void;
+  setCompare(open: boolean, tab?: CompareTab): void;
+  setCriteria(patch: Partial<Criteria>): void;
+  /** Moves to a UTC date and time: picks the weekly start that contains it, then the time inside it. */
+  goToTime(tMs: number): void;
+  startTour(): void;
+  /** From any view to the whole Moon, with no site selected. */
+  overview(): void;
+  /** Moves the time cursor to a UTC time inside the loaded 30 days. */
+  jumpTo(tMs: number): void;
   setIndex(index: number): void;
-  /** Moves the time to a UTC instant inside the period. */
-  setTime(tMs: number): void;
   togglePlay(): void;
   setSpeed(hoursPerSecond: number): void;
-  setAutoFlight(on: boolean): void;
-  /** Starts the cinematic landing on the selected site, if the Sun is visible there. */
-  land(): void;
-  jumpToSunrise(): void;
   skip(): void;
-  /** From the ground back to the site view. */
   back(): void;
-  /** Zooms out to the whole south pole. */
-  overview(): void;
-  setAssistant(open: boolean): void;
-  setGuide(open: boolean): void;
 }

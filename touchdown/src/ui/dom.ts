@@ -32,19 +32,10 @@ const ICONS: Record<string, string> = {
   back: '<path d="M4 12a8 8 0 108-8H7M7 4L4 7l3 3"/>',
   skip: '<path d="M5 5l9 7-9 7V5zM18 5v14"/>',
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  check: '<path d="M5 12.5l4.5 4.5L19 7.500"/>',
-  cross: '<path d="M6 6l12 12M18 6L6 18"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
   left: '<path d="M15 6l-6 6 6 6"/>',
   right: '<path d="M9 6l6 6-6 6"/>',
-  chat: '<path d="M4 5h16v11H9l-5 4V5z"/>',
-  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.500a2.500 2.500 0 113.500 2.300c-.7.400-1 1-1 1.700M12 17v.01"/>',
-  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
-  table: '<path d="M4 5h16v14H4zM4 10h16M4 15h16M10 5v14"/>',
-  link: '<path d="M5 19l14-14M9 5h10v10"/>',
-  bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6l1-7z"/>',
-  rocket: '<path d="M12 3c3 2 5 6 5 10l-2 3H9l-2-3c0-4 2-8 5-10zM9 16l-2 4 4-2M15 16l2 4-4-2"/><circle cx="12" cy="10" r="1.6"/>',
-  zoomOut: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6"/>',
 };
 
 export function icon(name: keyof typeof ICONS | string): SVGSVGElement {

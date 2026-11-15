@@ -5,10 +5,7 @@
  */
 import { length, normalize, scale, slerp, type Vec3 } from "../data/astro";
 
-/**
- * cruise: whole south pole. focus: one site, seen from orbit, numbers on screen.
- * transfer, descent, final: the illustrative landing. surface: on the ground.
- */
+/** "focus" is the orbit view zoomed on the selected site, before any flight. */
 export type Phase = "cruise" | "focus" | "transfer" | "descent" | "final" | "surface";
 
 export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));

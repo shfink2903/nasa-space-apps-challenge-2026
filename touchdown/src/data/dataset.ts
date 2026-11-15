@@ -6,7 +6,8 @@ import { lerpAngleDeg } from "./astro";
 
 export const DATA_BASE = "/data/v1";
 
-export type SiteStatus = "historical" | "study_point";
+/** "custom" is a free point chosen by the user; it is not in the dataset catalogue. */
+export type SiteStatus = "historical" | "study_point" | "announced" | "custom";
 /** 0 = not visible, 1 = partly visible, 2 = fully visible, null = unknown. */
 export type DiskState = 0 | 1 | 2 | null;
 
@@ -15,12 +16,16 @@ export interface Site {
   name: string;
   mission: string | null;
   status: SiteStatus;
-  /** "unverified" when the coordinates were not checked against a second source. */
-  verification: string;
   latDeg: number;
   lonDeg: number;
   terrainProduct: string | null;
+  /** "single_source", "unverified" or "team_defined", as published. */
+  verification: string;
   scenarioIds: string[];
+  /** True when the dataset has no scenario for the site: its values are a geometric estimate made in the browser. */
+  computed?: boolean;
+  /** Where the position comes from, for the sites added to the dataset catalogue. */
+  source?: { title: string; url: string };
 }
 
 export interface Series {
@@ -37,17 +42,9 @@ export interface Series {
   earthAngularRadiusDeg: number[];
 }
 
-/** A published visibility window. "truncated" means it touches the edge of the 30-day period. */
-export interface TimeWindow {
-  startUtc: string;
-  endUtc: string;
-  truncatedStart: boolean;
-  truncatedEnd: boolean;
-}
-
 export interface ScenarioEvent {
   body: "sun" | "earth";
-  type: "rise" | "set" | "grazing";
+  type: "rise" | "set";
   convention: "anyDisk" | "fullDisk";
   tUtc: string;
 }
@@ -57,83 +54,42 @@ export interface Metric {
   value: number | null;
   unit: string;
   quality: string;
-  /** Only on "longest gap" metrics: the gap touches an edge of the period, so it is a lower bound. */
-  truncatedStart?: boolean;
-  truncatedEnd?: boolean;
-  truncatedByMissingData?: boolean;
 }
+
+/** Exact visibility interval [startUtc, endUtc), from the 60 s grid refined to 1 s. */
+export interface VisibilityWindow {
+  startUtc: string;
+  endUtc: string;
+  truncatedStart: boolean;
+  truncatedEnd: boolean;
+}
+
+export type WindowKey = "sun.anyDisk" | "sun.fullDisk" | "earth.anyDisk" | "earth.fullDisk";
 
 export interface Scenario {
   scenarioId: string;
   siteId: string;
   modelLevel: string;
-  profileId: string | null;
   validationStatus: string;
-  coverageStatus?: "covered" | "partial" | "outside";
-  processingStatus?: "complete" | "partial" | "failed";
+  coverageStatus: string;
+  profileId: string | null;
   events: ScenarioEvent[];
+  windows: Record<WindowKey, VisibilityWindow[]>;
   metrics: Metric[];
-  /** Keys: "sun.anyDisk", "sun.fullDisk", "earth.anyDisk", "earth.fullDisk". */
-  windows: Record<string, TimeWindow[]>;
-  /** Intervals with usable data, distinct from intervals where a body is visible. */
-  analysableWindows?: Record<string, TimeWindow[]>;
-  /** Sun and Earth both visible (any part of each disc). */
-  overlapWindows: TimeWindow[];
   limits: string[];
   seriesRef: { path: string; encoding: string };
-}
-
-/** One row of a date sweep: the published metrics of one 30-day scenario. */
-export interface SweepRow {
-  scenarioId: string;
-  surfaceStartUtc: string;
-  validationStatus: string;
-  metrics: Metric[];
-}
-
-/** All 52 weekly start dates for one site, one observer height and one model. */
-export interface Sweep {
-  siteId: string;
-  heightM: number;
-  modelLevel: Model;
-  rows: SweepRow[];
-}
-
-/** One point of the 5 x 5 grid (1 km spacing) around a study point. */
-export interface SensitivityRow {
-  scenarioId: string;
-  eastOffsetKm: number;
-  northOffsetKm: number;
-  latDeg: number;
-  lonDeg: number;
-  metrics: Metric[];
-}
-
-export interface Sensitivity {
-  siteId: string;
-  heightM: number;
-  modelLevel: Model;
-  validationStatus: string;
-  grid: { size: [number, number]; spacingKm: number };
-  limits: string[];
-  rows: SensitivityRow[];
 }
 
 export interface HorizonProfile {
   profileId: string;
   azimuthStepDeg: number;
   horizonElevationDeg: (number | null)[];
-  /** Distance of the terrain point that makes the horizon, per azimuth. */
-  distanceOfMaxKm: (number | null)[];
 }
-
-/** "lola" uses the terrain horizon. "geometric" ignores relief. */
-export type Model = "geometric" | "lola";
 
 export interface ScenarioKey {
   date: string; // YYYYMMDD
   heightM: number;
-  model: Model;
+  model: "geometric" | "lola";
 }
 
 const ID_PATTERN = /^(.+)_(\d{8})_30d_h(\d+)m_(geometric|lola)_[0-9a-f]+$/;
@@ -155,18 +111,24 @@ export function availableDates(site: Site): string[] {
   return [...dates].sort();
 }
 
-/** True when the dataset has terrain-aware scenarios for this site. */
-export function hasModel(site: Site, model: Model): boolean {
-  return site.scenarioIds.some((id) => parseScenarioId(id)?.model === model);
-}
-
-/** The published scenario for a site, a start date, an observer height and a model. Null if there is none. */
-export function pickScenarioId(site: Site, date: string, heightM: number, model: Model): string | null {
+/**
+ * Picks the published scenario for a site, a start date and an observer height.
+ * Without `model`, the terrain-aware model ("lola") is used when the dataset has it, else "geometric".
+ */
+export function pickScenarioId(site: Site, date: string, heightM = 2, model?: ScenarioKey["model"]): string | null {
+  let geometric: string | null = null;
   for (const id of site.scenarioIds) {
     const key = parseScenarioId(id);
-    if (key && key.date === date && key.heightM === heightM && key.model === model) return id;
+    if (!key || key.date !== date || key.heightM !== heightM) continue;
+    if (model ? key.model === model : key.model === "lola") return id;
+    if (!model) geometric = id;
   }
-  return null;
+  return geometric;
+}
+
+/** Model level the interface shows for a site: terrain-aware when published, else geometric. */
+export function bestModel(site: Site): ScenarioKey["model"] {
+  return site.scenarioIds.some((id) => parseScenarioId(id)?.model === "lola") ? "lola" : "geometric";
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -184,7 +146,11 @@ export function loadScenario(id: string, signal?: AbortSignal): Promise<Scenario
   return getJson<Scenario>(`scenarios/${id}.json`, signal);
 }
 
-/** Opaque suffix keeps static hosts from automatically decoding the gzip bytes. */
+/**
+ * Series files are gzip on disk. They are fetched under the ".bin" name the
+ * build ships next to each one (scripts/dataset-build.ts), so a static host
+ * sends the raw bytes instead of decoding them. Decoded here.
+ */
 export async function loadSeries(scenario: Scenario, signal?: AbortSignal): Promise<Series> {
   const res = await fetch(`${DATA_BASE}/${scenario.seriesRef.path}.bin`, { signal });
   if (!res.ok || !res.body) throw new Error(`${scenario.seriesRef.path}: HTTP ${res.status}`);
@@ -192,13 +158,12 @@ export async function loadSeries(scenario: Scenario, signal?: AbortSignal): Prom
   return (await new Response(stream).json()) as Series;
 }
 
-export function loadSweep(siteId: string, heightM: number, model: Model, signal?: AbortSignal): Promise<Sweep> {
-  return getJson<Sweep>(`sweeps/${siteId}_h${heightM}m_${model}_dates.json`, signal);
-}
-
-/** Grids exist only for the south-pole study points. */
-export function loadSensitivity(siteId: string, heightM: number, signal?: AbortSignal): Promise<Sensitivity> {
-  return getJson<Sensitivity>(`sensitivity/${siteId}_h${heightM}m_grid1km.json`, signal);
+/** Series of a published scenario, straight from its id (the file is named after it). */
+export async function loadSeriesById(scenarioId: string, signal?: AbortSignal): Promise<Series> {
+  const path = `series/${scenarioId}.json.gz`;
+  const res = await fetch(`${DATA_BASE}/${path}.bin`, { signal });
+  if (!res.ok || !res.body) throw new Error(`${path}: HTTP ${res.status}`);
+  return (await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).json()) as Series;
 }
 
 /** Horizon profiles exist only for terrain-aware scenarios. Returns null when there is none. */
@@ -249,4 +214,104 @@ export function sampleSeries(series: Series, index: number): Sample {
     earthState: series.earthState[near],
     earthRadiusDeg: series.earthAngularRadiusDeg[near],
   };
+}
+
+/** Next published Sun event (any-disk convention) after a time, or null. */
+export function nextSunEvent(scenario: Scenario, tMs: number): ScenarioEvent | null {
+  let best: ScenarioEvent | null = null;
+  let bestT = Infinity;
+  for (const ev of scenario.events) {
+    if (ev.body !== "sun" || ev.convention !== "anyDisk") continue;
+    const t = Date.parse(ev.tUtc);
+    if (t > tMs && t < bestT) {
+      best = ev;
+      bestT = t;
+    }
+  }
+  return best;
+}
+
+export function metric(scenario: Scenario, id: string): number | null {
+  return scenario.metrics.find((m) => m.metricId === id)?.value ?? null;
+}
+
+export interface Visibility {
+  visible: boolean;
+  /** Time of the next change: the set when visible, the rise when not. Null when the window publishes none. */
+  changeMs: number | null;
+}
+
+/**
+ * Is a body above the terrain at a time, and when does that change?
+ * Read from the published exact windows, never from the display samples.
+ */
+export function visibilityAt(scenario: Scenario, key: WindowKey, tMs: number): Visibility {
+  for (const w of scenario.windows[key] ?? []) {
+    const start = Date.parse(w.startUtc);
+    const end = Date.parse(w.endUtc);
+    // A window cut by the end of the analysis stops 1 ms before the last display sample.
+    if (tMs >= start && (tMs < end || (w.truncatedEnd && tMs <= end + 1000))) {
+      return { visible: true, changeMs: w.truncatedEnd ? null : end };
+    }
+    if (start > tMs) return { visible: false, changeMs: start };
+  }
+  return { visible: false, changeMs: null };
+}
+
+/** Fractional index of the display series for a time, clamped to the series. */
+export function indexAt(series: Series, tMs: number): number {
+  const x = (tMs - Date.parse(series.t0Utc)) / (series.stepS * 1000);
+  return Math.min(series.n - 1, Math.max(0, x));
+}
+
+// ---------- Compact index of published sweeps, comparisons and sensitivity grids ----------
+
+export interface SweepEntry {
+  dates: string[];
+  validationStatus: string;
+  values: Record<string, (number | null)[]>;
+}
+
+export interface ComparisonEntry {
+  comparisonId: string;
+  exploredCount: number;
+  criteria: { metricId: string; direction: "max" | "min" }[];
+  nonDominated: string[];
+}
+
+export interface SensitivityEntry {
+  date: string;
+  modelLevel: string;
+  validationStatus: string;
+  spacingKm: number;
+  size: [number, number];
+  limits: string[];
+  ranges: { metricId: string; min: number | null; max: number | null; knownCount: number; totalCount: number }[];
+  cells: { northKm: number; eastKm: number; sun: number | null; earth: number | null }[];
+}
+
+/** Built by scripts/build-derived.mjs. Values are copied from the dataset, never computed. */
+export interface Derived {
+  datasetVersion: string;
+  metricIds: string[];
+  sweeps: Record<string, SweepEntry>;
+  comparisons: Record<string, ComparisonEntry>;
+  sensitivity: Record<string, SensitivityEntry>;
+}
+
+export async function loadDerived(signal?: AbortSignal): Promise<Derived> {
+  const res = await fetch("/derived/v1.json", { signal });
+  if (!res.ok) throw new Error(`derived/v1.json: HTTP ${res.status}`);
+  return (await res.json()) as Derived;
+}
+
+export function sweepFor(derived: Derived, site: Site, heightM: number, model = bestModel(site)): SweepEntry | null {
+  return derived.sweeps[`${site.id}|${heightM}|${model}`] ?? null;
+}
+
+/** Published 30-day metric of a site for one start date. Null when the dataset has no value. */
+export function sweepValue(derived: Derived, site: Site, heightM: number, date: string, metricId: string): number | null {
+  const sweep = sweepFor(derived, site, heightM);
+  const i = sweep ? sweep.dates.indexOf(date) : -1;
+  return i < 0 ? null : (sweep!.values[metricId]?.[i] ?? null);
 }

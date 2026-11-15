@@ -73,106 +73,42 @@ function buildGround(seed: number): THREE.BufferGeometry {
   return geometry;
 }
 
-const MIN_RIDGE_M = PATCH_RADIUS * 1.04;
-const MAX_RIDGE_M = 150_000;
-
 /**
- * Far relief from the published horizon profile. For each azimuth the dataset
- * gives the elevation of the skyline and how far away the terrain that makes
- * it is. Each skyline point is put at that direction and that distance, so
- * near ridges and far mountains keep their real size and move correctly when
- * the camera moves. Unknown values are drawn at 0 degrees, 20 km away.
+ * Far hills from the published horizon profile. For each azimuth the crest is
+ * at the elevation the dataset gives, seen from the pad. The hills are drawn as
+ * a long slope that starts on the plain and climbs to the crest, so they read
+ * as terrain and not as a wall. Only the crest height is data; the slope shape
+ * is for the picture. Unknown values are drawn at 0°.
  */
 function buildHorizon(profile: HorizonProfile): THREE.BufferGeometry {
   const n = profile.horizonElevationDeg.length;
-  const raw = profile.distanceOfMaxKm.map((km) => THREE.MathUtils.clamp((km ?? 20) * 1000, MIN_RIDGE_M, MAX_RIDGE_M));
-  // The distance jumps where one ridge passes in front of another. Smooth it over 3 degrees so no thin wall joins them.
-  const half = Math.round(1.5 / profile.azimuthStepDeg);
-  const distance = raw.map((_, i) => {
-    let sum = 0;
-    for (let k = -half; k <= half; k++) sum += raw[(i + k + n) % n];
-    return sum / (2 * half + 1);
-  });
   const position = new Float32Array(n * 2 * 3);
-  const normal = new Float32Array(n * 2 * 3);
   const color = new Float32Array(n * 2 * 3);
+  const foot = PATCH_RADIUS * 0.45;
   for (let i = 0; i < n; i++) {
-    const el = (profile.horizonElevationDeg[i] ?? 0) * DEG;
-    const d = surfaceDir(i * profile.azimuthStepDeg, 0);
-    const reach = distance[i] * Math.cos(el);
-    position.set([d.x * reach, -distance[i] * 0.07 - 150, d.z * reach], i * 6);
-    position.set([d.x * reach, distance[i] * Math.sin(el), d.z * reach], i * 6 + 3);
-    // Mostly upward, like the ground: far relief then gets about the same light as the plain in front of it.
-    const nrm = new THREE.Vector3(-d.x * 0.3, 1, -d.z * 0.3).normalize();
-    normal.set([nrm.x, nrm.y, nrm.z, nrm.x, nrm.y, nrm.z], i * 6);
-    const shade = (0.8 + 0.4 * hash2(Math.floor(i / 6), 7, 4242)) * mix(1, 0.72, (distance[i] - MIN_RIDGE_M) / (MAX_RIDGE_M - MIN_RIDGE_M));
-    color.set([0.1, 0.095, 0.09, 0.34 * shade, 0.325 * shade, 0.305 * shade], i * 6);
+    const az = i * profile.azimuthStepDeg;
+    const el = profile.horizonElevationDeg[i] ?? 0;
+    const d = surfaceDir(az, 0);
+    const crest = Math.max(-60, PATCH_RADIUS * Math.tan(el * DEG));
+    position.set([d.x * foot, -14, d.z * foot], i * 6);
+    position.set([d.x * PATCH_RADIUS, crest, d.z * PATCH_RADIUS], i * 6 + 3);
+    // Same grey as the regolith, with a slow change around the horizon.
+    const shade = 0.3 * (0.92 + 0.08 * Math.sin(az * DEG * 7) + 0.05 * Math.sin(az * DEG * 23 + 1.3));
+    color.set([shade, shade * 0.97, shade * 0.93, shade, shade * 0.97, shade * 0.93], i * 6);
   }
   const index: number[] = [];
   for (let i = 0; i < n; i++) {
     const a = i * 2;
     const b = ((i + 1) % n) * 2;
-    index.push(a, b, a + 1, b, b + 1, a + 1); // front faces look inward, toward the pad
+    index.push(a, b, a + 1, b, b + 1, a + 1); // front faces look inward and up, toward the pad
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(position, 3));
-  geometry.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(color, 3));
   geometry.setIndex(index);
+  // Real slope normals: the side facing the Sun is lit, the other side falls in shadow.
+  geometry.computeVertexNormals();
   return geometry;
-}
-
-/** Compass painted on the ground around the pad: a ring, ticks every 10 degrees and the four letters. */
-function compassTexture(letters: [string, string, string, string]): THREE.Texture {
-  const size = 1024;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const c = size / 2;
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(c, c, c * 0.8, 0, Math.PI * 2);
-  ctx.stroke();
-  for (let deg = 0; deg < 360; deg += 10) {
-    const a = (deg * Math.PI) / 180;
-    const inner = c * (deg % 90 === 0 ? 0.68 : deg % 30 === 0 ? 0.73 : 0.77);
-    ctx.lineWidth = deg % 90 === 0 ? 5 : 2;
-    ctx.beginPath();
-    ctx.moveTo(c + Math.sin(a) * inner, c - Math.cos(a) * inner);
-    ctx.lineTo(c + Math.sin(a) * c * 0.8, c - Math.cos(a) * c * 0.8);
-    ctx.stroke();
-  }
-  ctx.font = "600 64px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  letters.forEach((letter, i) => {
-    const a = (i * Math.PI) / 2; // N, E, S, W
-    ctx.fillText(letter, c + Math.sin(a) * c * 0.91, c - Math.cos(a) * c * 0.91);
-  });
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 8;
-  return texture;
-}
-
-/** Thin flat arrow on the ground, from the pad outward. Turned to the azimuth of a body. */
-function groundArrow(color: number): THREE.Mesh {
-  const shape = new THREE.Shape();
-  shape.moveTo(-1.2, 62);
-  shape.lineTo(1.2, 62);
-  shape.lineTo(1.2, 112);
-  shape.lineTo(4.5, 112);
-  shape.lineTo(0, 124);
-  shape.lineTo(-4.5, 112);
-  shape.lineTo(-1.2, 112);
-  shape.closePath();
-  // The shape is drawn in X/Y with +Y forward. Lay it flat with +Y toward north (-Z).
-  const geometry = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
-  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.y = 0.3;
-  return mesh;
 }
 
 /** Small tiling normal map for the grain of the soil close to the camera. */
@@ -267,17 +203,15 @@ export class SurfaceScene {
   private readonly glow: THREE.Mesh;
   private ground: THREE.Mesh | null = null;
   private horizon: THREE.Mesh | null = null;
-  private readonly compass: THREE.Mesh;
-  private readonly sunArrow = groundArrow(0xffba60);
-  private readonly earthArrow = groundArrow(0x9dbcff);
-  private readonly link: THREE.Mesh;
   private seed = 0;
   private cameraAzDeg = 0;
   private shipYaw = 0;
   private readonly look = new THREE.Vector3(0, SHIP_MID, 0);
   private readonly sunColor = new THREE.Color();
 
-  constructor(assets: SurfaceAssets, dom: HTMLElement) {
+  private frameKey = "";
+
+  constructor(assets: SurfaceAssets, private readonly dom: HTMLElement) {
     this.groundMaterial = new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.97,
@@ -320,24 +254,6 @@ export class SurfaceScene {
     this.glow.position.y = 0.35;
     this.scene.add(this.glow);
 
-    this.compass = new THREE.Mesh(
-      new THREE.PlaneGeometry(210, 210).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.34, depthWrite: false }),
-    );
-    this.compass.position.y = 0.25;
-    this.setCompassLetters(["N", "E", "S", "W"]);
-    this.scene.add(this.compass, this.sunArrow, this.earthArrow);
-
-    // Line of sight from the top of the ship to the Earth, shown while the Earth is visible.
-    const beam = new THREE.CylinderGeometry(0.22, 0.22, 1, 8, 1, true);
-    beam.translate(0, 0.5, 0);
-    this.link = new THREE.Mesh(
-      beam,
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(0.7, 1.1, 2.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
-    );
-    this.link.scale.set(1, 2600, 1);
-    this.scene.add(this.link);
-
     this.controls = new OrbitControls(this.camera, dom);
     this.controls.enabled = false;
     this.controls.enablePan = false;
@@ -353,12 +269,21 @@ export class SurfaceScene {
   prepare(site: Site, profile: HorizonProfile | null, sample: Sample): void {
     this.seed = seedFromId(site.id);
     this.ground?.geometry.dispose();
+    this.horizon?.geometry.dispose();
     if (this.ground) this.scene.remove(this.ground);
+    if (this.horizon) this.scene.remove(this.horizon);
+
     this.ground = new THREE.Mesh(buildGround(this.seed), this.groundMaterial);
     this.ground.receiveShadow = true;
     this.ground.castShadow = true;
     this.scene.add(this.ground);
-    this.setHorizon(profile);
+
+    this.horizon = null;
+    if (profile) {
+      const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+      this.horizon = new THREE.Mesh(buildHorizon(profile), material);
+      this.scene.add(this.horizon);
+    }
 
     // Camera on the far side of the light, off axis: the ship is lit from the side and a little from behind.
     const lightAz = sample.sunState ? sample.sunAzDeg : sample.earthAzDeg;
@@ -368,27 +293,6 @@ export class SurfaceScene {
     this.shipYaw = hullYaw(new THREE.Quaternion(), new THREE.Vector3(), new THREE.Vector3(Math.sin(az), 0, -Math.cos(az))) + 0.55;
     this.dust.reset();
     this.controls.enabled = false;
-  }
-
-  /** Far relief around the site. Null removes it (geometric model: no terrain). */
-  setHorizon(profile: HorizonProfile | null): void {
-    if (this.horizon) {
-      this.horizon.geometry.dispose();
-      (this.horizon.material as THREE.Material).dispose();
-      this.scene.remove(this.horizon);
-      this.horizon = null;
-    }
-    if (!profile) return;
-    this.horizon = new THREE.Mesh(buildHorizon(profile), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }));
-    this.scene.add(this.horizon);
-  }
-
-  /** Letters of the ground compass, in the language of the interface: north, east, south, west. */
-  setCompassLetters(letters: [string, string, string, string]): void {
-    const material = this.compass.material as THREE.MeshBasicMaterial;
-    material.map?.dispose();
-    material.map = compassTexture(letters);
-    material.needsUpdate = true;
   }
 
   /** Sun and Earth from the dataset sample for this site. */
@@ -424,16 +328,6 @@ export class SurfaceScene {
     this.bounce.intensity = SUN_POWER * 0.2 * sunLevel * Math.max(Math.sin(sample.sunElDeg * DEG), 0.22);
     this.rig.setSurroundings(0.08 + 0.92 * sunLevel);
     this.stars.setIntensity(mix(1, 0.4, sunLevel));
-    // Ground arrows point to the azimuth of each body. They are bright when the body is visible.
-    this.sunArrow.rotation.y = -sample.sunAzDeg * DEG;
-    this.earthArrow.rotation.y = -sample.earthAzDeg * DEG;
-    (this.sunArrow.material as THREE.MeshBasicMaterial).opacity = sunLevel > 0 ? 0.85 : 0.18;
-    (this.earthArrow.material as THREE.MeshBasicMaterial).opacity = earthLevel > 0 ? 0.85 : 0.18;
-    this.link.position.copy(this.rig.root.position).setY(this.rig.root.position.y + this.rig.height);
-    this.link.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), earthDir);
-    (this.link.material as THREE.MeshBasicMaterial).opacity = earthLevel * (0.2 + 0.1 * Math.sin(timeS * 3));
-    this.link.visible = earthLevel > 0;
-
     // High Sun makes the ground very bright: close the exposure. Low Sun: open it.
     const low = 1 - smoothstep(0, 35, sample.sunElDeg);
     this.exposure = sunLevel > 0 ? mix(0.7, 1.3, low) : 1.9;
@@ -441,6 +335,7 @@ export class SurfaceScene {
 
   /** Shot 3: the last metres, seen from the ground. k runs 0..1. */
   setFinal(k: number, timeS: number, dt: number): void {
+    this.frame();
     const altitude = finalAltitudeM(k);
     const power = throttle(k);
     const sway = clamp01(altitude / 320);
@@ -475,6 +370,20 @@ export class SurfaceScene {
     this.camera.updateMatrixWorld();
   }
 
+  /**
+   * On wide screens the caption sits left of centre. Shift the picture to the
+   * right so the ship and its pad stay clear of it.
+   */
+  private frame(): void {
+    const w = this.dom.clientWidth;
+    const h = this.dom.clientHeight;
+    const key = `${w}x${h}`;
+    if (key === this.frameKey) return;
+    this.frameKey = key;
+    if (w > 1180) this.camera.setViewOffset(w, h, -0.13 * w, 0, w, h);
+    else this.camera.clearViewOffset();
+  }
+
   /** Puts the ship on the pad with no animation (skip, or reduced motion). */
   snapLanded(): void {
     this.rig.root.position.set(0, 0, 0);
@@ -501,6 +410,7 @@ export class SurfaceScene {
 
   /** Shot 4: the ship stands, the user looks around, the dust falls back. */
   setLanded(timeS: number, dt: number): void {
+    this.frame();
     this.rig.setThrottle(0, timeS);
     (this.glow.material as THREE.MeshBasicMaterial).opacity = 0;
     this.dust.update(dt, 0, this.sunColor, 0);

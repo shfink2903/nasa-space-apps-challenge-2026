@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { enuBasis, latLonToUnit, type Vec3 } from "../data/astro";
+import { DEG, enuBasis, latLonToUnit, type Vec3 } from "../data/astro";
 import type { Site } from "../data/dataset";
 import { arcPoint, clamp01, descentRadius, easeInOutCubic, HOLD_RADIUS, mix, smoothstep } from "../flight/timeline";
 import { createMoonMaterial, type MoonMaterial } from "./moonMaterial";
@@ -7,25 +7,22 @@ import { createShipRig, hullYaw, type ShipRig } from "./ship";
 import { createEarth, createStars, createSun, type Earth, type SkyBody, type Stars } from "./sky";
 
 const toV3 = (a: Vec3): THREE.Vector3 => new THREE.Vector3(a[0], a[1], a[2]);
-const toVec3 = (v: THREE.Vector3): Vec3 => [v.x, v.y, v.z];
 const UP = new THREE.Vector3(0, 1, 0);
-const SOUTH_POLE = new THREE.Vector3(0, -1, 0);
 
 /** Scene distances are in Moon radii. Ship size here is for the picture only. */
-const SHIP_CRUISE_SIZE = 0.07;
-const SHIP_PARKED_SIZE = 0.06;
+const SHIP_CRUISE_SIZE = 0.1;
 const SHIP_ORBIT_SIZE = 0.03;
 const CHASE_FAR = 0.2;
 const CHASE_NEAR = 0.082;
-const CRUISE_FAR = 6.6;
-const CRUISE_NEAR = 3.0;
-/** The overview looks at the Moon from under the south pole. */
-const CRUISE_LAT_DEG = -74;
-const CRUISE_LON_DEG = 4;
-/** Site view: this far above the site and this far back, on its south side. */
-const FOCUS_UP = 0.5;
-const FOCUS_BACK = 0.42;
-const BEAM_LENGTH = 0.24;
+const CRUISE_FAR = 9.6;
+const CRUISE_NEAR = 4.3;
+/** Cruise camera: over the southern hemisphere, so the south pole faces the viewer. */
+const CRUISE_LAT_DEG = -44;
+const CRUISE_LON_DEG = 10;
+/** Focus view: the camera stands above the site, but never straight over a pole. */
+const FOCUS_DISTANCE = 2.85;
+const FOCUS_MAX_LAT_DEG = 56;
+const BLEND_SECONDS = 1.7;
 const STAR_RADIUS = 3000;
 const SUN_DISTANCE = 2500;
 const EARTH_DISTANCE = 221.3; // 384 400 km in Moon radii
@@ -38,41 +35,22 @@ export interface OrbitAssets {
   hullEnv: THREE.Texture;
 }
 
-export interface ScreenPoint {
+export interface PinScreen {
+  id: string;
   x: number;
   y: number;
   visible: boolean;
 }
 
-export interface PinScreen extends ScreenPoint {
-  id: string;
-}
-
 interface Pose {
   position: THREE.Vector3;
-  quaternion: THREE.Quaternion;
-}
-
-const LOOK = new THREE.Matrix4();
-/** Camera orientation that looks from `eye` to `target` with `up` toward the top of the picture. */
-function lookQuat(eye: THREE.Vector3, target: THREE.Vector3, up: THREE.Vector3): THREE.Quaternion {
-  return new THREE.Quaternion().setFromRotationMatrix(LOOK.lookAt(eye, target, up));
-}
-
-function beam(color: THREE.Color): THREE.Mesh {
-  const geometry = new THREE.CylinderGeometry(0.0022, 0.0006, 1, 8, 1, true);
-  geometry.translate(0, 0.5, 0);
-  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.scale.set(1, BEAM_LENGTH, 1);
-  mesh.visible = false;
-  return mesh;
+  target: THREE.Vector3;
+  up: THREE.Vector3;
 }
 
 /**
- * Far view: the georeferenced Moon seen from under its south pole, Sun, Earth
- * and stars, with the ship drawn in its own overlay scene (same camera, fresh
- * depth buffer).
+ * Far view: the georeferenced Moon, Sun, Earth and stars, with the ship drawn
+ * in its own overlay scene (same camera, fresh depth buffer).
  */
 export class OrbitScene {
   readonly scene = new THREE.Scene();
@@ -87,21 +65,23 @@ export class OrbitScene {
   private readonly shipSun = new THREE.DirectionalLight(0xfff4e6, 3.4);
   private readonly moonFill = new THREE.DirectionalLight(0x9a948c, 0);
   private readonly reticle: THREE.Mesh;
-  private readonly sunBeam = beam(new THREE.Color(2.6, 1.7, 0.6));
-  private readonly earthBeam = beam(new THREE.Color(0.7, 1.1, 2.8));
   private readonly sunDir = new THREE.Vector3(1, 0.1, 0.4).normalize();
-  private readonly earthDir = new THREE.Vector3(0, 0, 1);
-  private readonly pose: Pose = { position: new THREE.Vector3(0, 0, 8), quaternion: new THREE.Quaternion() };
+  /** Pose wanted by the current shot. `applied` is what the camera really has (after a blend). */
+  private readonly pose: Pose = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: UP.clone() };
+  private readonly applied: Pose = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: UP.clone() };
+  private blendFrom: Pose | null = null;
+  private blendK = 1;
+  private focusSite: Site | null = null;
+  /** 0 = ship at its cruise place, 1 = ship small, beside the selected site. Eased every frame. */
+  private shipFocus = 0;
 
-  // Captured when a move starts, then interpolated.
-  private from: Pose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
+  // Flight: captured at the click, then interpolated.
+  private from: Pose = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: UP.clone() };
   private fromShip = new THREE.Vector3();
   private fromShipQuat = new THREE.Quaternion();
   private fromShipSize = SHIP_CRUISE_SIZE;
-  private siteDir = new THREE.Vector3(0, -1, 0);
+  private siteDir = new THREE.Vector3(0, 0, 1);
   private chaseDir = new THREE.Vector3();
-  private focusPose: Pose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
-  private beamLevel = 0;
 
   constructor(assets: OrbitAssets) {
     this.moon = createMoonMaterial(assets.moonColor, assets.moonSlope);
@@ -113,7 +93,7 @@ export class OrbitScene {
     this.stars = createStars(STAR_RADIUS);
     this.sun = createSun();
     this.earth = createEarth(assets.earth);
-    this.scene.add(this.stars.object, this.sun.object, this.earth.object, this.sunBeam, this.earthBeam);
+    this.scene.add(this.stars.object, this.sun.object, this.earth.object);
 
     this.reticle = new THREE.Mesh(
       new THREE.RingGeometry(0.02, 0.0235, 72),
@@ -131,110 +111,123 @@ export class OrbitScene {
     this.shipScene.add(this.rig.root, this.shipSun, this.moonFill, new THREE.AmbientLight(0x8fa0c0, 0.05));
   }
 
-  /**
-   * Sun and Earth directions in the Moon-fixed frame, with their angular radii
-   * from the dataset. `sunVisible` and `earthVisible` are the published states
-   * at the selected site: they switch the two beams drawn from the site.
-   */
-  setSky(
-    sunDir: Vec3,
-    earthDir: Vec3,
-    sunRadiusDeg: number,
-    earthRadiusDeg: number,
-    timeS: number,
-    sunVisible: boolean,
-    earthVisible: boolean,
-  ): void {
+  /** Sun and Earth directions in the Moon-fixed frame, with their angular radii from the dataset. */
+  setSky(sunDir: Vec3, earthDir: Vec3, sunRadiusDeg: number, earthRadiusDeg: number, timeS: number): void {
     this.sunDir.set(sunDir[0], sunDir[1], sunDir[2]);
-    this.earthDir.set(earthDir[0], earthDir[1], earthDir[2]);
+    const earth = toV3(earthDir);
     this.moon.setSun(this.sunDir);
     // Lit part of Earth seen from the Moon: full when the Sun is behind the Moon.
-    this.moon.setEarth(this.earthDir, (1 - this.sunDir.dot(this.earthDir)) / 2);
+    this.moon.setEarth(earth, (1 - this.sunDir.dot(earth)) / 2);
     this.sun.place(this.camera.position, this.sunDir, SUN_DISTANCE, sunRadiusDeg);
-    this.earth.place(new THREE.Vector3(), this.earthDir, EARTH_DISTANCE, earthRadiusDeg);
+    this.earth.place(new THREE.Vector3(), earth, EARTH_DISTANCE, earthRadiusDeg);
     this.earth.setSun(this.sunDir);
     this.earth.spin(timeS * 0.02);
     this.shipSun.position.copy(this.sunDir).multiplyScalar(10);
-
-    const base = this.siteDir.clone().multiplyScalar(1.002);
-    const pulse = 0.8 + 0.2 * Math.sin(timeS * 3);
-    for (const [mesh, dir, on] of [
-      [this.sunBeam, this.sunDir, sunVisible],
-      [this.earthBeam, this.earthDir, earthVisible],
-    ] as const) {
-      const level = this.beamLevel * (on ? 1 : 0);
-      mesh.visible = level > 0.01;
-      mesh.position.copy(base);
-      mesh.quaternion.setFromUnitVectors(UP, dir);
-      (mesh.material as THREE.MeshBasicMaterial).opacity = 0.75 * level * pulse;
-    }
   }
 
-  /** Slow approach to the south pole. p = 0 far, 1 near. */
+  /** Slow approach. p = 0 far, 1 near. */
   setCruise(p: number, timeS: number): void {
     const e = easeInOutCubic(clamp01(p));
+    const aspect = this.camera.aspect;
+    const wide = smoothstep(0.75, 1.5, aspect);
     const distance = mix(CRUISE_FAR, CRUISE_NEAR, e);
-    const dir = toV3(latLonToUnit(CRUISE_LAT_DEG + Math.sin(timeS * 0.021) * 1.2, CRUISE_LON_DEG + Math.sin(timeS * 0.03) * 2.5));
+    const drift = Math.sin(timeS * 0.03) * 2.5;
+    const dir = toV3(latLonToUnit(CRUISE_LAT_DEG + Math.sin(timeS * 0.021) * 1.2, CRUISE_LON_DEG + drift));
     this.pose.position.copy(dir).multiplyScalar(distance);
-    // Far away, look at the whole Moon. Closer, turn toward the polar region.
-    const target = SOUTH_POLE.clone().multiplyScalar(0.35 * e);
-    this.pose.quaternion.copy(lookQuat(this.pose.position, target, UP));
+
+    // Aim beside the Moon so it sits right of centre and a little high, as in the sketch.
+    const right = new THREE.Vector3().crossVectors(UP, dir).normalize();
+    const up = new THREE.Vector3().crossVectors(dir, right).normalize();
+    this.pose.target
+      .set(0, 0, 0)
+      .addScaledVector(right, -distance * Math.tan(4.6 * DEG) * wide)
+      // Narrow screens: the panels fill the lower half, so the Moon is shown in the upper part.
+      .addScaledVector(up, -distance * Math.tan(mix(9, 2.2, wide) * DEG));
+    this.pose.up.copy(UP);
     this.applyPose();
-    this.parkShip(timeS, SHIP_CRUISE_SIZE, 1 - 0.25 * e);
+    this.placeCruiseShip(e, timeS, 0);
     this.moon.setDetail(0);
-    this.beamLevel = 0;
     this.setReticle(0, timeS);
   }
 
-  /** Remembers where the camera and the ship are, as the start of the next move. */
-  private capture(): void {
-    this.from = { position: this.pose.position.clone(), quaternion: this.pose.quaternion.clone() };
-    this.fromShip.copy(this.rig.root.position);
-    this.fromShipQuat.copy(this.rig.root.quaternion);
-    this.fromShipSize = this.rig.root.scale.x * this.rig.height;
+  /** Starts a smooth camera move from the current view to the next shot (cruise or focus). */
+  startBlend(): void {
+    this.blendFrom = { position: this.applied.position.clone(), target: this.applied.target.clone(), up: this.applied.up.clone() };
+    this.blendK = 0;
   }
 
-  private setSite(site: Site): void {
-    const basis = enuBasis(site.latDeg, site.lonDeg);
-    this.siteDir = toV3(basis.up);
-    const north = toV3(basis.north);
-    // Stand on the south side of the site and look north across it: north stays at the top, as in the overview.
-    const eye = this.siteDir.clone().multiplyScalar(1 + FOCUS_UP).addScaledVector(north, -FOCUS_BACK);
-    this.focusPose = { position: eye, quaternion: lookQuat(eye, this.siteDir, this.siteDir) };
-    this.chaseDir.copy(north).multiplyScalar(-1).addScaledVector(this.siteDir, 0.5).addScaledVector(toV3(basis.east), 0.55).normalize();
+  advanceBlend(dt: number): void {
+    if (this.blendK < 1) this.blendK = Math.min(1, this.blendK + dt / BLEND_SECONDS);
+  }
+
+  /** Aims the focus view at a site. `snap` skips the camera move (used behind a fade). */
+  beginFocus(site: Site, snap: boolean): void {
+    this.focusSite = site;
+    this.siteDir = toV3(latLonToUnit(site.latDeg, site.lonDeg));
     this.reticle.position.copy(this.siteDir).multiplyScalar(1.003);
     this.reticle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.siteDir);
+    if (snap) {
+      this.blendFrom = null;
+      this.blendK = 1;
+    } else this.startBlend();
   }
 
-  /** Starts the move to the site view. */
-  beginFocus(site: Site): void {
-    this.capture();
-    this.setSite(site);
-  }
-
-  /** Site view: the camera glides above the site, the ship waits in the corner. k runs 0..1. */
-  setFocus(k: number, timeS: number): void {
-    const e = easeInOutCubic(clamp01(k));
-    this.pose.position.copy(toV3(arcPoint(toVec3(this.from.position), toVec3(this.focusPose.position), k)));
-    this.pose.quaternion.copy(this.from.quaternion).slerp(this.focusPose.quaternion, e);
+  /** Zoomed view of the selected site, with the site in the middle of the free part of the screen. */
+  setFocus(timeS: number): void {
+    const site = this.focusSite;
+    if (!site) return;
+    const lat = THREE.MathUtils.clamp(site.latDeg, -FOCUS_MAX_LAT_DEG, FOCUS_MAX_LAT_DEG);
+    const dir = toV3(latLonToUnit(lat, site.lonDeg + Math.sin(timeS * 0.05) * 1.5));
+    this.pose.position.copy(dir).multiplyScalar(FOCUS_DISTANCE);
+    this.pose.target.copy(this.siteDir).multiplyScalar(0.94);
+    // Narrow screens: the panels cover the lower part, so the site is shown higher.
+    const narrow = 1 - smoothstep(0.75, 1.5, this.camera.aspect);
+    const screenUp = UP.clone().addScaledVector(dir, -UP.dot(dir)).normalize();
+    this.pose.target.addScaledVector(screenUp, -FOCUS_DISTANCE * Math.tan(9 * DEG) * narrow);
+    this.pose.up.copy(UP);
     this.applyPose();
-    this.parkShip(timeS, mix(this.fromShipSize, SHIP_PARKED_SIZE, e), 0.75);
-    this.moon.setDetail(0.55 * e);
-    this.beamLevel = e;
-    this.setReticle(e, timeS);
+    this.placeCruiseShip(1, timeS, 1);
+    this.moon.setDetail(0.25 * this.blendK);
+    this.setReticle(this.blendK, timeS);
   }
 
-  /** Starts a flight to a site. Returns the angle the camera swings around the Moon, in radians. */
+  /** Ship fixed in the camera frame, bottom-left, nose toward the Moon. e = 0 far, 1 near. */
+  private placeCruiseShip(e: number, timeS: number, focus: number): void {
+    this.shipFocus += (focus - this.shipFocus) * 0.07;
+    const f = this.shipFocus;
+    const wide = smoothstep(0.75, 1.5, this.camera.aspect);
+    const cam = this.camera;
+    // Wide screens: upper left, above the title of the overview. Narrow screens: lower left.
+    const local = new THREE.Vector3(mix(-0.045, -0.1, wide) + 0.02 * e, mix(-0.07, 0.05, wide) + 0.012 * e, mix(-0.42, -0.34, wide) - 0.1 * e);
+    // Focus: up and to the right of the site, clear of the panels and of the caption.
+    local.lerp(new THREE.Vector3(mix(0.02, 0.062, wide), 0.045, -0.44), f);
+    local.y += Math.sin(timeS * 0.5) * 0.0025;
+    this.rig.root.position.copy(local).applyMatrix4(cam.matrixWorld);
+    const nose = new THREE.Vector3(0.74, 0.5, -0.62).normalize().transformDirection(cam.matrixWorld);
+    this.rig.root.quaternion.setFromUnitVectors(UP, nose);
+    this.rig.root.rotateY(hullYaw(this.rig.root.quaternion, this.rig.root.position, cam.position) + 0.5 + Math.sin(timeS * 0.11) * 0.3);
+    this.rig.root.scale.setScalar((SHIP_CRUISE_SIZE * mix(1, 0.42, f)) / this.rig.height);
+    this.rig.setThrottle(0, timeS);
+    this.lightShip();
+  }
+
+  /** Stores the start of a flight and the chase-camera side for the site. Returns the swing angle in radians. */
   beginFlight(site: Site): number {
-    this.capture();
-    this.setSite(site);
-    return this.from.position.clone().normalize().angleTo(this.siteDir);
-  }
+    this.from = { position: this.applied.position.clone(), target: this.applied.target.clone(), up: this.applied.up.clone() };
+    this.blendFrom = null;
+    this.blendK = 1;
+    this.fromShip.copy(this.rig.root.position);
+    this.fromShipQuat.copy(this.rig.root.quaternion);
+    this.fromShipSize = SHIP_CRUISE_SIZE * mix(1, 0.42, this.shipFocus);
 
-  /** Camera station beside the ship, and the point it looks at (the middle of the ship). */
-  private chase(shipBase: THREE.Vector3, distance: number): { position: THREE.Vector3; target: THREE.Vector3 } {
-    const target = shipBase.clone().addScaledVector(this.siteDir, SHIP_ORBIT_SIZE * 0.5);
-    return { position: target.clone().addScaledVector(this.chaseDir, distance), target };
+    const basis = enuBasis(site.latDeg, site.lonDeg);
+    this.siteDir = toV3(basis.up);
+    // The chase camera flies beside the ship, on the equator side and a little above it.
+    const side = toV3(basis.north).multiplyScalar(site.latDeg > 0 ? -1 : 1);
+    this.chaseDir.copy(side).addScaledVector(this.siteDir, 0.5).addScaledVector(toV3(basis.east), 0.55).normalize();
+    this.reticle.position.copy(this.siteDir).multiplyScalar(1.003);
+    this.reticle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.siteDir);
+    return this.from.position.clone().normalize().angleTo(this.siteDir);
   }
 
   /** Ship orientation for the descent: nose up, steel side toward the camera, a little heat shield in view. */
@@ -244,49 +237,57 @@ export class OrbitScene {
     return q.multiply(new THREE.Quaternion().setFromAxisAngle(UP, yaw));
   }
 
+  /** Camera station beside the ship, and the point it looks at (the middle of the ship). */
+  private chase(shipBase: THREE.Vector3, distance: number): { position: THREE.Vector3; target: THREE.Vector3 } {
+    const target = shipBase.clone().addScaledVector(this.siteDir, SHIP_ORBIT_SIZE * 0.5);
+    return { position: target.clone().addScaledVector(this.chaseDir, distance), target };
+  }
+
   /** Shot 1: the camera swings around the Moon behind the ship, which stays in frame all the way. */
   setTransfer(k: number, timeS: number): void {
     const e = easeInOutCubic(clamp01(k));
     const site = this.siteDir;
     const hold = site.clone().multiplyScalar(HOLD_RADIUS);
     const end = this.chase(hold, CHASE_FAR);
-    const endQuat = lookQuat(end.position, end.target, site);
-    const from = toVec3(this.from.position);
-    const to = toVec3(end.position);
+    const from: Vec3 = [this.from.position.x, this.from.position.y, this.from.position.z];
+    const to: Vec3 = [end.position.x, end.position.y, end.position.z];
     const cameraAt = (kk: number): THREE.Vector3 => toV3(arcPoint(from, to, kk));
-    const quatAt = (kk: number): THREE.Quaternion => this.from.quaternion.clone().slerp(endQuat, easeInOutCubic(clamp01(kk)));
 
-    // The ship flies ahead of the camera, on its line of sight, and ends at the hold point above the site.
+    // The ship flies ahead of the camera, on the line to the hold point above the site.
     const lead0 = this.fromShip.distanceTo(this.from.position);
-    const lead1 = end.position.distanceTo(end.target);
+    const lead1 = end.position.distanceTo(hold);
     const shipAt = (kk: number): THREE.Vector3 => {
       const c = clamp01(kk);
       const camera = cameraAt(c);
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(quatAt(c));
-      const lead = mix(lead0, lead1, easeInOutCubic(c)) + 0.2 * Math.sin(Math.PI * c);
-      const onAxis = camera.clone().addScaledVector(forward, lead).addScaledVector(site, -SHIP_ORBIT_SIZE * 0.5 * c);
+      const toHold = hold.clone().sub(camera);
+      const lead = Math.min(toHold.length(), mix(lead0, lead1, easeInOutCubic(c)) + 0.2 * Math.sin(Math.PI * c));
+      const onLine = camera.clone().addScaledVector(toHold.normalize(), lead);
       const carried = this.fromShip.clone().add(camera).sub(this.from.position);
-      return carried.lerp(onAxis, smoothstep(0, 0.4, c));
+      return carried.lerp(onLine, smoothstep(0, 0.4, c));
     };
     const position = shipAt(k);
     const ahead = shipAt(k + 0.012).sub(shipAt(k - 0.012));
     const prograde = new THREE.Quaternion().setFromUnitVectors(UP, ahead.lengthSq() > 1e-12 ? ahead.normalize() : site);
+    const tailDown = this.tailDown(hold, end.position);
     this.rig.root.position.copy(position);
     this.rig.root.quaternion
       .copy(this.fromShipQuat)
       .slerp(prograde, smoothstep(0, 0.25, k))
-      .slerp(this.tailDown(hold, end.position), smoothstep(0.6, 0.97, k));
+      .slerp(tailDown, smoothstep(0.6, 0.97, k));
     this.rig.root.scale.setScalar(mix(this.fromShipSize, SHIP_ORBIT_SIZE, smoothstep(0, 0.7, k)) / this.rig.height);
     // A short burn to leave, then a coast.
     this.rig.setThrottle(smoothstep(0, 0.05, k) * (1 - smoothstep(0.2, 0.45, k)), timeS);
 
     this.pose.position.copy(cameraAt(k));
-    this.pose.quaternion.copy(quatAt(k));
+    // Look at the hold point: the ship is on that line, with the Moon behind it.
+    this.pose.target.lerpVectors(this.from.target, end.target, smoothstep(0, 0.6, k));
+    const upTurn = new THREE.Quaternion().setFromUnitVectors(this.from.up, site);
+    this.pose.up.copy(this.from.up).applyQuaternion(new THREE.Quaternion().slerp(upTurn, e));
     this.applyPose();
+
     this.lightShip();
-    this.moon.setDetail(mix(0.55, 0.7, e));
-    this.beamLevel = 1 - smoothstep(0.3, 0.8, k);
-    this.setReticle(1, timeS);
+    this.moon.setDetail(smoothstep(0.5, 1, e) * 0.6);
+    this.setReticle(smoothstep(0.1, 0.5, k), timeS);
   }
 
   /** Shot 2: tail first, engines on, the camera goes down with the ship. */
@@ -299,60 +300,68 @@ export class OrbitScene {
 
     const station = this.chase(this.rig.root.position, mix(CHASE_FAR, CHASE_NEAR, e));
     this.pose.position.copy(station.position);
-    this.pose.quaternion.copy(lookQuat(station.position, station.target, site));
+    this.pose.target.copy(station.target);
+    this.pose.up.copy(site);
     this.applyPose();
     this.rig.root.quaternion.copy(this.tailDown(this.rig.root.position, station.position));
     this.lightShip();
-    this.moon.setDetail(mix(0.7, 1, e));
-    this.beamLevel = 0;
+    this.moon.setDetail(mix(0.6, 1, e));
     this.setReticle(1, timeS);
+  }
+
+  /** Lunar coordinates under a screen point (x, y in -1..1), or null when the point is off the Moon. */
+  pick(ndcX: number, ndcY: number): { latDeg: number; lonDeg: number } | null {
+    const origin = this.camera.position;
+    const dir = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(this.camera).sub(origin).normalize();
+    // Ray against the unit sphere at the centre: nearest crossing.
+    const b = origin.dot(dir);
+    const disc = b * b - (origin.lengthSq() - 1);
+    if (disc < 0) return null;
+    const t = -b - Math.sqrt(disc);
+    if (t <= 0) return null;
+    const p = origin.clone().addScaledVector(dir, t);
+    return { latDeg: Math.asin(THREE.MathUtils.clamp(p.y, -1, 1)) / DEG, lonDeg: Math.atan2(p.x, p.z) / DEG };
   }
 
   /** Screen positions of the sites that face the camera. */
   projectPins(sites: Site[], width: number, height: number): PinScreen[] {
-    return sites.map((site) => ({ id: site.id, ...this.project(toV3(latLonToUnit(site.latDeg, site.lonDeg)).multiplyScalar(1.002), width, height, true) }));
-  }
-
-  /** Screen positions for the labels of the Sun and Earth beams at the selected site. */
-  projectBeams(width: number, height: number): { sun: ScreenPoint; earth: ScreenPoint } {
-    // A little over half-way along each beam, so the label stays inside the picture.
-    const end = (dir: THREE.Vector3): THREE.Vector3 => this.siteDir.clone().multiplyScalar(1.002).addScaledVector(dir, BEAM_LENGTH * 0.55);
-    return {
-      sun: { ...this.project(end(this.sunDir), width, height, false), visible: this.sunBeam.visible },
-      earth: { ...this.project(end(this.earthDir), width, height, false), visible: this.earthBeam.visible },
-    };
-  }
-
-  private project(point: THREE.Vector3, width: number, height: number, onSurface: boolean): ScreenPoint {
-    const facing = !onSurface || this.camera.position.clone().sub(point).normalize().dot(point) > 0.06;
-    const p = point.clone().project(this.camera);
-    return {
-      x: (p.x * 0.5 + 0.5) * width,
-      y: (-p.y * 0.5 + 0.5) * height,
-      visible: facing && p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05,
-    };
+    const p = new THREE.Vector3();
+    const toCamera = new THREE.Vector3();
+    return sites.map((site) => {
+      const dir = latLonToUnit(site.latDeg, site.lonDeg);
+      p.set(dir[0], dir[1], dir[2]).multiplyScalar(1.002);
+      toCamera.copy(this.camera.position).sub(p).normalize();
+      const facing = toCamera.dot(p) > 0.06;
+      p.project(this.camera);
+      return {
+        id: site.id,
+        x: (p.x * 0.5 + 0.5) * width,
+        y: (-p.y * 0.5 + 0.5) * height,
+        visible: facing && p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05,
+      };
+    });
   }
 
   private applyPose(): void {
-    this.camera.position.copy(this.pose.position);
-    this.camera.quaternion.copy(this.pose.quaternion);
+    const from = this.blendFrom;
+    if (from && this.blendK < 1) {
+      // Turn around the Moon on a great circle: the camera never cuts through the globe.
+      const a: Vec3 = [from.position.x, from.position.y, from.position.z];
+      const b: Vec3 = [this.pose.position.x, this.pose.position.y, this.pose.position.z];
+      const e = easeInOutCubic(this.blendK);
+      this.applied.position.copy(toV3(arcPoint(a, b, this.blendK)));
+      this.applied.target.lerpVectors(from.target, this.pose.target, e);
+      this.applied.up.lerpVectors(from.up, this.pose.up, e).normalize();
+    } else {
+      this.applied.position.copy(this.pose.position);
+      this.applied.target.copy(this.pose.target);
+      this.applied.up.copy(this.pose.up);
+    }
+    this.camera.position.copy(this.applied.position);
+    this.camera.up.copy(this.applied.up);
+    this.camera.lookAt(this.applied.target);
     this.camera.updateMatrixWorld();
     this.stars.object.position.copy(this.camera.position);
-  }
-
-  /** Ship fixed in the camera frame: low, left of centre, clear of the side panels, nose toward the Moon. */
-  private parkShip(timeS: number, size: number, spread: number): void {
-    const cam = this.camera;
-    const wide = smoothstep(0.75, 1.5, cam.aspect);
-    const local = new THREE.Vector3(mix(-0.03, -0.074, wide) * spread, mix(-0.075, -0.07, wide), mix(-0.44, -0.34, wide));
-    local.y += Math.sin(timeS * 0.5) * 0.0025;
-    this.rig.root.position.copy(local).applyMatrix4(cam.matrixWorld);
-    const nose = new THREE.Vector3(0.74, 0.5, -0.62).normalize().transformDirection(cam.matrixWorld);
-    this.rig.root.quaternion.setFromUnitVectors(UP, nose);
-    this.rig.root.rotateY(hullYaw(this.rig.root.quaternion, this.rig.root.position, cam.position) + 0.5 + Math.sin(timeS * 0.11) * 0.3);
-    this.rig.root.scale.setScalar(size / this.rig.height);
-    this.rig.setThrottle(0, timeS);
-    this.lightShip();
   }
 
   /** Light that the sunlit Moon sends back to the ship. */

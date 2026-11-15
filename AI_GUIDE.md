@@ -138,6 +138,8 @@ separate from model usage; chat reads prepared evidence, not DEMs or SPICE cache
 
 ## Reproduce verification
 
+Note: `npm run test:e2e` and `check-live-browser.mjs` drive the Touchdown interface that had the assistant panel. The interface with three tabs (branch `simon/touchdown-mission-planner`) replaced it and has no assistant panel, so these two browser checks are not in the tree any more. They remain in git history (commit `1ffe1c1`). The Python tests and `npm test` below still apply.
+
 ```bash
 # Simulated providers, real dataset and HTTP tests; no provider calls.
 .venv/bin/python -m pytest -q
