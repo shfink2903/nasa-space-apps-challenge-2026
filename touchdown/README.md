@@ -1,4 +1,6 @@
-# Touchdown
+# Landfall
+
+The app is named **Landfall** in its interface. Its folder is still `touchdown/`.
 
 A cinematic view for the Lunar Landing Site Navigator: Starship comes closer to the Moon, you pick a real landing site, and the ship flies there and lands. The time bar moves the Sun and the Earth of the project dataset.
 
@@ -37,30 +39,30 @@ The top bar has three tabs:
 
 | Tab | What it holds |
 |---|---|
-| **The Moon** (home) | The whole Moon with the sites. Click a site, or any point of the Moon, to open its sheet. |
-| **Evaluate the sites** | The main page, full screen: the mission criteria, the sites studied (south pole or whole Moon, plus your own coordinates), then three views: **On one date**, **Full year**, **Delay**. |
+| **The Moon** (home) | The whole Moon with the sites. Drag to turn around the Moon, use the wheel to come closer. Click a site, or any point of the Moon, to open its sheet. |
+| **Evaluate the sites** | The main page. Its blocks are panes of glass over the 3D view, and the top right is left open as a window on the Moon and the ship. The mission criteria, the sites studied (south pole or whole Moon, plus your own coordinates), then three views: **On one date**, **Full year**, **Delay**. |
 | **Explore the mission** | Six steps that drive the real tool: why the south pole, the Sun, the Earth, the date, a landing. It has the screen to itself. |
 
 Every value is said in days out of the 30 days studied from the landing date ("Sun visible 13 days"). The period is always written with its two dates.
 
-The site sheet reads from top to bottom:
+The site sheet has two tabs, **Conditions** and **Understand**. Conditions reads from top to bottom:
 
 - **Landing date**: a date field, the hour, and one week earlier or later. Any date of the year studied.
 - **One answer**: *Landing possible*, *It is night at this time* (with the sunrise and a button to go there), or *Landing not possible* (with the threshold that fails and the next date when the site is possible again).
 - **Sun** and **Earth**: lit or not now, the time left, and the number of days out of 30.
 - **Over the year**: one cell per weekly landing date, possible or not. Click a cell to choose that date.
-- **Your mission criteria**, then three points to understand.
+- **Your mission criteria**.
 - **Scientific details** (folded): the sky chart, the height of the Sun and the Earth over the 30 days, angles, both disc conventions, longest night and blackout, the 1 km grid, observer height, model level, validation status, scenario id and published limits.
 
 With a site open, the bottom bar shows the 30 days studied as two bands, *Sun visible* and *Earth visible*, with one cursor and a play button.
 
 **Evaluate the sites**:
 
-- **On one date**: drag the date (or play the year) and the bars and the ranking move. Rank by Sun and Earth together, Sun, or Earth. *Exact values* adds percentages, the longest night and blackout, maximum heights and the model level.
-- **Full year**: the solar energy possible at each site (share of the year with the Sun visible, mean of the 52 weekly dates; no power is computed), then a calendar of the dates when landing is possible. Click a cell for its values.
+- **On one date**: drag the date (or play the year) and the bars and the ranking move. Rank by Sun and communication together, Sun, or communication. The exact values are on from the start: days with one decimal, the solar energy received, the longest night, the longest communication blackout and the maximum heights. A switch brings back the short table. Your own point is written larger than the catalogue sites.
+- **Full year**: the solar energy received at each site over a year, in kWh per m² (see below), then a calendar of the dates when landing is possible. Click a cell for its values.
 - **Delay**: see below.
 
-"Sun visible" and "Earth visible" are the published visibility states above the terrain. They are not a power budget or a radio link budget.
+"Sun visible" and "Communication possible" (the Earth in view) are the published visibility states above the terrain. They are not a power budget or a radio link budget.
 
 Keys: `Space` play/pause, `←` `→` one hour, `Esc` back. With "reduce motion" on, the flight is skipped. `?lang=en` forces the language.
 
@@ -72,6 +74,13 @@ The user sets three thresholds (sliders in days out of 30, kept in the browser):
 - The verdict is shown on the site sheet, as a column of the ranking and as a calendar over the year. A missing value gives "unknown", never a pass.
 - **Landing not possible** blocks the flight. The sheet then gives the next date when the site meets the criteria, and a link to the other sites.
 - A verdict only compares published 30-day values with the thresholds. It is not a mission validation.
+
+### Solar energy
+
+`src/data/energy.ts` turns the published share of time with the Sun visible into energy: solar constant (1.361 kW per m²) × hours with the Sun visible. The result is the energy that reaches 1 m² kept facing the Sun, in kWh per m², over the 30 days of a date or over a year (mean of the 52 weekly dates × 8760 h).
+
+- The solar constant is the only number added to the dataset. It is a physical constant, not a vehicle parameter (data.md R2): no panel size, no efficiency and no pointing loss is assumed, so this is energy received, not electricity produced.
+- It is an upper bound: the published share counts the Sun as visible as soon as any part of its disc is above the horizon.
 
 ### Launch delay
 

@@ -7,9 +7,9 @@ import { LANG, switchLang, T } from "./strings";
  * the mission) and the language. Always in view.
  */
 export function createTopBar(store: Store, actions: Actions): HTMLElement {
-  const tab = (label: string, primary = false): HTMLButtonElement => h("button", { class: `nav-button ${primary ? "is-primary" : ""}`, type: "button", text: label });
+  const tab = (label: string): HTMLButtonElement => h("button", { class: "nav-button", type: "button", text: label });
   const home = tab(T.navHome);
-  const evaluate = tab(T.navEvaluate, true);
+  const evaluate = tab(T.navEvaluate);
   const explore = tab(T.navExplore);
   home.addEventListener("click", () => actions.home());
   evaluate.addEventListener("click", () => actions.setCompare(true));

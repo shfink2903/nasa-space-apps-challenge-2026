@@ -5,6 +5,9 @@ import type { Phase } from "./flight/timeline";
 
 export type CompareTab = "date" | "year" | "delay";
 
+/** Dataset hours shown per real second when Play runs: the 30 days pass in about 80 seconds. */
+export const PLAY_SPEED_H = 9;
+
 export interface AppState {
   /** The user's mission thresholds. They decide the go / no-go answer. */
   criteria: Criteria;

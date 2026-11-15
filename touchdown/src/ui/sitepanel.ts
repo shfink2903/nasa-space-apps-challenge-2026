@@ -143,7 +143,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
 
   const learn = h(
     "div",
-    { class: "block" },
+    { class: "learn-block" },
     h("h3", { class: "card-title", text: T.learnTitle }),
     h(
       "ul",
@@ -229,13 +229,29 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
     traceModel.row,
     traceValidation.row,
     traceCoverage.row,
+    h("p", { class: "note", text: T.credits }),
   );
+
+  // Two tabs: the conditions of the site, and what they mean.
+  const sitePane = h("div", { class: "pane" }, estimate, dateBlock, verdictBox, sun.el, earth.el, yearBlock, h("div", { class: "block" }, createCriteria(store, actions)), more);
+  const learnPane = h("div", { class: "pane", hidden: true }, learn);
+  const siteTab = h("button", { class: "seg is-on", type: "button", text: T.tabSite });
+  const learnTab = h("button", { class: "seg", type: "button", text: T.tabLearn });
+  const showTab = (learning: boolean): void => {
+    siteTab.classList.toggle("is-on", !learning);
+    learnTab.classList.toggle("is-on", learning);
+    sitePane.hidden = learning;
+    learnPane.hidden = !learning;
+  };
+  siteTab.addEventListener("click", () => showTab(false));
+  learnTab.addEventListener("click", () => showTab(true));
 
   const sheet = h(
     "section",
     { class: "panel conditions", "aria-label": T.sheetTitle, hidden: true },
     h("header", { class: "sheet-head" }, h("div", { class: "cond-head" }, name, place, tags), close),
-    h("div", { class: "sheet-scroll" }, estimate, dateBlock, verdictBox, sun.el, earth.el, yearBlock, h("div", { class: "block" }, createCriteria(store, actions)), learn, more),
+    h("div", { class: "segmented segmented-wide sheet-tabs" }, siteTab, learnTab),
+    h("div", { class: "sheet-scroll" }, sitePane, learnPane),
   );
 
   function renderYear(site: Site, s: AppState): void {
@@ -438,7 +454,7 @@ export function createSitePanel(store: Store, actions: Actions, derived: Derived
   store.subscribe((s, p) => {
     const site = s.sites.find((x) => x.id === s.siteId);
     const ready = site !== undefined && s.lightSiteId === s.siteId && s.series !== null && s.scenario !== null;
-    const show = s.phase !== "cruise" && site !== undefined && !s.touring;
+    const show = s.phase !== "cruise" && site !== undefined && !s.touring && !s.compareOpen;
     const wasHidden = sheet.hidden;
     sheet.hidden = !show;
     sheet.classList.toggle("is-loading", show && !ready);
